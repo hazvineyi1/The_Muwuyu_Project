@@ -54,6 +54,7 @@
 
 const crypto = require('crypto');
 const access = require('./db/access');
+const keeper = require('./db/keeper');
 const audit = require('./db/audit');
 const appeals = require('./db/appeals');
 
@@ -498,9 +499,21 @@ function gate({
       const given = normalise(req.body && req.body.passphrase);
       const actor = String(req.body?.by || '').slice(0, 120);
 
-      // 1. The admin. Checked first so that an admin passphrase which happens
-      //    to look like a passcode is never spent looking for a family.
-      if (adminSecret && given && sameSecret(given, adminSecret)) {
+      /* 1. The admin, by either of two keys.
+
+            MW_ADMIN_PASSPHRASE is the deployment's, and is what turns these
+            pages on at all. The keeper's own — migrations/013 — is a second
+            secret to the same door, chosen from inside the dashboard so that
+            changing it does not need a redeploy. Setting one does not retire
+            the other; see the migration for why that is stated rather than
+            quietly arranged.
+
+            Both checked before any family passcode, so an admin key that
+            happens to look like a passcode is never spent looking for a
+            family. */
+      const asAdmin = (adminSecret && given && sameSecret(given, adminSecret)) ||
+                      (pool && given && await keeper.check(pool, given));
+      if (asAdmin) {
         doorLimit.clear(addr);
         if (!pool) return refuse(res, origin, 'The admin pages need a database.');
         const session = await access.createSession(pool, {
@@ -816,6 +829,12 @@ function requireOwnTree(paramName = 'id') {
 
 module.exports = {
   gate, requireAdmin, requireOwnTree, limiter, addressOf, limitKeyOf,
+  /* Constant-time secret comparison. Public rather than tests-only because
+     the keeper's own passphrase is changed from routes/admin, which has to
+     check the passphrase in force before it will change it — and a second
+     implementation of "are these two secrets equal" in a second file is how
+     two of them end up disagreeing about timing. */
+  sameSecret,
   COOKIE, SESSION_DAYS, MAX_ATTEMPTS, WINDOW_MS, APPEAL_MAX,
   // exported for tests only
   _internals: { sameSecret, readCookie, legacySign, legacyValid, legacyIssue,

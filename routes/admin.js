@@ -26,6 +26,8 @@ const adminDb = require('../db/admin');
 const access = require('../db/access');
 const audit = require('../db/audit');
 const appeals = require('../db/appeals');
+const keeperDb = require('../db/keeper');
+const { sameSecret } = require('../auth');
 
 const DASHBOARD = path.join(__dirname, '..', 'admin', 'dashboard.html');
 
@@ -401,9 +403,95 @@ module.exports = function adminRoutes(pool) {
   });
 
   // Who the dashboard is talking to, so it can say so rather than assuming.
-  r.get('/api/admin/me', (req, res) => {
+  r.get('/api/admin/me', async (req, res) => {
+    // Whether a keeper's key exists, never what it is. There is no endpoint
+    // that reads a secret back in this project and this is not going to be
+    // the first one.
+    let own = null;
+    try { own = await keeperDb.current(pool); } catch { own = null; }
     res.json({ scope: req.muti?.scope || null, actor: whoami(req),
-               sessionId: req.muti?.session?.id || null });
+               sessionId: req.muti?.session?.id || null,
+               ownPassphrase: !!own,
+               ownSetAt: own ? own.set_at : null,
+               ownSetBy: own ? own.set_by : '',
+               minLength: keeperDb.MIN });
+  });
+
+  /* Choose a keeper's passphrase, or give one up.
+  
+     THE CURRENT ONE IS REQUIRED, and being signed in is not a substitute for
+     it. A session is a cookie on one machine; the passphrase is the thing
+     that person actually knows. Without this, a laptop left open on the
+     dashboard is enough for somebody to set a key of their own and keep the
+     keeper's pages after the laptop is shut — and the real keeper would find
+     out when their own passphrase stopped being the only one.
+  
+     "The current one" means whichever key is in force: the environment's, or
+     a keeper's key already chosen. Either proves the same thing. */
+  r.post('/api/admin/passphrase', async (req, res) => {
+    try {
+      const by = whoami(req);
+      const given = String(req.body?.current || '');
+      const next = String(req.body?.next || '');
+
+      const env = String(process.env.MW_ADMIN_PASSPHRASE || '').trim();
+      const okNow = (env && given.trim() && sameSecret(given, env)) ||
+                    await keeperDb.check(pool, given);
+      if (!okNow) {
+        await audit.record(pool, { ...ctx(req), kind: 'keeper.passphrase.refused',
+          ok: false, detail: { why: 'wrong_current' } });
+        return res.status(403).json({ error: 'wrong_current',
+          message: 'That is not the passphrase in force. Nothing has been changed.' });
+      }
+
+      // Giving it up, so the environment's key is the only one again.
+      if (!next.trim()) {
+        if (!env) return res.status(409).json({ error: 'would_lock_out',
+          message: 'MW_ADMIN_PASSPHRASE is not set, so this is the only way in. ' +
+                   'Set that in the host first, then clear this.' });
+        await keeperDb.clear(pool);
+        await audit.record(pool, { ...ctx(req), kind: 'keeper.passphrase.cleared', ok: true });
+        return res.json({ ok: true, cleared: true,
+          notice: 'Your own passphrase is gone. The one in the host is the only key again.' });
+      }
+
+      const done = await keeperDb.set(pool, next, { by });
+      if (!done.ok) {
+        return res.status(400).json({ error: done.reason,
+          message: done.reason === 'too_short'
+            ? `At least ${done.min} characters. This door fronts every family on ` +
+              `this deployment, so the floor is there to catch a slip rather than ` +
+              `to grade the choice.`
+            : 'Type the passphrase you want to use.' });
+      }
+
+      /* Every other keeper's session ends, and this one does not.
+      
+         The commonest reason to change this is that somebody who had it
+         should not have it any more, and a change that leaves their session
+         open has not done the thing it was asked to do. The current session
+         is spared because signing the keeper out of the page they are
+         standing on, at the moment they succeed, reads as a failure. */
+      let ended = 0;
+      const mine = req.muti?.session?.id || null;
+      try {
+        const live = await access.liveSessions(pool, { scope: 'admin', limit: 200 });
+        for (const s of live) {
+          if (!s.id || s.id === mine) continue;
+          await access.revokeSession(pool, s.id, by);
+          ended++;
+        }
+      } catch { /* the passphrase is changed either way; say so below */ }
+
+      await audit.record(pool, { ...ctx(req), kind: 'keeper.passphrase.set', ok: true,
+        detail: { sessionsEnded: ended, hadOwnBefore: undefined } });
+
+      res.json({ ok: true, sessionsEnded: ended,
+        notice: env
+          ? 'Your passphrase works from now on. The one in the host still does ' +
+            'too — it is what turns these pages on. Clear it there to retire it.'
+          : 'Your passphrase works from now on.' });
+    } catch (e) { fail(res, e); }
   });
 
   /* Ending your own admin session. Worth having as a button rather than

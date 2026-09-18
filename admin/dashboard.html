@@ -176,6 +176,7 @@
   <button data-tab="sessions">Signed in</button>
   <button data-tab="appeals">Appeals<span class="count" id="appealCount" hidden></span></button>
   <button data-tab="storage">Storage</button>
+  <button data-tab="keeper">Your passphrase</button>
 </nav>
 
 <!-- ── overview ───────────────────────────────────────────────────────── -->
@@ -293,6 +294,43 @@
 </section>
 
 <!-- ── storage ────────────────────────────────────────────────────────── -->
+<section class="panel" id="tab-keeper" hidden>
+  <div class="card">
+    <h2>Your passphrase</h2>
+    <p class="sub">The one you type to open these pages. Changing it here takes
+       effect at once and needs no redeploy.</p>
+
+    <p class="say" id="keeperState">…</p>
+
+    <div class="row" style="margin-top:12px;flex-wrap:wrap">
+      <input id="kpNow"  type="password" autocomplete="current-password"
+             placeholder="the passphrase you use now" style="flex:1;min-width:240px">
+    </div>
+    <div class="row" style="margin-top:8px;flex-wrap:wrap">
+      <input id="kpNew"  type="password" autocomplete="new-password"
+             placeholder="the one you want instead" style="flex:1;min-width:240px">
+      <input id="kpAgain" type="password" autocomplete="new-password"
+             placeholder="and again" style="flex:1;min-width:240px">
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button class="act strong" id="kpSet">Use this passphrase</button>
+      <button class="act" id="kpClear">Give mine up</button>
+    </div>
+
+    <p class="say"><b>Two keys, one door.</b> The passphrase in the host
+       (<span class="mono">MW_ADMIN_PASSPHRASE</span>) is what turns these pages on
+       at all — choosing your own here adds a second key, it does not retire that
+       one. To retire it, clear it in the host, and know that clearing it turns
+       these pages off entirely. That is also the way back in if you ever forget
+       what you chose here.</p>
+    <p class="say">Changing it ends every other keeper's session but this one —
+       the usual reason to change a passphrase is that somebody who had it should
+       not have it any more, and leaving their session open would not have done
+       that. It is stored the same way as a family passcode: a scrypt hash with
+       its own salt. Nobody can read it back, you included.</p>
+  </div>
+</section>
+
 <section class="panel" id="tab-storage" hidden>
   <div class="card">
     <h2>What the database is holding</h2>
@@ -789,6 +827,41 @@ $('apList').addEventListener('click', async e => {
 });
 
 // ── storage ─────────────────────────────────────────────────────────────
+loaders.keeper = async () => {
+  const me = await api('/api/admin/me');
+  $('keeperState').innerHTML = me.ownPassphrase
+    ? `You are using a passphrase of your own, set ${when(me.ownSetAt)}` +
+      `${me.ownSetBy ? ' by ' + esc(me.ownSetBy) : ''}. The host's one still works too.`
+    : `You have not chosen one — the passphrase in the host is the only key. ` +
+      `At least ${me.minLength} characters if you set your own.`;
+};
+
+$('kpSet').onclick = async () => {
+  const now = $('kpNow').value, next = $('kpNew').value, again = $('kpAgain').value;
+  if (!next){ alert('Type the passphrase you want to use.'); return; }
+  // Checked here as well as on the server, because a mistyped new passphrase
+  // that nobody notices is a lockout, and the server cannot see the second box.
+  if (next !== again){ alert('The two new ones do not match.'); return; }
+  try {
+    const d = await post('/api/admin/passphrase', { current: now, next });
+    $('kpNow').value = $('kpNew').value = $('kpAgain').value = '';
+    alert(d.notice + (d.sessionsEnded ? `\n\n${d.sessionsEnded} other session` +
+      `${d.sessionsEnded === 1 ? '' : 's'} ended.` : ''));
+    await loaders.keeper();
+  } catch (e){ showErr(e); }
+};
+
+$('kpClear').onclick = async () => {
+  if (!confirm('Give up your own passphrase? The one in the host becomes the ' +
+               'only key again.')) return;
+  try {
+    const d = await post('/api/admin/passphrase', { current: $('kpNow').value, next: '' });
+    $('kpNow').value = '';
+    alert(d.notice);
+    await loaders.keeper();
+  } catch (e){ showErr(e); }
+};
+
 loaders.storage = async () => {
   const { tables } = await api('/api/admin/storage');
   $('stTable').querySelector('tbody').innerHTML = tables.map(t => `<tr>
