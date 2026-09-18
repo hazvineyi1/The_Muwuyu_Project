@@ -530,6 +530,11 @@ body{
   text-align:left; cursor:pointer;
 }
 #form .dupe:hover{border-color:var(--gold); background:var(--pod);}
+/* The offer above the browsable list. Quieter than the name-match one: it is
+   an invitation, not a warning that you may be typing a duplicate. */
+#form .browse{
+  margin:0 0 6px; font-size:11px; line-height:1.45; color:var(--muted);
+}
 #form .dupe u{
   flex:1; text-decoration:none; display:block;
   font-family:'Fraunces',Georgia,serif; font-size:14px; font-weight:500;
@@ -1154,11 +1159,29 @@ function toggleRoot(id){
 function addUnion(partners, children){
   const id = uid('u');
   state.unions[id] = { id, partners:partners.slice(), children:children.slice() };
+  // A new marriage is a new path up the tree for everybody under it.
+  ancestryCache.clear();
   return state.unions[id];
 }
 function snapshot(){
   history.push(JSON.stringify(state));
   if (history.length > 50) history.shift();
+  /* THE MOMENT THE TREE IS ABOUT TO CHANGE, which is the honest place to
+     throw away anything derived from its old shape.
+
+     The ancestry memo used to be cleared by render() alone, on the reasoning
+     that every change is followed by a repaint. That holds in the page and
+     fails everywhere else: canLink walks the ancestry of two people to decide
+     whether joining them would make a loop, so asking the question warms the
+     cache — and then linkExisting changes the very lines the answer was
+     computed from. Anything reading kinship between the change and the next
+     repaint got the tree as it was before, which came back as no relationship
+     at all between two people who had just been made brother and sister.
+
+     snapshot() is called by every function that edits the tree and by nothing
+     else, so it is exactly the signal. render() still clears it too — this is
+     a second lock on the same door, not a replacement. */
+  ancestryCache.clear();
 }
 
 /* Grow a new person off an existing one. Each branch also creates the
@@ -1694,6 +1717,10 @@ async function refreshDuplicates(){
 }
 
 /* Candidates for a name being typed into the form. */
+/* What the chosen bud is asking for, in the words on the panel. */
+const KIND_AS = { parent:'a parent', sibling:'a brother or sister',
+                  partner:'a husband or wife', child:'a child' };
+
 function matchesForName(name, excludeId){
   if (nameTokens(name).length === 0 || name.trim().length < 3) return [];
   // Nothing is known about a name being typed except the name, so these are
@@ -1705,6 +1732,48 @@ function matchesForName(name, excludeId){
     .filter(x => x.m)
     .sort((x, y) => y.m.score - x.m.score)
     .slice(0, 3);
+}
+
+/* WHO IS ALREADY HERE AND COULD BE JOINED ON, before a single letter is typed.
+ *
+ * THE FAULT THIS FIXES is not that linking was missing — canLink and
+ * linkExisting have been here all along — it is that the only door to it was
+ * a coincidence. The list of people you could point at appeared once you had
+ * typed three characters that happened to resemble somebody's name. So the
+ * family had to already know that the person was in the tree, already
+ * remember how their name was spelt when it was entered, and already guess
+ * that typing it would offer them. Somebody who merely suspects the two
+ * branches meet had nothing to click at all, and did the only thing left:
+ * typed the grandmother in a second time.
+ *
+ * So the same list answers the empty box. Not a search result — an offer.
+ *
+ * WHO IS OFFERED, and why not simply everybody. A tree of four hundred people
+ * is not a list anybody reads, so the ones most likely to be meant come
+ * first: the family's own surname before a stranger's, then whoever stands
+ * nearest in the picture, since the join being made is almost always to a
+ * branch alongside. Everyone else is still reachable by typing.
+ *
+ * WHO IS NOT OFFERED: anybody this link would refuse anyway. A name shown and
+ * then greyed out is a question the family has to answer twice. canLink
+ * decides, so the reasons stay in one place and this cannot drift away from
+ * what the button will actually do. */
+function linkCandidates(kind, anchorId, limit){
+  const anchor = state.people[anchorId] || {};
+  const house = (anchor.name || '').split(' ').slice(1).join(' ').toLowerCase();
+  const near = layout.persons[anchorId];
+
+  return people()
+    .filter(p => p.id !== anchorId && !canLink(kind, anchorId, p.id))
+    .map(p => {
+      const surname = (p.name || '').split(' ').slice(1).join(' ').toLowerCase();
+      const at = layout.persons[p.id];
+      const d = (near && at) ? Math.hypot(at.x - near.x, at.y - near.y) : 1e9;
+      return { id:p.id, kin:(house && surname === house) ? 0 : 1, d };
+    })
+    .sort((x, y) => x.kin - y.kin || x.d - y.d)
+    .slice(0, limit || 8)
+    .map(x => ({ id:x.id, m:null }));
 }
 
 /* ── Shona kinship ──────────────────────────────────────────────────────
@@ -5618,8 +5687,17 @@ function openForm(kind, anchorId){
   const suggest = () => {
     // the form may have closed while this was waiting its turn
     if (!nameEl.isConnected) return;
-    const matches = matchesForName(nameEl.value, anchorId);
-    box.innerHTML = matches.map(({ id, m }) => {
+    /* Typed something → who resembles it. Typed nothing → who is already here
+       and could be joined on. The second is the one the family needs when
+       they suspect a link but cannot spell the name the way it was entered. */
+    const typed = nameEl.value.trim().length >= 3;
+    const matches = typed ? matchesForName(nameEl.value, anchorId)
+                          : linkCandidates(kind, anchorId);
+    const heading = typed ? '' :
+      `<p class="browse">Or join someone already in this tree —
+        ${esc(KIND_AS[kind] || 'related')} to ${esc((state.people[anchorId].name || '').split(' ')[0])}.
+        No second record, no duplicate.</p>`;
+    box.innerHTML = heading + matches.map(({ id, m }) => {
       const q = state.people[id];
       const blocked = canLink(kind, anchorId, id);
       const life = q.born ? `b. ${esc(q.born)} · ` : '';
@@ -5640,13 +5718,26 @@ function openForm(kind, anchorId){
       keepSteady(anchorId, before);
       bringIntoView(otherId);
       save();
-      say(`${state.people[otherId].name} linked in — one record, not two.`);
+      /* The words are derived from the graph now that the link is in it —
+         never from the button that was pressed. Somebody joined as "a
+         brother" comes back Mukoma or Munin'ina depending on the years, and
+         if the two were already related another way it says both. */
+      const k = kinTerms(anchorId, otherId);
+      const said = k && k.list.length ? k.list.map(t => t.term).join(' · ') : '';
+      say(said
+        ? `${state.people[otherId].name} joined on — ${said} to ${state.people[anchorId].name.split(' ')[0]}.`
+        : `${state.people[otherId].name} joined on — one record, not two.`);
     });
   };
   nameEl.addEventListener('input', () => {
     clearTimeout(suggestTimer);
     suggestTimer = setTimeout(suggest, 160);
   });
+
+  /* Once, on opening, with the box still empty — otherwise the offer to join
+     somebody already here is only ever made to people who started typing,
+     which is exactly the door that was missing. */
+  suggest();
 
   $('fName').focus();
 }

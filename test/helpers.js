@@ -122,7 +122,7 @@ function loadFrontend(){
       sameHouse, mutupoNotes, housesJoined, housesJoin,
       PALETTES, THEMES,
       diffOps, remapId, familyLink, titleFor, treeStamp, TITLE_BUDGET,
-      seniorSide, insertByAge,
+      seniorSide, insertByAge, canLink, linkExisting, linkCandidates, KIND_AS,
       // The drawn picture, for the tests that are about where people stand.
       layoutOf(){ computeLayout(); return layout; },
       rowOf(id){ computeLayout();
