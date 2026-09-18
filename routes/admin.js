@@ -41,6 +41,23 @@ function fail(res, e) {
 // beside it in the log do the rest.
 const whoami = req => String(req.muti?.actor || req.get('x-muti-actor') || 'admin').slice(0, 120);
 
+/* Why a chosen passcode was refused, said so the keeper can fix it rather
+   than guess. Each one names the constraint AND a passcode that would work,
+   because "invalid" on its own is how somebody ends up trying nine variations
+   of the same rejected word. */
+const CHOSEN_TROUBLE = {
+  empty: () => 'Type the passcode you want this family to use.',
+  too_long: () => 'That is longer than 200 characters.',
+  bad_handle: s =>
+    `A passcode's first part is also how sign-in finds the family, so it has ` +
+    `to be 2–64 letters and digits with no spaces — "${s.handle}" is not. ` +
+    `Either use a single plain word, or put one in front: musoni-${s.handle || 'something'}.`,
+  handle_taken: s =>
+    `Another family already answers to "${s.handle}", and taking it would lock ` +
+    `them out of their own tree. Choose a different word, or add something to ` +
+    `this one: "${s.handle}2" or "${s.handle}-family".`
+};
+
 module.exports = function adminRoutes(pool) {
   const r = express.Router();
 
@@ -158,7 +175,22 @@ module.exports = function adminRoutes(pool) {
   r.post('/api/admin/family/:id/passcode', async (req, res) => {
     try {
       const by = whoami(req);
-      const issued = await access.issuePasscode(pool, req.params.id, { by });
+
+      /* A passcode in the body means the keeper chose one. Anything else is
+         the ordinary case: generate 59 bits and hand them over once. */
+      const wants = String(req.body?.passcode || '').trim();
+      let issued;
+      if (wants) {
+        const set = await access.setPasscode(pool, req.params.id, wants, { by });
+        if (!set.ok) {
+          if (set.reason === 'no_such_family') return res.status(404).json({ error: 'no_such_family' });
+          return res.status(400).json({ error: set.reason, message: CHOSEN_TROUBLE[set.reason]
+            ? CHOSEN_TROUBLE[set.reason](set) : 'That passcode cannot be used.' });
+        }
+        issued = set;
+      } else {
+        issued = await access.issuePasscode(pool, req.params.id, { by });
+      }
       if (!issued) return res.status(404).json({ error: 'no_such_family' });
 
       // Belt and braces: raising the generation already ends them, and this
@@ -169,15 +201,32 @@ module.exports = function adminRoutes(pool) {
         ...ctx(req),
         kind: issued.passcode_gen === 1 ? 'passcode.set' : 'passcode.reset',
         ok: true, treeId: req.params.id,
+        /* The passcode itself is NOT in here and must never be. What is
+           recorded is that somebody chose it rather than took what they were
+           given, and the handle it moved the family to — enough to explain
+           later why a family's handle changed, without the audit log becoming
+           the plaintext store this whole design exists to avoid. */
         detail: { generation: issued.passcode_gen, sessionsEnded: ended,
+                  chosen: !!issued.passcode_chosen,
+                  ...(issued.handleChanged
+                      ? { handleWas: issued.previousHandle, handleNow: issued.handle }
+                      : {}),
                   reason: String(req.body?.reason || '').slice(0, 300) }
       });
 
       res.json({
         treeId: issued.id, name: issued.name, handle: issued.handle,
         passcode: issued.passcode, sessionsEnded: ended,
-        notice: 'This is the only time this passcode can be seen. It is stored ' +
-                'only as a hash — nobody, including you, can read it back.'
+        chosen: !!issued.passcode_chosen,
+        handleChanged: !!issued.handleChanged,
+        previousHandle: issued.previousHandle || null,
+        notice: issued.passcode_chosen
+          ? 'This passcode was chosen rather than generated, so it is only as ' +
+            'hard to guess as the word itself. It is stored the same way — as a ' +
+            'hash, unreadable — but anyone who guesses the word is in. Issue a ' +
+            'generated one to undo this.'
+          : 'This is the only time this passcode can be seen. It is stored ' +
+            'only as a hash — nobody, including you, can read it back.'
       });
     } catch (e) { fail(res, e); }
   });

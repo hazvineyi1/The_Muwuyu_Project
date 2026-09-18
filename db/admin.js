@@ -111,7 +111,7 @@ async function families(pool, { q = '', cursor = null, limit = 25, filter = '' }
   const { rows } = await pool.query(
     `SELECT t.id, t.name, t.handle, t.created_at, t.created_by,
             t.passcode_set_at, t.passcode_set_by, t.passcode_gen,
-            (t.passcode_hash IS NOT NULL) AS has_passcode,
+            (t.passcode_hash IS NOT NULL) AS has_passcode, t.passcode_chosen,
             t.suspended_at, t.suspended_by, t.suspended_reason,
             (SELECT count(*)::int FROM people p
               WHERE p.tree_id = t.id AND p.aside_at IS NULL) AS people,
@@ -140,7 +140,7 @@ async function family(pool, treeId) {
   const { rows } = await pool.query(
     `SELECT t.id, t.name, t.handle, t.key, t.key_set_at, t.created_at, t.created_by,
             t.passcode_set_at, t.passcode_set_by, t.passcode_gen,
-            (t.passcode_hash IS NOT NULL) AS has_passcode,
+            (t.passcode_hash IS NOT NULL) AS has_passcode, t.passcode_chosen,
             t.suspended_at, t.suspended_by, t.suspended_reason
        FROM trees t WHERE t.id = $1`, [treeId]);
   if (!rows.length) return null;

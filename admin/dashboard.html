@@ -213,7 +213,7 @@
     </div>
     <div class="scroll"><table id="famTable"><thead><tr>
       <th>Family</th><th>Handle</th><th class="num">People</th>
-      <th class="num">Here now</th><th>Last edit</th><th>Passcode</th><th></th>
+      <th class="num">Here now</th><th>Started</th><th>Last edit</th><th>Passcode</th><th></th>
     </tr></thead><tbody></tbody></table></div>
     <div class="row" style="margin-top:12px">
       <button class="act" id="famMore" hidden>Show more</button>
@@ -438,7 +438,7 @@ async function loadFamilies(more) {
   const body = $('famTable').querySelector('tbody');
   if (!more) body.innerHTML = '';
   if (!d.families.length && !more) {
-    body.innerHTML = '<tr><td colspan="7" class="empty">No family answers to that.</td></tr>';
+    body.innerHTML = '<tr><td colspan="8" class="empty">No family answers to that.</td></tr>';
   }
   for (const f of d.families) {
     const tr = document.createElement('tr');
@@ -447,9 +447,12 @@ async function loadFamilies(more) {
       `<td class="mono">${esc(f.handle)}</td>` +
       `<td class="num">${f.people.toLocaleString()}</td>` +
       `<td class="num">${f.live_sessions || ''}</td>` +
+      `<td>${day(f.created_at)}</td>` +
       `<td>${f.last_edit ? ago(f.last_edit) : '<span style="color:var(--faint)">never</span>'}</td>` +
       `<td>${f.has_passcode
-        ? `<span class="pill good">issued ${day(f.passcode_set_at)}</span>`
+        ? (f.passcode_chosen
+            ? `<span class="pill warn">chosen word</span>`
+            : `<span class="pill good">issued ${day(f.passcode_set_at)}</span>`)
         : '<span class="pill warn">never issued</span>'}</td>` +
       `<td><button class="act" data-open="${esc(f.id)}">Open</button></td>`;
     body.appendChild(tr);
@@ -487,7 +490,8 @@ async function openFamily(id) {
       <dt>Edits</dt><dd>${f.changes.toLocaleString()}${f.last_edit ? ', last ' + ago(f.last_edit) : ''}</dd>
       <dt>Hands</dt><dd>${hands}</dd>
       <dt>Passcode</dt><dd>${f.has_passcode
-        ? `issued ${when(f.passcode_set_at)}${f.passcode_set_by ? ' by ' + esc(f.passcode_set_by) : ''}
+        ? `${f.passcode_chosen ? '<span class="pill warn">a chosen word</span> ' : ''}set
+           ${when(f.passcode_set_at)}${f.passcode_set_by ? ' by ' + esc(f.passcode_set_by) : ''}
            · generation ${f.passcode_gen}`
         : '<span class="pill warn">never issued</span>'}</dd>
       <dt>State</dt><dd>${f.suspended_at
@@ -509,6 +513,20 @@ async function openFamily(id) {
     <p class="say">Issuing a passcode ends every session this family has open, and
        the new one can be shown only once. Nobody can read the old one back — not
        even from the database.</p>
+
+    <div class="row" style="margin-top:10px">
+      <input id="chosenCode" type="text" autocomplete="off" spellcheck="false"
+             placeholder="or set a word of their own, e.g. musoni"
+             style="flex:1;min-width:220px">
+      <button class="act" data-act="chosen" data-id="${esc(f.id)}">Use this word</button>
+    </div>
+    <p class="say"><b>A word is only as hard to guess as the word.</b> A generated
+       passcode cannot be guessed; a family's own name can be, by anyone who finds
+       the address — and it is written across every record it is protecting. It is
+       stored the same way either way, as a hash nobody can read back. Setting one
+       also changes the family's handle to that word, because the handle is how
+       sign-in knows which family to check. Issuing a generated passcode undoes
+       both.</p>
     ${f.suspended_at ? `<p class="say"><b>Deleting is the one thing here that cannot
        be undone.</b> Everything else in this project is reversible — a person is
        set aside rather than removed, a family is closed rather than ended. This
@@ -536,6 +554,16 @@ $('famDetail').addEventListener('click', async e => {
     if (b.dataset.act === 'passcode') {
       const reason = prompt('Why is this being issued? (kept in the record)') ?? '';
       const d = await post(`/api/admin/family/${id}/passcode`, { reason });
+      reveal(d);
+    } else if (b.dataset.act === 'chosen') {
+      const word = ($('chosenCode')?.value || '').trim();
+      if (!word) { alert('Type the word first.'); return; }
+      if (!confirm(`Set this family's passcode to "${word}"?\n\n` +
+                   `Anyone who guesses that word can open their whole tree, and ` +
+                   `it also becomes the family's handle. Everyone signed in now ` +
+                   `is signed out.`)) return;
+      const reason = prompt('Why is this being set? (kept in the record)') ?? '';
+      const d = await post(`/api/admin/family/${id}/passcode`, { passcode: word, reason });
       reveal(d);
     } else if (b.dataset.act === 'suspend') {
       const reason = prompt('Why is this family being closed? They will be shown ' +
@@ -583,6 +611,10 @@ function reveal(d) {
     <p class="say">${esc(d.notice)}</p>
     ${d.sessionsEnded ? `<p class="say">${d.sessionsEnded} session${d.sessionsEnded === 1 ? '' : 's'}
       ended — everyone who was signed in must use the new passcode.</p>` : ''}
+    ${d.handleChanged ? `<p class="say">This family's handle moved from
+      <b>${esc(d.previousHandle)}</b> to <b>${esc(d.handle)}</b>, because the handle
+      is how sign-in finds them. Any older passcode beginning
+      <b>${esc(d.previousHandle)}-</b> has stopped working.</p>` : ''}
     <div class="row" style="margin-top:14px">
       <button class="act strong" id="revealCopy">Copy it</button>
       <button class="act" id="revealDone">I have written it down</button>

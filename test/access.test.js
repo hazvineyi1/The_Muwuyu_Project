@@ -70,8 +70,26 @@ const access = require('../db/access');
   eq('a handle that does not exist is refused', nobody.ok, false);
   eq('with a reason that is NOT shown to anybody', nobody.reason, 'no_family');
 
+  /* A passcode with no dash used to be 'malformed' — rejected on sight, before
+     any lookup. It is now a legitimate shape, because a family that has chosen
+     a one-word passcode has no dash in it (see chosen.test.js), and the word
+     is its own handle.
+
+     That makes this case better, not worse. Answering 'malformed' instantly
+     told anyone listening that their guess never reached a family, so a wrong
+     SHAPE and a wrong HANDLE were distinguishable by the clock — the same
+     enumeration leak the decoy hash below exists to close. Both now cost one
+     lookup and one scrypt. */
   const shapeless = await access.signIn(pool, 'nodashes', {});
-  eq('and something that is not a passcode at all', shapeless.reason, 'malformed');
+  eq('a word nobody answers to is refused like any unknown handle',
+     shapeless.reason, 'no_family');
+
+  // What is still not a passcode: there is no handle in front of the dash to
+  // look anybody up by, so there is nothing to check and nothing to time.
+  for (const nonsense of ['', '   ', '-leadingdash']) {
+    const r = await access.signIn(pool, nonsense, {});
+    eq(`"${nonsense}" is malformed`, r.reason, 'malformed');
+  }
 
   section('one family\'s passcode does not open another');
   const otherIssued = await access.issuePasscode(pool, otherId, { by: 'keeper' });

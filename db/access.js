@@ -79,13 +79,47 @@ function makePasscode(handle) {
 
 /* The handle is everything before the first dash. Split there rather than on
    every dash so that a family who types their own passcode with a stray dash
-   in it still gets the right family looked up. */
+   in it still gets the right family looked up.
+
+   A PASSCODE WITH NO DASH IS ITS OWN HANDLE. A family that has chosen a
+   passcode they can say out loud — see setPasscode — has one word and no
+   dash, and that word has to identify the family as well as prove who they
+   are. It can, because a chosen passcode is only allowed to be set when it
+   matches the family's handle, so the lookup is the same single indexed read
+   it has always been. What it must NOT become is a search: trying a guess
+   against every family in the table is not a slow sign-in, it is a way of
+   making one request cost a thousand scrypts.
+
+   This deliberately no longer returns null for a dash-less guess. Doing so
+   answered instantly, which told anyone listening that the input never
+   reached a family — a wrong handle and a wrong shape were distinguishable
+   by the clock. Now both cost one lookup and one scrypt, decoy included. */
 function splitPasscode(given) {
   const s = normalise(given);
+  if (!s) return null;
   const dash = s.indexOf('-');
-  if (dash < 1) return null;
-  return { handle: s.slice(0, dash), passcode: s };
+  // A leading dash leaves no handle in front of it to look anybody up by.
+  if (dash === 0) return null;
+  return { handle: dash < 0 ? s : s.slice(0, dash), passcode: s };
 }
+
+/* What a chosen passcode requires the family's handle to be.
+
+   The handle is the lookup key, so the front of the passcode has to BE the
+   handle or sign-in cannot find the family to check against. That is a fact
+   about how the table is read, not a rule invented here, which is why this
+   is computed rather than configured. */
+function handleFor(passcode) {
+  const dash = passcode.indexOf('-');
+  return dash < 0 ? passcode : passcode.slice(0, dash);
+}
+
+/* A handle is read down a phone line, typed on a phone, and used as the key
+   for one indexed lookup. Lower case because normalise() has already lowered
+   the passcode and the two must agree; no dash because the dash is the
+   delimiter; nothing else exotic because a handle nobody can dictate over the
+   telephone is a handle that costs the keeper a support call. */
+const HANDLE_OK = /^[a-z0-9]{2,64}$/;
 
 async function hashPasscode(passcode) {
   const salt = crypto.randomBytes(16);
@@ -133,12 +167,86 @@ async function issuePasscode(pool, treeId, { by = '' } = {}) {
         SET passcode_hash = $2,
             passcode_set_at = clock_timestamp(),
             passcode_set_by = $3,
-            passcode_gen = passcode_gen + 1
+            passcode_gen = passcode_gen + 1,
+            -- Back to false: the flag describes the passcode in force, not
+            -- anything the family did once. Issuing a proper one undoes it.
+            passcode_chosen = FALSE
       WHERE id = $1
-      RETURNING id, name, handle, passcode_gen, passcode_set_at`,
+      RETURNING id, name, handle, passcode_gen, passcode_set_at, passcode_chosen`,
     [treeId, hash, String(by || '').slice(0, 120)]);
 
   return { ...saved[0], passcode };
+}
+
+/* Set a passcode somebody CHOSE, rather than one this file invented.
+
+   WHY THIS EXISTS AND WHAT IT COSTS. A generated passcode is about 59 bits
+   and cannot be guessed. A chosen one is a word, and a word that means
+   something to the family is a word a stranger can guess — very often the
+   family's own name, which is written across every record the passcode is
+   protecting. This does not pretend otherwise and does not grade the choice:
+   it records that a choice was made (passcode_chosen), so the keeper's
+   dashboard can show it, and it leaves the judgement with the person.
+   Issuing a generated passcode is one click away and clears the flag.
+
+   IT RENAMES THE HANDLE WHEN IT HAS TO, and says so in what it returns. A
+   handle is a random six characters; a chosen passcode of "musoni" can only
+   be found if the family's handle is "musoni", because the handle is how
+   sign-in knows which family to check. So the rename is not a liberty taken
+   with the family's record, it is the other half of the same act — and it is
+   refused outright if another family already answers to that handle, because
+   taking it would lock that family out of their own tree.
+
+   One transaction, because a renamed handle with the old passcode still
+   stored is a family that cannot get in: the passcode they hold begins with a
+   handle that no longer exists. Both halves land or neither does. */
+async function setPasscode(pool, treeId, chosen, { by = '' } = {}) {
+  const passcode = normalise(chosen);
+  if (!passcode) return { ok: false, reason: 'empty' };
+  if (passcode.length > 200) return { ok: false, reason: 'too_long' };
+
+  const wanted = handleFor(passcode);
+  if (!HANDLE_OK.test(wanted)) return { ok: false, reason: 'bad_handle', handle: wanted };
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query(
+      'SELECT id, name, handle FROM trees WHERE id = $1 FOR UPDATE', [treeId]);
+    if (!rows.length) { await client.query('ROLLBACK'); return { ok: false, reason: 'no_such_family' }; }
+    const was = rows[0].handle;
+
+    if (was !== wanted) {
+      const { rows: taken } = await client.query(
+        'SELECT id FROM trees WHERE handle = $1 AND id <> $2', [wanted, treeId]);
+      if (taken.length) {
+        await client.query('ROLLBACK');
+        return { ok: false, reason: 'handle_taken', handle: wanted };
+      }
+      await client.query('UPDATE trees SET handle = $2 WHERE id = $1', [treeId, wanted]);
+    }
+
+    const hash = await hashPasscode(passcode);
+    const { rows: saved } = await client.query(
+      `UPDATE trees
+          SET passcode_hash = $2,
+              passcode_set_at = clock_timestamp(),
+              passcode_set_by = $3,
+              passcode_gen = passcode_gen + 1,
+              passcode_chosen = TRUE
+        WHERE id = $1
+        RETURNING id, name, handle, passcode_gen, passcode_set_at, passcode_chosen`,
+      [treeId, hash, String(by || '').slice(0, 120)]);
+    await client.query('COMMIT');
+
+    return { ok: true, ...saved[0], passcode,
+             handleChanged: was !== wanted, previousHandle: was };
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
 }
 
 // ── sessions ───────────────────────────────────────────────────────────────
@@ -609,6 +717,7 @@ async function revokeInvite(pool, inviteId, { treeId = null, by = '' } = {}) {
 module.exports = {
   SESSION_DAYS, INVITE_DAYS,
   makePasscode, splitPasscode, hashPasscode, checkPasscode, issuePasscode,
+  setPasscode, handleFor,
   createSession, readSession, touch, revokeSession, revokeTreeSessions, forgetTree,
   identify, carrySessions,
   liveSessions, purgeSessions, signIn,
