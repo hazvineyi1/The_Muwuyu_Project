@@ -122,6 +122,14 @@ function loadFrontend(){
       sameHouse, mutupoNotes, housesJoined, housesJoin,
       PALETTES, THEMES,
       diffOps, remapId, familyLink, titleFor, treeStamp, TITLE_BUDGET,
+      seniorSide, insertByAge,
+      // The drawn picture, for the tests that are about where people stand.
+      layoutOf(){ computeLayout(); return layout; },
+      rowOf(id){ computeLayout();
+        const xs = Object.entries(layout.persons)
+          .filter(([, q]) => q.y === layout.persons[id].y)
+          .sort((a, b) => a[1].x - b[1].x).map(([k]) => k);
+        return xs; },
       setMe(id){ meId = id; },
       setState(s){ state = s; }, getState(){ return state; }
     };`, sandbox);

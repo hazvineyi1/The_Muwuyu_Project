@@ -1214,7 +1214,7 @@ function grow(kind, anchorId, name, sex, totem, opts){
     let u = opts.unionId ? state.unions[opts.unionId] : null;
     if (!u || !u.partners.includes(anchorId)) u = unionsOf(anchorId)[0];
     if (!u) u = addUnion([anchorId], []);
-    u.children.push(id);                   // newest is youngest
+    insertByAge(u.children, id);
   }
   return id;
 }
@@ -1318,6 +1318,36 @@ function setParentage(id, share){
 }
 
 /* Move somebody one place among their brothers and sisters. */
+/* WHERE A NEW CHILD STANDS IN THE ROW.
+ *
+ * This used to be `children.push(id)` — newest is youngest — which is right
+ * exactly when a family enters their children oldest first and wrong the rest
+ * of the time. Families do not. They remember the one who lives nearby, then
+ * the one whose birthday it was, then the eldest who died before the others
+ * were born; and each of them landed on the young end of the row, so the
+ * sibling order said the opposite of the truth. That order is not decoration
+ * here — Mukoma and Munin'ina are read off it.
+ *
+ * So a child with a birth year is put where that year belongs: after every
+ * sibling known to be older, before the first known to be younger.
+ *
+ * A child with NO year is still appended, and that is deliberate rather than
+ * lazy. The row is the family's own statement of seniority — it is what
+ * olderThan falls back on when there are no dates — and a person nobody has
+ * dated cannot be slotted into it without inventing a claim. The end of the
+ * row is the only position that asserts nothing beyond "and also this one",
+ * and the arrows are there to move them. */
+function insertByAge(list, id){
+  const yr = birthYear(id);
+  if (yr === null){ list.push(id); return; }
+  let at = list.length;
+  for (let i = 0; i < list.length; i++){
+    const y = birthYear(list[i]);
+    if (y !== null && y > yr){ at = i; break; }
+  }
+  list.splice(at, 0, id);
+}
+
 function reorder(id, dir){
   const pu = parentUnionOf(id);
   if (!pu) return;
@@ -2761,6 +2791,61 @@ function generations(){
 
    Every block hangs off at most one parent block, so the family is still a
    forest and one tidy-tree pass places it. */
+/* WHICH WAY ROUND A ROW STANDS, and why it must not be insertion order.
+ *
+ * THE FAULT THIS FIXES. A row of people is built by walking the marriage
+ * graph, and the walk used to start at whichever end it happened to find
+ * first. So a wife added to a husband stood to his right, and a husband added
+ * to a wife stood to HERS — the same marriage, drawn back to front, decided
+ * by nothing more than which of the two was typed in first. The family sees
+ * one couple facing one way and the next facing the other, and nothing on
+ * screen explains why.
+ *
+ * So the order is computed from the people rather than remembered from the
+ * typing, and it is computed the same way every time the tree is drawn. Enter
+ * a family in any order at all and it settles into the same picture.
+ *
+ * THE RULE, in the order it is applied:
+ *
+ *   1. THE LINE'S OWN BEFORE THE MARRIED-IN. Somebody whose parents are in
+ *      this tree stands nearer the senior end than somebody who married into
+ *      it. This is the rule that keeps the lines clear, which is why it is
+ *      first and not a tiebreak: descent runs down through the blood member,
+ *      so putting them next to their own parents keeps the branch short and
+ *      straight, and pushes the spouse to the outside where their line has
+ *      nothing to cross.
+ *
+ *   2. THE ELDER BEFORE THE YOUNGER. Seniority by birth year, which is how
+ *      this family counts it and the same rule the sibling row already uses.
+ *      Mukoma stands before Munin'ina.
+ *
+ *   3. Then sex, then the id. Not because either means anything here, but
+ *      because two people the first two rules cannot separate still have to
+ *      be put in SOME order, and an order that changes between two draws of
+ *      the same tree is the bug this whole comment is about.
+ *
+ * SENIOR_LEFT is which side "first" comes out on. Left, because the sibling
+ * row is already eldest-first and reads left to right, and a tree whose
+ * children run one way and whose parents run the other is worse than either
+ * convention on its own. One constant, so a family that reads it the other
+ * way round changes it here and nothing else. */
+const SENIOR_LEFT = true;
+
+function seniorSide(a, b){
+  const pa = state.people[a] || {}, pb = state.people[b] || {};
+
+  const bloodA = parentUnionOf(a) ? 0 : 1, bloodB = parentUnionOf(b) ? 0 : 1;
+  if (bloodA !== bloodB) return bloodA - bloodB;
+
+  const ya = birthYear(a), yb = birthYear(b);
+  if (ya !== null && yb !== null && ya !== yb) return ya - yb;
+
+  const rank = x => x === 'm' ? 0 : x === 'f' ? 1 : 2;
+  if (rank(pa.sex) !== rank(pb.sex)) return rank(pa.sex) - rank(pb.sex);
+
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 function computeLayout(){
   const g = generations();
   const blocks = [], ofPerson = {};
@@ -2806,6 +2891,13 @@ function computeLayout(){
     const ends = (adj[p.id] || []).length === 1 ? p.id
       : ((adj[p.id] || []).find(m => (adj[m] || []).length === 1) || p.id);
     const members = chainFrom(ends);
+    /* The walk gives a chain; it does not give a direction. Turn it so the
+       senior end leads — see seniorSide. A chain of three or more is judged
+       by its two ends, because those are the only places a row can be
+       entered from and the middle is fixed by the marriages either side. */
+    if (members.length > 1 &&
+        seniorSide(members[members.length - 1], members[0]) < 0) members.reverse();
+    if (!SENIOR_LEFT) members.reverse();
     const b = { id:'b' + blocks.length, members, gen:g[members[0]] ?? 0, x:0, kids:[], parent:null, unions:[] };
     members.forEach(m => ofPerson[m] = b);
     blocks.push(b);
@@ -2861,9 +2953,27 @@ function computeLayout(){
     return span;
   }
 
+  /* THE SAME RULE ONE LEVEL UP. A block with no parent is a family whose
+     elders are the oldest anybody has traced — the top of a line, or a
+     household nobody has yet joined to the rest. These were placed in the
+     order their people were entered, so a grandfather added this morning
+     landed to the right of a grandson added last year.
+
+     Sorted rather than appended, so the picture does not depend on the diary.
+     Deepest generation first, because an ancestor belongs at the head of the
+     line and not beside their own descendants; then the same seniority rule
+     the rows use. A socket — the placeholder for parents nobody has named —
+     is ranked by the child hanging under it, since it has no people of its
+     own to rank. */
+  const headOf = b => b.members[0] || b.forChild || '';
+  const roots = blocks.filter(b => !b.parent).sort((b1, b2) => {
+    if (b1.gen !== b2.gen) return b2.gen - b1.gen;
+    const s = seniorSide(headOf(b1), headOf(b2));
+    return SENIOR_LEFT ? s : -s;
+  });
+
   let cursor = 0;
-  for (const b of blocks){
-    if (b.parent) continue;
+  for (const b of roots){
     cursor += place(b, cursor) + SIB_GAP * 2;
   }
 
