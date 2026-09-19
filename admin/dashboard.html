@@ -107,6 +107,15 @@
   button.act.danger:hover{border-color:var(--bad);color:var(--bad)}
   button.act[disabled]{opacity:.5;cursor:default}
   .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  /* THE BOX AND ITS BUTTON MUST READ AS ONE THING.
+     The input was flex:1, so on a wide card it ate the whole row and shoved
+     "Use this word" against the far edge — a button a screen's width away
+     from the box it belongs to. So the word got typed, and then the big
+     obvious button above it got pressed instead, which issues a GENERATED
+     passcode. A family asked for a word of their own three times and got
+     random letters three times, and nothing on the screen explained why. */
+  .chosenrow{flex-wrap:nowrap}
+  .chosenrow input{flex:0 1 320px;min-width:0}
   .row.tight{gap:6px}
 
   input,select,textarea{font:inherit;font-size:13px;padding:8px 11px;
@@ -552,11 +561,10 @@ async function openFamily(id) {
        the new one can be shown only once. Nobody can read the old one back — not
        even from the database.</p>
 
-    <div class="row" style="margin-top:10px">
+    <div class="row chosenrow" style="margin-top:10px">
       <input id="chosenCode" type="text" autocomplete="off" spellcheck="false"
-             placeholder="or set a word of their own, e.g. musoni"
-             style="flex:1;min-width:220px">
-      <button class="act" data-act="chosen" data-id="${esc(f.id)}">Use this word</button>
+             placeholder="or set a word of their own, e.g. musoni">
+      <button class="act strong" data-act="chosen" data-id="${esc(f.id)}">Use this word</button>
     </div>
     <p class="say"><b>A word is only as hard to guess as the word.</b> A generated
        passcode cannot be guessed; a family's own name can be, by anyone who finds
@@ -581,6 +589,18 @@ async function openFamily(id) {
       </tr>`).join('') : '<tr><td colspan="4" class="empty">Nothing yet.</td></tr>'}
     </tbody></table></div>
   </div>`;
+  /* Enter in the box does what the button beside it does. Typing a word and
+     pressing Enter is what anybody does, and having that do nothing is the
+     other half of how the word got typed and a generated passcode got
+     issued instead. */
+  const word = $('chosenCode');
+  if (word) word.addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const go = $('famDetail').querySelector('button[data-act="chosen"]');
+    if (go) go.click();
+  });
+
   $('famDetail').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
