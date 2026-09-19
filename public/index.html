@@ -3458,7 +3458,34 @@ function titleFor(anchor, id){
   return html;
 }
 
+/* A DRAWING FAILURE MUST NOT LOOK LIKE AN EMPTY FAMILY.
+ *
+ * Everything below builds the picture from the tree, and if any of it throws
+ * — a layout rule meeting a shape nobody anticipated, a link pointing at
+ * somebody who is not there — the exception escapes, the canvas keeps
+ * whatever it had, and the family is shown a blank page. There is no
+ * difference on screen between "the drawing code broke" and "your tree is
+ * gone", and the second is the one people assume.
+ *
+ * So the drawing is wrapped. The records are untouched by anything in here —
+ * render only reads — so the honest thing to say is that the tree is safe and
+ * the picture is not, and to put the actual error where it can be read out.
+ * That sentence is worth more than any amount of defensive coding further
+ * down, because it turns "everything has disappeared" into one line somebody
+ * can send me. */
 function render(){
+  try {
+    draw();
+  } catch (e){
+    console.error('The tree could not be drawn:', e);
+    const n = people().length;
+    say(`The picture could not be drawn — but nothing is lost: ${n} ` +
+        `${n === 1 ? 'person is' : 'people are'} still recorded and safe on the ` +
+        `server. Reload, and if it happens again send this: ${e && e.message}`);
+  }
+}
+
+function draw(){
   ancestryCache.clear();          // the tree may have changed shape
   forgetHouses();
   computeLayout();
