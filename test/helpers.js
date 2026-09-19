@@ -124,7 +124,7 @@ function loadFrontend(){
       diffOps, remapId, familyLink, titleFor, treeStamp, TITLE_BUDGET,
       seniorSide, insertByAge, canLink, linkExisting, linkCandidates, KIND_AS,
       rowsOutOfOrder, sortRowByAge, sortAllRowsByAge, seniorityConflicts,
-      moveChildTo, slotAt,
+      moveChildTo, slotAt, rowAnchor,
       // Undo is a click handler in the page; this is the same two lines, so a
       // test can prove an edit is reversible rather than assume it.
       undo(){ if (!history.length) return false; state = JSON.parse(history.pop()); return true; },

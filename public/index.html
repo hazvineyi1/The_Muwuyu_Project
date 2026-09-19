@@ -1418,6 +1418,29 @@ function insertByAge(list, id){
  * position has to mean something. Somewhere between two brothers means
  * something. Ninety pixels to the left of the tree means nothing, and storing
  * it would be storing a pixel and calling it kinship. */
+/* WHO IN A HOUSEHOLD ACTUALLY CARRIES IT.
+ *
+ * A branch hangs from ONE person: the one whose parents are in the tree. Their
+ * husband or wife married in and hangs from nobody, so there is no row to move
+ * them along and dragging them can do nothing.
+ *
+ * But the thing a family grabs is the HOUSEHOLD — a couple and everyone under
+ * them — and which of the two pods is under the thumb is an accident. Grabbing
+ * the wife and being told she has no brothers and sisters is a true sentence
+ * and a useless one when her husband is standing right beside her with the
+ * whole branch hanging off him.
+ *
+ * So a pod with no row of its own hands the drag to whichever partner has one.
+ * The picture does not change either way — they stand together — and the
+ * family gets the household they reached for rather than a refusal about the
+ * person they happened to touch. */
+function rowAnchor(id){
+  if (!id || !state.people[id]) return null;
+  if (parentUnionOf(id)) return id;
+  for (const mate of partnersOf(id)) if (parentUnionOf(mate)) return mate;
+  return null;
+}
+
 function moveChildTo(id, index){
   const pu = parentUnionOf(id);
   if (!pu) return false;
@@ -6853,9 +6876,12 @@ podsEl.addEventListener('pointerdown', e => {
   const pod = e.target.closest('.pod');
   // The small controls on a card are their own targets, not handles.
   if (!pod || e.target.closest('.rm,.ord,[data-card]')) return;
-  const id = pod.dataset.id;
-  if (!id || !state.people[id]) return;
-  carry = { id, sx:e.clientX, sy:e.clientY, slot:null, told:false };
+  const pressed = pod.dataset.id;
+  if (!pressed || !state.people[pressed]) return;
+  // The household is what is being reached for; the person who carries it may
+  // be their husband or wife. See rowAnchor.
+  const id = rowAnchor(pressed) || pressed;
+  carry = { id, pressed, sx:e.clientX, sy:e.clientY, slot:null, told:false };
 });
 
 addEventListener('pointermove', e => {
@@ -6864,15 +6890,21 @@ addEventListener('pointermove', e => {
     if (Math.hypot(e.clientX - carry.sx, e.clientY - carry.sy) < CARRY_SLOP) return;
     carried = true;
     if (!parentUnionOf(carry.id)){
-      // Nothing to move them among. Say it once and stop.
+      /* Nobody in this household has parents in the tree, so there is no row
+         to move along — not a refusal about the person touched, which is why
+         it names the household rather than them. */
       if (!carry.told){
         carry.told = true;
-        say(`${state.people[carry.id].name} has no brothers or sisters recorded ` +
-            `to move among. Add their parents first, and the row is theirs to ` +
-            `arrange.`);
+        say(`Nobody in ${state.people[carry.pressed].name}'s household has ` +
+            `parents recorded yet, so there is no row to move them along. ` +
+            `Add a parent and the row becomes yours to arrange.`);
       }
       carry = null; carried = false;
       return;
+    }
+    if (carry.id !== carry.pressed){
+      say(`Carrying ${state.people[carry.pressed].name}'s household, by ` +
+          `${state.people[carry.id].name}.`);
     }
     document.body.classList.add('carrying');
   }

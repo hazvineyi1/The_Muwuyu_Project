@@ -89,6 +89,51 @@ section('everyone below comes along, because they were always below');
         JSON.stringify({ parent:L.persons[h.kids[0]].x, child:L.persons[grandkid].x }));
 }
 
+section('GRABBING THE WIFE CARRIES THE HOUSEHOLD');
+/* The case from the screenshot: a couple, and the pod under the thumb was
+   the one who married in. A branch hangs from ONE person — the one whose
+   parents are in the tree — so the wife hangs from nobody and dragging her
+   could do nothing. But the thing being reached for is the HOUSEHOLD, and
+   which of the two pods the thumb landed on is an accident. */
+{
+  const fe = loadFrontend();
+  const gf = fe.addPerson('Grandfather', 'm', 'Mwendamberi', '1930', '');
+  const sons = ['SonA', 'Thomas', 'SonC'].map((n, i) =>
+    fe.grow('child', gf, n, 'm', 'Mwendamberi', { born: String(1955 + i * 5) }));
+  const idah = fe.grow('partner', sons[1], 'Idah', 'f', 'Shava', { born:'1962' });
+
+  eq('she has no row of her own', fe.parentUnionOf(idah), null);
+  eq('so the drag is handed to her husband', fe.rowAnchor(idah), sons[1]);
+
+  check('and carrying her moves his household', fe.moveChildTo(fe.rowAnchor(idah), 0));
+  eq('to the front of the row',
+     names(fe, Object.values(fe.getState().unions).find(u => u.children.length === 3).children),
+     ['Thomas', 'SonA', 'SonC']);
+}
+
+section('somebody who has their own row keeps it, rather than being handed on');
+{
+  const fe = loadFrontend();
+  const gf = fe.addPerson('Grandfather', 'm', 'Mwendamberi', '1930', '');
+  const son = fe.grow('child', gf, 'Son', 'm', 'Mwendamberi', { born:'1960' });
+  const herDad = fe.addPerson('Her father', 'm', 'Nzou', '1935', '');
+  const wife = fe.grow('child', herDad, 'Wife', 'f', 'Nzou', { born:'1962' });
+  fe.linkExisting('partner', son, wife);
+  eq('she carries herself', fe.rowAnchor(wife), wife);
+  eq('and he carries himself', fe.rowAnchor(son), son);
+}
+
+section('a household where nobody has parents carries nothing');
+// Not a refusal about the person touched — there is simply no row anywhere in
+// the household, and the message says so.
+{
+  const fe = loadFrontend();
+  const a = fe.addPerson('A', 'm', 'Mwendamberi', '1940', '');
+  const b = fe.grow('partner', a, 'B', 'f', 'Shava', { born:'1942' });
+  eq('nobody to hand it to', fe.rowAnchor(b), null);
+  eq('nor the other way', fe.rowAnchor(a), null);
+}
+
 section('somebody with no row cannot be carried anywhere');
 // An only child, or a person whose parents nobody has recorded, has no
 // brothers and sisters to move among. Refused rather than silently ignored.
