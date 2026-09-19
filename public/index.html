@@ -243,6 +243,10 @@ body{
 /* ── stage ──────────────────────────────────────────────────────────── */
 #stage{position:fixed; inset:0; cursor:grab; touch-action:none;}
 #stage.dragging{cursor:grabbing;}
+/* While a branch is being carried: the whole canvas says so, and nothing
+   under the pointer can be selected out from under the drag. */
+body.carrying{cursor:grabbing; user-select:none;}
+body.carrying .pod{transition:none;}
 #sky{position:absolute; inset:0; background:linear-gradient(var(--sky-far),var(--sky) 60%);}
 /* Corners fall away very slightly. It is barely perceptible on its own and it
    is most of what separates a page that feels composed from one that feels
@@ -1389,6 +1393,58 @@ function insertByAge(list, id){
     if (y !== null && y > yr){ at = i; break; }
   }
   list.splice(at, 0, id);
+}
+
+/* CARRY A BRANCH TO WHERE IT BELONGS.
+ *
+ * The arrows move somebody one place at a time, which is right for correcting
+ * a birth order and useless for the thing a family actually wants: picking up
+ * a whole household — a person and everyone recorded below them — and putting
+ * it on the other side of its brothers and sisters.
+ *
+ * It is the same edit either way. A branch hangs where its person sits in
+ * their parents' row, so moving the branch IS moving them along that row, and
+ * everyone below comes because they were always below. Nothing else changes:
+ * no parents are reassigned, nobody is added or removed, and the marriage the
+ * row belongs to is untouched.
+ *
+ * `index` is the place in the row the family wants them, counted among
+ * everybody who is in it. Computed rather than nudged, so a drag across four
+ * siblings is one act and one line in the change log rather than four.
+ *
+ * WHAT IT DOES NOT DO is let a branch be dropped anywhere on the canvas. The
+ * row is a statement about seniority that the rest of the app reads —
+ * olderThan falls back on it, Mukoma and Munin’ina come out of it — so a
+ * position has to mean something. Somewhere between two brothers means
+ * something. Ninety pixels to the left of the tree means nothing, and storing
+ * it would be storing a pixel and calling it kinship. */
+function moveChildTo(id, index){
+  const pu = parentUnionOf(id);
+  if (!pu) return false;
+  const kids = pu.children;
+  if (kids.indexOf(id) < 0) return false;
+
+  const rest = kids.filter(x => x !== id);
+  const at = Math.max(0, Math.min(rest.length, Number(index) || 0));
+  const next = rest.slice();
+  next.splice(at, 0, id);
+  if (next.join(',') === kids.join(',')) return false;   // already there
+
+  snapshot();
+  pu.children = next;
+  return true;
+}
+
+/* Where in their row a person would land if dropped at this point on the
+   canvas. Counted by how many of their brothers and sisters are already to
+   the left of it — which is what the eye is doing when somebody drags. */
+function slotAt(id, treeX){
+  const pu = parentUnionOf(id);
+  if (!pu) return null;
+  const sibs = pu.children.filter(x => x !== id && present(x) && layout.persons[x]);
+  let n = 0;
+  for (const sib of sibs) if (layout.persons[sib].x < treeX) n++;
+  return n;
 }
 
 function reorder(id, dir){
@@ -6765,7 +6821,100 @@ budsEl.addEventListener('keydown', e => {
   }
 });
 
-podsEl.addEventListener('pointerdown', e => e.stopPropagation());
+/* CARRYING A BRANCH.
+ *
+ * A pod already swallows pointerdown so that starting on somebody does not
+ * pan the whole canvas. That is the opening this needs: press on a person,
+ * move sideways, and you are carrying them and everyone below them along
+ * their parents' row.
+ *
+ * THE THREE THINGS IT MUST NOT BREAK, which is most of the code here:
+ *
+ *   A TAP. Nothing happens until the pointer has travelled further than a
+ *   thumb wobbles (CARRY_SLOP). Under that it is a tap and the click handler
+ *   below does its ordinary job; over it, the click that the browser fires
+ *   afterwards is swallowed, or every drag would also open a card.
+ *
+ *   PANNING. The canvas is still dragged by pressing anywhere that is not a
+ *   person, exactly as before.
+ *
+ *   SOMEBODY WITH NO ROW. An only child, or a person whose parents nobody has
+ *   recorded, has no brothers and sisters to move among. Dragging them says
+ *   so once rather than appearing to work and doing nothing.
+ *
+ * The hint names where they will land as the pointer moves, because a drag
+ * with no answer to "where is this going" is a guess, and a row of pods all
+ * the same shape gives the eye nothing to judge by. */
+const CARRY_SLOP = 8;
+let carry = null, carried = false;
+
+podsEl.addEventListener('pointerdown', e => {
+  e.stopPropagation();
+  const pod = e.target.closest('.pod');
+  // The small controls on a card are their own targets, not handles.
+  if (!pod || e.target.closest('.rm,.ord,[data-card]')) return;
+  const id = pod.dataset.id;
+  if (!id || !state.people[id]) return;
+  carry = { id, sx:e.clientX, sy:e.clientY, slot:null, told:false };
+});
+
+addEventListener('pointermove', e => {
+  if (!carry) return;
+  if (!carried){
+    if (Math.hypot(e.clientX - carry.sx, e.clientY - carry.sy) < CARRY_SLOP) return;
+    carried = true;
+    if (!parentUnionOf(carry.id)){
+      // Nothing to move them among. Say it once and stop.
+      if (!carry.told){
+        carry.told = true;
+        say(`${state.people[carry.id].name} has no brothers or sisters recorded ` +
+            `to move among. Add their parents first, and the row is theirs to ` +
+            `arrange.`);
+      }
+      carry = null; carried = false;
+      return;
+    }
+    document.body.classList.add('carrying');
+  }
+  const treeX = (e.clientX - pos.x) / pos.k;
+  const slot = slotAt(carry.id, treeX);
+  if (slot === carry.slot) return;
+  carry.slot = slot;
+
+  const pu = parentUnionOf(carry.id);
+  const sibs = pu.children.filter(x => x !== carry.id && present(x));
+  const first = x => (state.people[x].name || '').split(' ')[0];
+  const me = first(carry.id);
+  say(!sibs.length ? `${me} is the only one in this row.`
+      : slot <= 0 ? `${me} before ${first(sibs[0])}`
+      : slot >= sibs.length ? `${me} after ${first(sibs[sibs.length - 1])}`
+      : `${me} between ${first(sibs[slot - 1])} and ${first(sibs[slot])}`);
+});
+
+addEventListener('pointerup', e => {
+  const held = carry, moved = carried;
+  carry = null; carried = false;
+  document.body.classList.remove('carrying');
+  if (!held || !moved) return;
+
+  if (moveChildTo(held.id, held.slot ?? 0)){
+    const kept = screenOf(held.id);
+    render();
+    keepSteady(held.id, kept);
+    save();
+    say(`${state.people[held.id].name} moved — ` +
+        `${rankLabel(held.id, true).toLowerCase() || 'in the row'}.`);
+  }
+  // Whether it moved or not, the click the browser is about to fire was part
+  // of a drag and must not also open a card.
+  podsEl.addEventListener('click', ev => ev.stopImmediatePropagation(),
+                          { capture:true, once:true });
+});
+
+addEventListener('pointercancel', () => {
+  carry = null; carried = false;
+  document.body.classList.remove('carrying');
+});
 podsEl.addEventListener('click', e => {
   const card = e.target.closest('[data-card]');
   if (card){ openCard(card.dataset.card); return; }
