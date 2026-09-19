@@ -3068,15 +3068,55 @@ function computeLayout(){
     (adj[y] = adj[y] || []).push(x);
   }
   const seen = new Set();
-  const chainFrom = start => {                  // depth-first, so A–X–B–C reads in order
-    const order = [], stack = [start];
-    while (stack.length){
-      const n = stack.pop();
-      if (seen.has(n)) continue;
-      seen.add(n); order.push(n);
-      (adj[n] || []).slice().reverse().forEach(m => { if (!seen.has(m)) stack.push(m); });
-    }
-    return order;
+
+  /* HOW A ROW OF MARRIED PEOPLE IS ORDERED, and why a plain walk is not good
+   * enough.
+   *
+   * THE FAULT THIS FIXES is the line that crosses the whole canvas. A row is
+   * everybody joined by marriage, laid out left to right, and the marriages
+   * are drawn as horizontal bonds between them. It used to be ordered by a
+   * straightforward depth-first walk, which reads fine for a simple chain —
+   * A married X, X married B — and falls apart on the shape families actually
+   * have.
+   *
+   * A man with three wives is not a chain, it is a star. The walk reached
+   * him, went down his first wife, and then followed HER earlier marriage,
+   * and that husband's other wife, and so on to the end of the row — before
+   * coming back for the second and third wives. So a marriage that is one
+   * step in the family was drawn as a line spanning six people and half the
+   * screen, and the couple it joined appeared to be on opposite sides of the
+   * tree.
+   *
+   * So the row is built to keep married people near each other. Each person
+   * is placed BETWEEN the branches hanging off them rather than in front of
+   * all of them: the longest branch runs out to one side, the person next,
+   * then the rest in growing order. A husband ends up standing among his
+   * wives instead of at one end of a queue of in-laws, and the bonds that
+   * have to reach are the short ones.
+   *
+   * It cannot make every bond adjacent — a row is one-dimensional and a man
+   * with three wives can only stand beside two of them. What it can do is
+   * make the one that reaches reach past one person instead of past ten. */
+  const chainFrom = start => {
+    const build = node => {
+      seen.add(node);
+      const subs = [];
+      for (const m of (adj[node] || [])){
+        if (seen.has(m)) continue;              // also what keeps a cycle finite
+        subs.push(build(m));
+      }
+      if (!subs.length) return { list:[node], size:1 };
+      // Longest first, and a stable tiebreak so the same family draws the
+      // same way twice.
+      subs.sort((a, b) => b.size - a.size ||
+                          (a.list[0] < b.list[0] ? -1 : a.list[0] > b.list[0] ? 1 : 0));
+      const before = subs[0].list;                    // the long branch, outward
+      const after = subs.slice(1).reverse()           // the rest, nearest first
+                        .reduce((out, sub) => out.concat(sub.list), []);
+      return { list: before.concat(node, after),
+               size: 1 + subs.reduce((n, sub) => n + sub.size, 0) };
+    };
+    return build(start).list;
   };
 
   for (const p of people()){

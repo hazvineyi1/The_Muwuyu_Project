@@ -131,6 +131,63 @@ section('a family with nothing to do with another is still ordered by seniority'
         JSON.stringify({ a:L.persons[a].x, b:L.persons[b].x }));
 }
 
+// ── the line that crossed the whole canvas ─────────────────────────────────
+section('A MARRIAGE IS NEVER DRAWN AS A LINE ACROSS THE WHOLE ROW');
+/* A row is everybody joined by marriage, laid out left to right, and the
+   marriages are horizontal bonds between them. A plain walk reads fine for a
+   chain — A married X, X married B — and falls apart on the shape families
+   actually have. A man with three wives is a star: the walk went down his
+   first wife, followed HER earlier marriage and that husband's other wife to
+   the end of the row, then came back for the second and third wives. So a
+   marriage one step wide was drawn spanning six people and half the screen,
+   and the couple looked like they were on opposite sides of the tree. */
+function remarried(){
+  const fe = loadFrontend();
+  const P = (n, s, b) => fe.addPerson(n, s, 'Mwendamberi', b, '');
+  const man = P('Man', 'm', '1940');
+  const w1 = P('First wife', 'f', '1942');
+  const w2 = P('Second wife', 'f', '1950');
+  const w3 = P('Third wife', 'f', '1955');
+  fe.addUnion([man, w1], []); fe.addUnion([man, w2], []); fe.addUnion([man, w3], []);
+  const ex = P('Her earlier husband', 'm', '1938'); fe.addUnion([w1, ex], []);
+  const exw = P('His other wife', 'f', '1944'); fe.addUnion([ex, exw], []);
+  return { fe, L: fe.layoutOf() };
+}
+const bondSpans = L => L.links.filter(l => l.kind === 'bond')
+  .map(l => Math.round((l.x2 - l.x1) / 162));
+{
+  const r = remarried();
+  const worst = Math.max(...bondSpans(r.L));
+  check('no marriage reaches past more than one person', worst <= 2, 'worst span ' + worst);
+}
+
+section('and that is the best a single row can do, not merely better');
+/* Two is the floor, not a threshold somebody tuned. A row is one line of
+   people: a man with three wives can stand beside two of them and no
+   arrangement puts him beside the third. */
+{
+  const r = remarried();
+  const spans = bondSpans(r.L).sort();
+  eq('every marriage but one is side by side',
+     spans.filter(n => n === 1).length, spans.length - 1);
+}
+
+section('it holds when several households have remarried');
+// The shape that made the line cross the whole canvas in a real tree.
+{
+  const fe = loadFrontend();
+  const P = n => fe.addPerson(n, 'f', 'Mwendamberi', '1950', '');
+  const hub1 = fe.addPerson('Hub one', 'm', 'Mwendamberi', '1950', '');
+  const wives = ['a', 'b', 'c'].map(k => { const w = P('one ' + k); fe.addUnion([hub1, w], []); return w; });
+  const hub2 = fe.addPerson('Hub two', 'm', 'Mwendamberi', '1950', '');
+  fe.addUnion([wives[0], hub2], []);
+  ['d', 'e'].forEach(k => fe.addUnion([hub2, P('two ' + k)], []));
+
+  const worst = Math.max(...bondSpans(fe.layoutOf()));
+  check('still no long reach with seven people and two hubs',
+        worst <= 2, 'worst span ' + worst);
+}
+
 section('and drawing the same tree twice still moves nobody');
 {
   const f = family('1935');
