@@ -40,9 +40,15 @@ const access = require('../db/access');
 
   check('it checks out against the hash',
         await access.checkPasscode(issued.passcode, stored.rows[0].passcode_hash));
+  /* A character that is definitely NOT the one already there. This used to
+     append a fixed 'x', which is a wrong passcode 30 times out of 31 and the
+     RIGHT one when the generated passcode happened to end in x — a one-in-31
+     spurious failure, found by exactly that. */
+  const last = issued.passcode.slice(-1);
   check('one character wrong does not',
-        !await access.checkPasscode(issued.passcode.slice(0, -1) + 'x',
-                                    stored.rows[0].passcode_hash));
+        !await access.checkPasscode(
+          issued.passcode.slice(0, -1) + (last === 'x' ? 'y' : 'x'),
+          stored.rows[0].passcode_hash));
   check('a phone\'s trailing space is not a wrong passcode',
         await access.checkPasscode(issued.passcode + ' ', stored.rows[0].passcode_hash));
   check('nor is a phone capitalising the first letter',

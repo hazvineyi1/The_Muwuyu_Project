@@ -3132,7 +3132,35 @@ function computeLayout(){
     if (members.length > 1 &&
         seniorSide(members[members.length - 1], members[0]) < 0) members.reverse();
     if (!SENIOR_LEFT) members.reverse();
-    const b = { id:'b' + blocks.length, members, gen:g[members[0]] ?? 0, x:0, kids:[], parent:null, unions:[] };
+    /* WHICH ROW THE WHOLE HOUSEHOLD STANDS ON.
+     *
+     * This used to be the generation of whichever member came first in the
+     * list, which was fine only for as long as nothing reordered the list.
+     * Reordering it is exactly what the walk above now does — so the row a
+     * family stood on started depending on which of two spouses happened to
+     * end up on the left, and households jumped rows between one drawing and
+     * the next.
+     *
+     * Members do not always agree. generations() numbers outward from one
+     * person and the first path to reach somebody wins, so a wife whose own
+     * parents are recorded can be numbered from her father rather than from
+     * her husband and come out one row off him.
+     *
+     * They are married: they belong on ONE row. So the row is the one most of
+     * them compute to, and the oldest of those when they tie — a decision
+     * about the household rather than about whoever is standing at the end of
+     * it, and the same answer whatever order they are in. */
+    const tally = new Map();
+    for (const m of members){
+      const gm = g[m] ?? 0;
+      tally.set(gm, (tally.get(gm) || 0) + 1);
+    }
+    let gen = 0, best = -1;
+    for (const [value, count] of [...tally].sort((a, b) => a[0] - b[0])){
+      if (count > best){ best = count; gen = value; }
+    }
+
+    const b = { id:'b' + blocks.length, members, gen, x:0, kids:[], parent:null, unions:[] };
     members.forEach(m => ofPerson[m] = b);
     blocks.push(b);
   }
@@ -6778,7 +6806,7 @@ const touches = new Map();   // pointerId -> {x,y}, so two fingers can pinch
 let pinch = null;
 
 const zoomAt = (k, cx, cy) => {
-  k = Math.max(0.25, Math.min(2.4, k));
+  k = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, k));
   pos.x = cx - (cx - pos.x) * (k / pos.k);
   pos.y = cy - (cy - pos.y) * (k / pos.k);
   pos.k = k;
@@ -6829,13 +6857,23 @@ stage.addEventListener('wheel', e => {
   zoomAt(pos.k * (e.deltaY < 0 ? 1.12 : 1/1.12), e.clientX, e.clientY);
 }, { passive:false });
 
+/* How far the picture may be zoomed, in one place.
+ *
+ * These were two different numbers: a hand on the wheel could reach 0.25, and
+ * fit() refused to go below 0.5. So on a tree wide enough to need it, the one
+ * button whose whole job is to show you everything could not reach a zoom the
+ * user could reach themselves — it framed the middle and left the rest off
+ * both edges. On a big family that reads as most of the tree having vanished,
+ * and the button that should rescue you is the one that cannot. */
+const ZOOM_MIN = 0.25, ZOOM_MAX = 2.4;
+
 function fit(){
   const pts = Object.values(layout.persons).concat((layout.sockets || []).map(q => ({ x:q.x, y:q.y })));
   if (!pts.length){ pos = { x:innerWidth/2, y:innerHeight*0.6, k:1 }; applyTransform(); return; }
   const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
   const minX = Math.min(...xs) - POD_W, maxX = Math.max(...xs) + POD_W;
   const minY = Math.min(...ys) - POD_H*1.8, maxY = Math.max(...ys) + POD_H*1.8;
-  pos.k = Math.max(0.5, Math.min(1.15,
+  pos.k = Math.max(ZOOM_MIN, Math.min(1.15,
     Math.min((innerWidth - 80) / (maxX - minX || 1),
              (innerHeight - 170 - TOPBAR) / (maxY - minY || 1))));
   pos.x = innerWidth/2 - ((minX + maxX)/2) * pos.k;
