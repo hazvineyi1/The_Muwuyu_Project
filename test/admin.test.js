@@ -144,6 +144,27 @@ function client(server) {
     check('  and no name came back with it', !/Chenjerai/.test(r.text));
   }
 
+  /* THE TRAP THIS CLOSES, which cost a family an evening believing their
+     tree was gone. /api/home answers "which tree is this session's". For an
+     admin session there is none — that is the wall above working — but it
+     used to fall through to the deployment's home tree and hand back an id
+     the session provably cannot open. The family page then asked for it, got
+     the 404 the wall correctly gives, and showed "the tree could not be read"
+     directly above an invitation to plant the first person. A keeper who
+     typed their passphrase at the family door was one name away from creating
+     a tree nobody wanted, while their real family sat untouched and
+     apparently vanished. */
+  section('AND IS NOT SENT TO A FAMILY TREE IT CANNOT THEN OPEN');
+  r = await keeper.go('/api/home');
+  eq('the question is answered', r.status, 200);
+  {
+    const home = JSON.parse(r.text);
+    check('it says the session is the keeper\'s', home.keeper === true, r.text);
+    check('and names no tree at all', !home.treeId, r.text);
+    check('and says where the keeper\'s own pages are',
+          /\/admin/.test(home.message || ''), home.message);
+  }
+
   section('nor write to one');
   r = await keeper.go(`/api/tree/${nyamhunga.id}/ops`, { method:'POST',
     json:[{ op:'addPerson', ref:'x', name:'Somebody the keeper invented' }] });

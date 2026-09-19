@@ -174,6 +174,30 @@ module.exports = function treeRoutes(pool, homeTreeId = null) {
      the fallback for the one case that has no family session of its own: a
      deployment with no gate at all, run locally to look at. */
   r.get('/home', async (req, res) => {
+    /* THE KEEPER IS NOT A FAMILY, and saying so here is the difference
+       between a clear sentence and a trap.
+
+       An admin session has no tree — that is the whole point of it, and the
+       wall this project keeps between administering families and reading
+       them. But this used to fall straight through to homeTreeId, handing
+       back a tree the session provably cannot open. The family page then
+       asked for it, got the 404 that `own` correctly gives, and showed "the
+       tree could not be read" above an invitation to plant the first person
+       — so a keeper who typed their passphrase at the family door was one
+       name away from creating a tree they did not want, while their real
+       family sat there untouched and apparently gone.
+
+       Nothing here refuses anything the gate did not already refuse. It just
+       stops pretending there is a tree to go to. */
+    if (req.muti?.scope === 'admin') {
+      return res.json({
+        keeper: true,
+        message: 'You are signed in as the keeper of this deployment, not as a ' +
+                 'family. The keeper\'s pages are at /admin. To open a family\'s ' +
+                 'tree, sign out and sign in with that family\'s passcode.'
+      });
+    }
+
     const treeId = req.muti?.treeId || homeTreeId;
     if (!treeId) {
       return res.status(503).json({

@@ -990,10 +990,10 @@ body{
 <div id="others" hidden role="status"></div>
 
 <div id="stalled" hidden role="alert">
-  <b>The shared tree did not load.</b>
+  <b id="stalledHead">The shared tree did not load.</b>
   <span id="stalledWhy"></span>
-  Nothing you do here will be saved, and nothing already recorded has been
-  touched. Reload once the connection is back.
+  <span id="stalledCalm">Nothing you do here will be saved, and nothing already
+  recorded has been touched. Reload once the connection is back.</span>
   <button id="stalledGo">Try again</button>
 </div>
 
@@ -7088,6 +7088,17 @@ async function load(){
   if (r && r.ok && (r.headers.get('content-type') || '').includes('json')){
     try {
       const home = await r.json();
+      /* Signed in as the keeper rather than as a family. Not an error and not
+         a missing tree — the wrong door, and the page has to say which. The
+         old reading was "the server named no tree", which sat above the
+         invitation to plant the first person and made creating an unwanted
+         tree the most obvious thing on screen. */
+      if (home && home.keeper){
+        store = 'keeper';
+        stalledWhy = home.message ||
+          'You are signed in as the keeper, not as a family.';
+        throw new Error('keeper');
+      }
       if (!home || !home.treeId) throw new Error('the server named no tree');
       treeId = home.treeId;
       familyKey = home.key || asked || null;
@@ -7108,8 +7119,12 @@ async function load(){
       }
       store = 'shared';
     } catch (e) {
+      // The keeper case already said exactly what is wrong and why; a generic
+      // "could not be read" on top of it would bury the one useful sentence.
+      if (store === 'keeper') { /* keep it */ } else {
       store = 'stalled';
       stalledWhy = 'The tree could not be read (' + e.message + ').';
+      }
     }
   } else if (r && r.status === 404 && via === 'link'){
     store = 'stalled';
@@ -7599,7 +7614,32 @@ function showClash(detail){
 function showStalled(){
   const el = $('stalled');
   if (!el) return;
-  el.hidden = store !== 'stalled';
+  el.hidden = store !== 'stalled' && store !== 'keeper';
+
+  if (store === 'keeper'){
+    /* Not a failure, so it must not be dressed as one — and above all the
+       "plant the first person" box below must not be the obvious thing to
+       do next, because doing it makes a tree nobody wanted. */
+    $('stalledHead').textContent = 'You are signed in as the keeper.';
+    $('stalledWhy').textContent = stalledWhy;
+    $('stalledCalm').textContent = 'Nothing is wrong with any family\u2019s tree.';
+    /* THE TRAP, closed. This box invites you to plant the first person, and a
+       keeper who did that would create a tree nobody wanted while their real
+       family sat elsewhere looking lost. It is not an offer that makes any
+       sense to a session that is not a family. */
+    const seed = $('seed');
+    if (seed) seed.hidden = true;
+    const again = $('stalledGo');
+    if (again){
+      again.textContent = 'Open the keeper’s pages';
+      again.onclick = () => { location.href = '/admin'; };
+    }
+    clearInterval(poller);
+    say('Signed in as the keeper — the family trees are opened with a ' +
+        'family passcode, not this one.');
+    return;
+  }
+
   if (store === 'stalled'){
     $('stalledWhy').textContent = stalledWhy;
     clearInterval(poller);
