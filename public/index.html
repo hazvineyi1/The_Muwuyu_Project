@@ -3111,10 +3111,55 @@ function computeLayout(){
      is ranked by the child hanging under it, since it has no people of its
      own to rank. */
   const headOf = b => b.members[0] || b.forChild || '';
-  const roots = blocks.filter(b => !b.parent).sort((b1, b2) => {
+  const roots = blocks.filter(b => !b.parent);
+
+  /* CONNECTED HOUSEHOLDS ARE KEPT TOGETHER, and this is the other half of
+     "the tree is not joined".
+   *
+   * Sorting the top-level families by seniority alone is right when they have
+   * nothing to do with each other, and badly wrong when they do. Two people
+   * already in the tree marry; their row hangs under one set of parents; the
+   * OTHER set is left as a top-level family of its own — and then gets sorted
+   * by its elder's birth year to wherever that falls. A father born in 1900
+   * lands at the far left of the canvas while his son stands in a household
+   * near the right, and the line between them crosses everything. The family
+   * reads that as a branch growing on the wrong side, and they are right.
+   *
+   * So before seniority is considered at all, the roots are gathered into
+   * groups that actually reach each other, and each group is kept contiguous.
+   * Seniority then orders the groups, and orders the members inside each one
+   * — it decides where a family sits, not whether it is torn in half. */
+  const rootOf = b => { while (b.parent) b = b.parent; return b; };
+  const group = new Map(roots.map(b => [b, b]));           // union-find, flat
+  const find = b => { while (group.get(b) !== b) b = group.get(b); return b; };
+  const join = (x, y) => { const a = find(x), c = find(y); if (a !== c) group.set(a, c); };
+
+  for (const u of us){
+    if (!u.partners.length) continue;
+    const home = ofPerson[u.partners[0]];
+    if (!home) continue;
+    for (const c of u.children){
+      const kid = ofPerson[c];
+      if (kid) join(rootOf(home), rootOf(kid));
+    }
+  }
+
+  const rank = b => [b.gen, headOf(b)];
+  const seniorOf = (b1, b2) => {
     if (b1.gen !== b2.gen) return b2.gen - b1.gen;
     const s = seniorSide(headOf(b1), headOf(b2));
     return SENIOR_LEFT ? s : -s;
+  };
+  // Each group led by its most senior member; groups in that same order.
+  const lead = new Map();
+  for (const b of roots){
+    const g = find(b);
+    if (!lead.has(g) || seniorOf(b, lead.get(g)) < 0) lead.set(g, b);
+  }
+  roots.sort((b1, b2) => {
+    const g1 = find(b1), g2 = find(b2);
+    if (g1 !== g2) return seniorOf(lead.get(g1), lead.get(g2));
+    return seniorOf(b1, b2);
   });
 
   let cursor = 0;
@@ -3152,6 +3197,27 @@ function computeLayout(){
       }
     }
   }
+  /* EVERY DESCENT LINE, not just the one the layout hung the block from.
+   *
+   * THE FAULT THIS FIXES, and it detaches whole branches. The picture is laid
+   * out as a tree: each row of people hangs beneath one parent row. A family
+   * is not a tree. The moment two people who are both already in it marry
+   * each other, their row has TWO sets of parents wanting to claim it, and
+   * the loop above gives it to whichever was reached first — `if (cb.parent)
+   * continue`.
+   *
+   * That is a reasonable way to decide where a row STANDS. It was also,
+   * wrongly, the only thing that decided where a line was DRAWN. So the other
+   * set of parents got no line at all: a grandfather with one son in the tree
+   * would sit off at the edge of the canvas, joined to nothing, looking like
+   * a family nobody had finished entering — when in fact the app knew exactly
+   * whose father he was and simply never drew it.
+   *
+   * Position and connection are now separate things. The block tree still
+   * decides where everybody stands; the lines are drawn from the marriages,
+   * so every parent-child link the family has recorded appears on the canvas.
+   * A line to a household standing somewhere else is longer and may cross
+   * others — and is enormously better than a branch that silently floats. */
   for (const b of blocks){
     if (!b.parent) continue;
     const to = persons[b.viaChild];
@@ -3169,6 +3235,28 @@ function computeLayout(){
       child:b.viaChild, parents
     });
   }
+  /* The second pass: every (marriage -> child) the first pass did not draw.
+     Keyed on the pair, so the link the block hangs from is never doubled. */
+  const drawnLink = new Set(blocks.filter(b => b.parent && b.viaUnion)
+                                  .map(b => b.viaUnion + '>' + b.viaChild));
+  for (const u of us){
+    if (!u.partners.length) continue;
+    const from = unionAt[u.id];
+    if (!from) continue;
+    for (const c of u.children){
+      if (drawnLink.has(u.id + '>' + c)) continue;
+      const to = persons[c];
+      if (!to) continue;
+      links.push({
+        kind:'branch', reaches:true,
+        x1:from.x, y1:from.y, x2:to.x, y2:to.y,
+        weight: ofPerson[c] ? countBelow(ofPerson[c]) : 1,
+        root:(from.y + to.y)/2 > 0, unknown:false,
+        id:c, child:c, parents:u.partners.filter(present)
+      });
+    }
+  }
+
   layout = { persons, sockets, links };
 }
 
