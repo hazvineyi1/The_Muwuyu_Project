@@ -562,6 +562,17 @@ body{
   display:block; font-family:'Karla',sans-serif; font-size:10px;
   color:var(--muted); margin-top:1px;
 }
+/* The fix that sits under a gap count. Indented under its row so it reads as
+   an answer to that line rather than a new section. */
+#form .gapfix{
+  margin:-2px 0 10px 0; padding:8px 10px; border-radius:0 0 10px 10px;
+  background:var(--pod-hi); border:1px solid var(--pod-edge); border-top:none;
+}
+#form .gapfix em{
+  display:block; margin-top:6px; font-size:10.5px; line-height:1.45;
+  color:var(--muted); font-style:normal;
+}
+
 #form .relline.none{background:var(--pod-hi); color:var(--ink); border:1.5px dashed var(--pod-edge);}
 #form .relline.none b{color:var(--muted);}
 #form .relline.taught{background:var(--gold); color:var(--pod);}
@@ -1902,6 +1913,71 @@ function olderThan(a, b){
    that says one thing and a date that says another means somebody has entered
    something they did not mean to, and the family is the only one who can say
    which. Surfaced in the kinship panel beside the other gaps. */
+/* PUT A SIBLING ROW BACK IN BIRTH ORDER.
+ *
+ * WHY THIS IS NOT DONE AUTOMATICALLY, which is the whole design of it.
+ *
+ * Almost everything this app knows is derived and therefore always current:
+ * which side of a row somebody stands on, which family is drawn first, every
+ * kin term, every house relation. Change the rule and every tree on the
+ * deployment is drawing by the new rule the moment it repaints, with nothing
+ * to migrate.
+ *
+ * The sibling row is the exception, because it is not derived — it is
+ * RECORDED. New children are placed by their year (insertByAge), but rows
+ * entered before that are still in the order somebody typed them, and those
+ * rows may be right. The row IS the family's statement of seniority when
+ * there are no dates: it is what olderThan falls back on, and somebody may
+ * have arranged it by hand with the arrows precisely because they knew
+ * something the dates do not say.
+ *
+ * So a blanket re-sort would silently overwrite the considered judgement of
+ * every family on this deployment to fix the careless typing of some of them.
+ * It is offered instead, one row at a time, and only where the row and the
+ * dates actually contradict each other.
+ *
+ * AND ONLY THE DATED PEOPLE MOVE. Anybody without a birth year keeps their
+ * exact position in the row — there is nothing to check their placement
+ * against, so moving them would be inventing a claim rather than correcting
+ * one. The dated children are rearranged among the positions they already
+ * occupy, and the row closes back up around the undated exactly as it was. */
+function rowsOutOfOrder(){
+  const out = [];
+  for (const u of unions()){
+    const dated = u.children.filter(k => present(k) && birthYear(k) !== null);
+    if (dated.length < 2) continue;
+    const sorted = dated.slice().sort((a, b) => birthYear(a) - birthYear(b));
+    if (dated.some((k, i) => k !== sorted[i])) out.push(u.id);
+  }
+  return out;
+}
+
+function sortRowByAge(unionId){
+  const u = state.unions[unionId];
+  if (!u) return false;
+
+  const spots = [], dated = [];
+  u.children.forEach((k, i) => {
+    if (present(k) && birthYear(k) !== null){ spots.push(i); dated.push(k); }
+  });
+  if (dated.length < 2) return false;
+
+  const sorted = dated.slice().sort((a, b) => birthYear(a) - birthYear(b));
+  if (dated.every((k, i) => k === sorted[i])) return false;   // already right
+
+  snapshot();
+  spots.forEach((at, i) => { u.children[at] = sorted[i]; });
+  return true;
+}
+
+/* Every row that disagrees with its own dates. Returns how many moved, so the
+   family is told what was done rather than left to spot it. */
+function sortAllRowsByAge(){
+  let n = 0;
+  for (const id of rowsOutOfOrder()) if (sortRowByAge(id)) n++;
+  return n;
+}
+
 function seniorityConflicts(){
   const out = [];
   for (const u of unions()){
@@ -5350,6 +5426,15 @@ function openKinship(){
                    `${conflicts.length > 1 ? `, and ${conflicts.length - 1} more` : ''}` +
                    ' — the years decide'
                  : '') +
+        /* The one gap on this panel with a fix the app can actually apply,
+           so it is the one that gets a button. The others need somebody to
+           go and find something out. */
+        (conflicts.length
+          ? `<div class="gapfix"><button class="act" id="fixRows">` +
+            `Put ${rowsOutOfOrder().length === 1 ? 'that row' : 'those rows'} in birth order` +
+            `</button><em>Only people with a year move. Anyone without one keeps ` +
+            `their place, and the arrows still beat the dates.</em></div>`
+          : '') +
         gapRow(cov.gaps.sex.length, 'the term depends on he or she',
                'record which, and the word follows') +
         gapRow(cov.gaps.unlinked.length, 'no traced link between them',
@@ -5386,6 +5471,19 @@ function openKinship(){
     `<div class="row" style="margin-top:12px;"><button class="btn" id="kNo">Done</button></div>`;
   document.body.appendChild(el);
   placeForm(el);
+
+  /* The one fix on this panel the app can apply itself. Saved and repainted
+     like any other edit, and undoable like any other edit — sortRowByAge
+     takes a snapshot, so a family that dislikes the result gets it back. */
+  const fixBtn = el.querySelector('#fixRows');
+  if (fixBtn) fixBtn.onclick = () => {
+    const n = sortAllRowsByAge();
+    render(); save(); openKinship();
+    say(n
+      ? `${n} row${n === 1 ? '' : 's'} put in birth order. Undo if that is not how ` +
+        `your family counts it.`
+      : 'Every row already agrees with the years.');
+  };
 
   // Name pickers: filter as you type, click to choose.
   el.querySelectorAll('.kinpick').forEach(inp => {

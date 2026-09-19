@@ -123,6 +123,10 @@ function loadFrontend(){
       PALETTES, THEMES,
       diffOps, remapId, familyLink, titleFor, treeStamp, TITLE_BUDGET,
       seniorSide, insertByAge, canLink, linkExisting, linkCandidates, KIND_AS,
+      rowsOutOfOrder, sortRowByAge, sortAllRowsByAge, seniorityConflicts,
+      // Undo is a click handler in the page; this is the same two lines, so a
+      // test can prove an edit is reversible rather than assume it.
+      undo(){ if (!history.length) return false; state = JSON.parse(history.pop()); return true; },
       // The drawn picture, for the tests that are about where people stand.
       layoutOf(){ computeLayout(); return layout; },
       rowOf(id){ computeLayout();
