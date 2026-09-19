@@ -412,8 +412,9 @@ const HANDLERS = {
   },
 
   /* Take somebody out of the tree everybody sees, without destroying them.
-     This is the ONLY way a person leaves the visible tree. There is no
-     delete, here or anywhere else in this API.
+     The first way a person leaves the visible tree, the reversible one, and
+     the one to reach for. deletePerson below is the other, and it will not
+     touch anybody who has not been through here first.
 
      The reason is required, and required twice over: the database CHECK
      refuses a set-aside without one, and this refuses it before the database
@@ -461,6 +462,77 @@ const HANDLERS = {
     await logChange(client, treeId, 'person', id, 'restore',
                     { id, wasAsideBy: person.aside_by, wasWhy: person.aside_why }, actor);
     return { id };
+  },
+
+  /* Take somebody out of this tree for good.
+  
+     THE RULE THIS BREAKS, and why it is now written differently. Everything
+     around it used to say "there is no delete, here or anywhere else in this
+     API", and that was the right default: a family tree is a record, records
+     are wrong before they are right, and a person removed in a moment of
+     tidying cannot be got back. setAside exists so that taking somebody out
+     of the picture costs nothing and can be undone by anyone.
+  
+     But a family that entered a person by mistake — the same grandmother
+     typed twice, a name from the wrong household, somebody who asked not to
+     be in it — is entitled to have that gone rather than merely hidden, and
+     "set aside" is not that. So the delete exists, and everything below is
+     about making it the second half of a deliberate act rather than the first
+     half of an accident.
+  
+     THEY MUST BE SET ASIDE FIRST. The same shape as deleting a whole family,
+     for the same reason: two separate decisions, minutes or days apart, and
+     the first one is free to undo. Nobody deletes a person from the tree in
+     one tap.
+  
+     WHAT GOES WITH THEM. Every foreign key pointing at people is CASCADE or
+     SET NULL, so their place in their parents' marriage and in any marriage
+     of their own goes with the row, and no session or invitation that named
+     them is left dangling. A marriage with nobody left in it at all is
+     removed too — that is not a marriage, it is the hole where one person
+     used to be. A marriage that still has a partner or a child is kept: it is
+     somebody else's record as much as theirs.
+  
+     WHAT STAYS. One line in the change log saying a person of that name was
+     removed, by whom. That is the only trace, and it is deliberate: the
+     family's own log is how they find out why somebody is no longer in the
+     tree, and a deletion that left no account of itself would be
+     indistinguishable from a bug. */
+  async deletePerson(ctx, op) {
+    const { client, treeId, actor, resolve } = ctx;
+    const id = resolve(op.id, 'deletePerson.id');
+    const person = await checkVersion(client, 'people', id, op.expect, 'person');
+
+    if (!person.aside_at) {
+      throw badRequest('deletePerson: set them aside first. Deleting is the ' +
+                       'second half of a deliberate act, never the first.');
+    }
+
+    /* Read the marriages they belong to BEFORE the cascade removes the rows
+       that say so — afterwards there is no way to find them. */
+    const { rows: touched } = await client.query(
+      `SELECT union_id FROM union_partners WHERE person_id = $1
+        UNION
+       SELECT union_id FROM union_children WHERE person_id = $1`, [id]);
+
+    await client.query('DELETE FROM people WHERE id = $1', [id]);
+
+    let unionsRemoved = 0;
+    for (const t of touched) {
+      const { rows } = await client.query(
+        `SELECT (SELECT count(*) FROM union_partners WHERE union_id = $1) AS partners,
+                (SELECT count(*) FROM union_children WHERE union_id = $1) AS children`,
+        [t.union_id]);
+      if (Number(rows[0].partners) === 0 && Number(rows[0].children) === 0) {
+        await client.query('DELETE FROM unions WHERE id = $1', [t.union_id]);
+        unionsRemoved++;
+      }
+    }
+
+    await logChange(client, treeId, 'person', id, 'deletePerson',
+                    { id, name: person.name, wasAsideWhy: person.aside_why,
+                      unionsRemoved }, actor);
+    return { id, unionsRemoved };
   },
 
   /* Say that a person in this tree and a person in another tree are the same

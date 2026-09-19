@@ -4,7 +4,7 @@ const { execFileSync } = require('child_process');
 const { Client } = require('pg');
 const path = require('path');
 
-const FILES = ['gate.test.js', 'access.test.js', 'chosen.test.js', 'keeper.test.js', 'admin.test.js', 'hardening.test.js', 'ops.test.js', 'concurrency.test.js', 'reads.test.js',
+const FILES = ['gate.test.js', 'access.test.js', 'chosen.test.js', 'keeper.test.js', 'admin.test.js', 'hardening.test.js', 'ops.test.js', 'deleting.test.js', 'concurrency.test.js', 'reads.test.js',
                'duplicates.test.js', 'parity.test.js', 'sides.test.js', 'joining.test.js', 'joined.test.js', 'rows.test.js', 'kinship.test.js', 'halfsiblings.test.js', 'mothersline.test.js', 'cousins.test.js', 'houses.test.js', 'totems.test.js', 'palettes.test.js',
                'frontier.test.js', 'visibility.test.js', 'setaside.test.js', 'setaside.frontend.test.js', 'migration.test.js', 'forcedsort.test.js', 'migrate-runner.test.js', 'hometree.test.js', 'familykeys.test.js', 'crosstree.test.js', 'scale.test.js'];
 const fs = require('fs');

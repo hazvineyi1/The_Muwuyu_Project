@@ -573,6 +573,15 @@ body{
   color:var(--muted); font-style:normal;
 }
 
+/* The delete beside a set-aside row. Quiet until hovered: it is the one
+   irreversible thing on this panel and should not look like the primary
+   action next to "put back", which is. */
+#form .linkbtn.gone{
+  display:block; margin:-4px 0 8px auto; font-size:10.5px;
+  color:var(--muted); opacity:.75;
+}
+#form .linkbtn.gone:hover{ color:var(--bad, #a33); opacity:1; }
+
 #form .relline.none{background:var(--pod-hi); color:var(--ink); border:1.5px dashed var(--pod-edge);}
 #form .relline.none b{color:var(--muted);}
 #form .relline.taught{background:var(--gold); color:var(--pod);}
@@ -1392,8 +1401,8 @@ function reorder(id, dir){
   pu.children.splice(to, 0, id);
 }
 
-/* Take somebody out of the tree everybody sees. This is the only way a person
-   leaves it — there is no delete.
+/* Take somebody out of the tree everybody sees. The reversible way, and the
+   one to reach for — deleteForever below is the other.
 
    Note what is NOT touched: their unions. A person set aside has not left
    their marriage or stopped being their children's parent; they have been
@@ -1415,6 +1424,46 @@ function setAside(id, why){
   // holding it is set aside, the claim moves to whoever is still in the tree
   // rather than vanishing with them.
   if (state.rootId === id) state.rootId = (people()[0] || {}).id || null;
+  return true;
+}
+
+/* Take somebody out of this tree for good.
+ *
+ * SET ASIDE FIRST, ALWAYS. Refused here and refused again by the server, for
+ * the same reason a family cannot be deleted until it has been closed: two
+ * separate decisions, and the first one is free to undo. A tree is filled in
+ * by many people over years and the ordinary case is one relative doubting
+ * another's entry — if a doubt could destroy a record in one tap, the cost of
+ * being wrong would fall entirely on whoever knew the most.
+ *
+ * Their marriages go with them, and a marriage left with nobody in it goes
+ * too — that is not a marriage, it is the hole where a person used to be. A
+ * marriage that still holds somebody else is kept: it is that person's record
+ * as much as it was theirs.
+ *
+ * Undo still works, because snapshot() runs first: until the page saves, this
+ * is as reversible as anything else here. After the save it is not, anywhere,
+ * and the button that calls this says so.  */
+function deleteForever(id){
+  const p = state.people[id];
+  if (!p) return false;
+  if (!p.aside) return false;            // the server refuses this too
+
+  snapshot();
+  for (const u of unions()){
+    u.partners = u.partners.filter(x => x !== id);
+    u.children = u.children.filter(x => x !== id);
+  }
+  for (const u of unions()){
+    if (!u.partners.length && !u.children.length) delete state.unions[u.id];
+  }
+  delete state.people[id];
+
+  // The root is a claim about how far the line has been traced; it cannot go
+  // on pointing at somebody who is no longer here.
+  if (state.rootId === id) state.rootId = (people()[0] || {}).id || null;
+  if (meId === id) meId = null;
+  if (sel === id) sel = null;
   return true;
 }
 
@@ -5105,7 +5154,12 @@ function openAside(){
         `<small>Set aside${a.by ? ` by ${esc(a.by)}` : ''}${when(a.at) ? ` · ${when(a.at)}` : ''}` +
           `${into ? ` · details went to ${esc(into.name)}` : ''}` +
           `${p.by ? ` · recorded by ${esc(p.by)}` : ''}</small></u>` +
-      `<em>put back</em></button>`;
+      `<em>put back</em></button>` +
+      /* The second, deliberate act. Sits beside "put back" rather than on the
+         person's own card, so deleting is something you can only reach from
+         the list of people already out of the tree — never a stray tap while
+         looking at somebody. */
+      `<button type="button" class="linkbtn gone" data-gone="${p.id}">delete for good</button>`;
   };
 
   const el = document.createElement('div');
@@ -5145,6 +5199,30 @@ function openAside(){
     bringIntoView(id); revealBuds();
     say(`${name} is back in the tree.`);
   });
+  el.querySelectorAll('[data-gone]').forEach(b => b.onclick = () => {
+    const id = b.dataset.gone, p = state.people[id];
+    if (!p) return;
+    const below = descendantsOf(id);
+    const typed = prompt(
+      `Delete ${p.name} for good?\n\n` +
+      `This cannot be undone once the page saves. Their place in every ` +
+      `marriage goes with them` +
+      (below.count ? `, and ${below.count} ${below.count === 1 ? 'person' : 'people'} ` +
+                     `recorded below them lose their link to this part of the tree`
+                   : '') + `.\n\n` +
+      `"Put back" is there if you only want them out of the picture.\n\n` +
+      `Type their name to confirm: ${p.name}`);
+    if (typed === null) return;
+    if (typed.trim().toLowerCase() !== p.name.trim().toLowerCase()){
+      say('That is not the name. Nothing has been deleted.');
+      return;
+    }
+    const name = p.name;
+    if (!deleteForever(id)){ say('Set them aside first.'); return; }
+    closeForm(); render(); save();
+    say(`${name} has been deleted.`);
+  });
+
   $('asNo').onclick = closeForm;
   el.addEventListener('keydown', e => { if (e.key === 'Escape'){ e.preventDefault(); closeForm(); } });
 }
@@ -7098,6 +7176,23 @@ function diffOps(was, now){
     if (p.aside && !b.aside)   ops.push({ op:'setAside', id, why:p.aside.why,
                                           mergedInto:p.aside.mergedInto || undefined });
     if (!p.aside && b.aside)   ops.push({ op:'restore', id });
+  }
+
+  /* PEOPLE WHO ARE GONE.
+   *
+   * Everywhere else in this diff, a record missing from `now` but present in
+   * `was` meant a bug — there was no way for a person to leave, so their
+   * absence could only be a state that had been corrupted, and saying nothing
+   * was the safe reading. deleteForever makes the absence deliberate, so it
+   * now has to be said.
+   *
+   * Last, after every field change above and before the marriages below, so a
+   * batch that edits somebody and then deletes them does not send an update
+   * for a row that is already gone. The server refuses the whole batch if any
+   * op fails, so the order is the difference between "deleted" and "nothing
+   * happened at all". */
+  for (const id of Object.keys(was.people)){
+    if (!now.people[id]) ops.push({ op:'deletePerson', id, expect:was.people[id].v });
   }
 
   const ref = id => refOf[id] || id;

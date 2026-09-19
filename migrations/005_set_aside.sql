@@ -5,6 +5,14 @@
 -- record itself stays, forever, and anyone can bring it back. Deletion is not
 -- a slower version of this. There is no delete.
 --
+-- LATER: that last sentence stopped being true, and this note is here so a
+-- reader of this file is not misled by it. The SQL below is unchanged and the
+-- rule it encodes still holds for setting aside; what was added afterwards is
+-- a permanent delete that REFUSES to touch anybody who has not been set aside
+-- first (db/ops.js, deletePerson). A family that entered a person by mistake
+-- is entitled to have it gone rather than hidden. Set-aside remains the first
+-- act and the one to reach for; deletion is the deliberate second.
+--
 -- Why it belongs in the database and not only in the app: a family tree is
 -- filled in by many people over years, and the ordinary case is one relative
 -- doubting another's entry. If a doubt could destroy a record, the cost of

@@ -117,7 +117,7 @@ function loadFrontend(){
       frontier, isOpenEnd, descendantsOf, toggleRoot,
       parentageOptions, parentageOf, setParentage, unionForShare, unionsOf, reorder,
       olderThan, seniorityConflicts, birthYear, whyNotNamed,
-      setAside, restore, noticesFor, asidePeople, present, mergePeople, meName,
+      setAside, restore, deleteForever, noticesFor, asidePeople, present, mergePeople, meName,
       knownTotem, totemKey, totemsHere, totemSuggestions, MITUPO,
       sameHouse, mutupoNotes, housesJoined, housesJoin,
       PALETTES, THEMES,
