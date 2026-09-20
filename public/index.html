@@ -3628,9 +3628,89 @@ function seniorSide(a, b){
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
+/* ── WORKING ON ONE BRANCH ───────────────────────────────────────────────
+ *
+ * "Give the option of saying start build and close build, so I can get a
+ * limited view of the branch I am growing... This does not break the build,
+ * it just makes it easier to build and grow."
+ *
+ * Exactly right, and the important half of that sentence is the last one.
+ * This hides nothing and changes nothing: every record, every marriage, every
+ * word the app can derive is still there and still true. What narrows is the
+ * PICTURE — the rest of the family steps out of the way so that one branch
+ * can be worked on at the size of a thumb instead of the size of a grain of
+ * rice.
+ *
+ * WHY IT IS ONLY THE DRAWING. present() is the gate the whole app uses, and
+ * kinship reads through it: filter there and Babamukuru quietly becomes
+ * something else because half the people the word depends on have gone. So
+ * the scope is applied in computeLayout and nowhere else. Terms, the
+ * duplicate scan, what gets saved and what gets synced all see the whole
+ * family, always.
+ *
+ * WHAT IS IN A BRANCH: the person, everybody descended from them, and the
+ * husbands and wives who married into it — a household is a household. Their
+ * spouses' OTHER marriages are not, which is what keeps a branch a branch
+ * rather than the whole country.
+ *
+ * AND WHO IT HANGS FROM. The parents of the person you started from come too,
+ * alone, without their other children. Without them a branch looks like a
+ * family that fell out of the sky, and "isolated" would stop meaning
+ * "isolated for now" and start meaning "cut off".
+ *
+ * NOT REMEMBERED BETWEEN VISITS, deliberately. A page that opened showing a
+ * quarter of the family would look exactly like a page that had lost three
+ * quarters of it, and this family has twice thought their tree had
+ * disappeared. Closing the browser closes the build. */
+let building = null;                 // { from: personId } or null
+
+function branchFrom(id){
+  const out = new Set();
+  if (!present(id)) return out;
+
+  // One pass over the marriages rather than a scan per person, because this
+  // is recomputed on every draw and a branch can be most of a tree.
+  const mine = new Map();
+  for (const u of unions()){
+    for (const p of u.partners){
+      if (!mine.has(p)) mine.set(p, []);
+      mine.get(p).push(u);
+    }
+  }
+
+  const walk = pid => {
+    if (out.has(pid) || !present(pid)) return;
+    out.add(pid);
+    for (const u of (mine.get(pid) || [])){
+      // The person they married comes into the branch, but is not walked —
+      // their own parents and their children by anybody else stay outside.
+      for (const x of u.partners) if (present(x)) out.add(x);
+      for (const c of u.children) walk(c);
+    }
+  };
+  walk(id);
+
+  // What it hangs from.
+  const pu = parentUnionOf(id);
+  if (pu) for (const x of pu.partners) if (present(x)) out.add(x);
+  return out;
+}
+
+function startBuild(id){
+  if (!present(id)) return false;
+  building = { from: id };
+  return true;
+}
+function closeBuild(){ building = null; }
+
 function computeLayout(){
   const g = generations();
   const blocks = [], ofPerson = {};
+
+  /* The whole of the narrowing, in one place. `shown` stands in for `present`
+     for the rest of this function and nowhere else in the app. */
+  const inBuild = building ? branchFrom(building.from) : null;
+  const shown = id => (!inBuild || inBuild.has(id)) && present(id);
   const width = b => b.socket ? 112 : b.members.length * POD_W + (b.members.length - 1) * COUPLE_GAP;
 
   /* The unions as the DRAWN tree sees them: set-aside people are filtered out
@@ -3643,8 +3723,8 @@ function computeLayout(){
      have to hang off the partner who is left. */
   const us = unions().map(u => ({
     id: u.id,
-    partners: u.partners.filter(present),
-    children: u.children.filter(present)
+    partners: u.partners.filter(shown),
+    children: u.children.filter(shown)
   }));
 
   // Walk the marriage graph so everybody who married into a row stands in it.
@@ -3707,7 +3787,7 @@ function computeLayout(){
     return build(start).list;
   };
 
-  for (const p of people()){
+  for (const p of people().filter(q => shown(q.id))){
     if (seen.has(p.id)) continue;
     // start at an end of the row when there is one, so nobody is stranded
     const ends = (adj[p.id] || []).length === 1 ? p.id
@@ -4670,7 +4750,12 @@ function draw(){
   }
   podsEl.innerHTML = html.join('');
 
-  $('count').textContent = people().length;
+  /* The tally counts what is on screen, or it contradicts the picture. */
+  const onScreen = Object.keys(layout.persons).length;
+  $('count').textContent = building ? onScreen : people().length;
+  const tally = $('count').parentElement;
+  if (tally) tally.lastChild.textContent = building
+    ? ` on this branch · ${people().length} in the tree` : ' in the tree';
   showLit();
   updateWho();
   // Reads the cached answer. It does NOT scan: see refreshDuplicates above.
@@ -6830,6 +6915,22 @@ function showLit(){
   }
 
   const rows = [];
+
+  /* While a branch is being worked on, this never leaves the screen. A family
+     that has twice thought its tree had disappeared must never be left to
+     wonder where everybody went. */
+  if (building && present(building.from)){
+    const who = esc((state.people[building.from].name || '').split(' ')[0]);
+    const n = branchFrom(building.from).size;
+    rows.push(
+      `<div class="pill"><b>Building from ${who}</b>` +
+      `<span>${n} ${n === 1 ? 'person' : 'people'} on this branch. The rest of the ` +
+      `family is standing aside — nothing has been changed or removed.</span>` +
+      `<button type="button" id="buildOff">Close build</button></div>`);
+  } else if (building){
+    building = null;                            // they were set aside or deleted
+  }
+
   const seer = (sel && sel !== meId && present(sel)) ? sel : null;
   if (seer && titlesShowing){
     const first = esc((state.people[seer].name || '').split(' ')[0]);
@@ -6853,6 +6954,9 @@ function showLit(){
   el.innerHTML = rows.join('');
   el.hidden = !rows.length;
   if ($('litOff')) $('litOff').onclick = () => { lit = null; render(); };
+  if ($('buildOff')) $('buildOff').onclick = () => {
+    closeBuild(); render(); fit(); say('The whole family is back.');
+  };
   if ($('seerOff')) $('seerOff').onclick = () => { sel = null; render(); };
   if ($('seerWords')) $('seerWords').onclick = () => openWords(seer);
 }
@@ -7277,6 +7381,12 @@ function openCard(id){
     visibilityBlock(p) +
     `<button class="btn ghost wide${meId === id ? ' on' : ''}" id="cMe">` +
       `${meId === id ? '● This is you' : 'This is me'}</button>` +
+    `<button class="btn ghost wide${building && building.from === id ? ' on' : ''}" id="cBuild">` +
+      `${building && building.from === id ? '● Close build' : 'Start build from here'}</button>` +
+    `<p class="roothint">${building && building.from === id
+      ? 'The rest of the family is standing aside while you work. Nothing has been changed or removed.'
+      : 'Shows only this person and everyone below them, so a branch can be ' +
+        'grown without the whole family in the way. It changes no records.'}</p>` +
     `<div class="row"><button class="btn" id="cSave">Save</button>` +
     `<button class="btn ghost" id="cNo">Close</button></div>`;
   document.body.appendChild(el);
@@ -7336,6 +7446,15 @@ function openCard(id){
   $('cRoot').onclick = () => { commit(); toggleRoot(id); closeForm(); render(); save();
     say(`${p.name} ${p.root ? 'is now the root of the line' : 'is no longer marked as the root'}.`); };
   $('cMe').onclick = () => { commit(); setMe(meId === id ? null : id); closeForm(); render(); save(); };
+  $('cBuild').onclick = () => {
+    commit();
+    const off = building && building.from === id;
+    if (off) closeBuild(); else startBuild(id);
+    closeForm(); render(); save();
+    if (!off) fit();
+    say(off ? 'The whole family is back.'
+            : `Building from ${p.name}. Everybody else is standing aside.`);
+  };
   el.addEventListener('keydown', e => {
     if (e.key === 'Enter'){ e.preventDefault(); commit(); closeForm(); render(); save(); }
     if (e.key === 'Escape'){ e.preventDefault(); closeForm(); }
