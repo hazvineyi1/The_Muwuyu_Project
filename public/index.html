@@ -380,12 +380,19 @@ body.carrying .pod{transition:none;}
 .pod.lit .nm{font-weight:600;}
 #litbar{
   position:fixed; left:50%; bottom:74px; transform:translateX(-50%); z-index:46;
-  display:flex; align-items:center; gap:12px; max-width:min(92vw,560px);
+  display:flex; flex-direction:column; align-items:stretch; gap:7px;
+  max-width:min(92vw,600px);
+}
+#litbar .pill{
+  display:flex; align-items:center; gap:12px;
   padding:9px 9px 9px 16px; border-radius:99px;
   background:var(--pod); border:2px solid var(--gold); box-shadow:var(--lift);
   font-family:'Karla',sans-serif; font-size:12.5px; color:var(--muted);
 }
-#litbar b{font-family:'Fraunces',Georgia,serif; font-size:16px; color:var(--ink);}
+#litbar b{
+  flex:0 0 auto; white-space:nowrap;
+  font-family:'Fraunces',Georgia,serif; font-size:16px; color:var(--ink);
+}
 #litbar span{flex:1 1 auto; line-height:1.4;}
 #litbar button{
   flex:0 0 auto; padding:7px 13px; border-radius:99px; cursor:pointer;
@@ -430,6 +437,14 @@ body.carrying .pod{transition:none;}
 .pod .nm{
   font-family:'Fraunces',Georgia,'Times New Roman',serif; font-weight:500; font-size:15px;
   line-height:1.22; text-align:center; color:var(--ink); word-break:break-word;
+}
+.pod .also{
+  font-family:'Fraunces',Georgia,serif; font-style:italic; font-size:11.5px;
+  line-height:1.2; text-align:center; color:var(--muted); margin-top:1px;
+}
+#form .cap i.alsocap{
+  font-family:'Fraunces',Georgia,serif; font-style:italic; text-transform:none;
+  letter-spacing:0; font-size:12px; color:var(--muted);
 }
 .pod .tot{
   font-size:9.5px; letter-spacing:.11em; text-transform:uppercase;
@@ -3019,6 +3034,60 @@ function kinTerms(who, tid){
   return { list, base, shape: base.shape || null, plain: base.plain || null };
 }
 
+/* WHAT A PARENT IS CALLED AFTER THEIR FIRST CHILD.
+ *
+ * Esther is Mai Revai. Not a nickname and not an alias: from the day her
+ * first child is born that is what the neighbours call her, what the church
+ * roll says, what is read out at a funeral. Her husband is Baba Revai. A
+ * western record has no slot for this at all — it has a maiden name and a
+ * married name, both of which are her husband's business, and no way at all
+ * to say that a woman is known by her child.
+ *
+ * The app cannot know it, because families differ on which child it is and
+ * some people are never called it. So it is offered and never applied: the
+ * card says what the family would most likely say, and somebody has to agree
+ * before it is written down. That is the same rule as every other word here.
+ *
+ * THE FIRST child, which is the eldest this tree knows of across all of
+ * somebody's marriages — not the eldest of whichever marriage was entered
+ * first. A man's first child by a first wife is the one he is named for. */
+/* Looking somebody up by any name they answer to. A woman entered as Esther
+   and known to everybody as Mai Revai must be findable as either, or the
+   other name is a decoration rather than a record. */
+function matchesName(p, q){
+  if (!q) return true;
+  const needle = String(q).toLowerCase();
+  return (p.name || '').toLowerCase().includes(needle) ||
+         (p.also || '').toLowerCase().includes(needle);
+}
+
+function teknonym(id){
+  const p = state.people[id];
+  if (!p || !present(id)) return null;
+  const title = p.sex === 'f' ? 'Mai' : p.sex === 'm' ? 'Baba' : null;
+  if (!title) return null;
+
+  const kids = [];
+  for (const u of unions()){
+    if (!u.partners.includes(id)) continue;
+    for (const c of u.children) if (present(c)) kids.push(c);
+  }
+  if (!kids.length) return null;
+
+  // Eldest by the years where they are recorded; otherwise the order the
+  // family keeps their rows in, which is the same question already answered.
+  kids.sort((a, b) => {
+    const ya = birthYear(a), yb = birthYear(b);
+    if (ya !== null && yb !== null && ya !== yb) return ya - yb;
+    if (ya === null && yb !== null) return 1;
+    if (yb === null && ya !== null) return -1;
+    return 0;
+  });
+  const first = (state.people[kids[0]].name || '').trim().split(/\s+/)[0];
+  if (!first) return null;
+  return { text: `${title} ${first}`, title, child: kids[0] };
+}
+
 /* ONE WORD, MANY PEOPLE — and this is the whole difference.
  *
  * A western family tree draws one father. It has a box for him, a line from
@@ -4284,6 +4353,11 @@ function draw(){
       (mark ? `<span class="mk">${mark}</span>` : '') +
       (p.shown === false ? `<span class="shut" title="Not in the public record">·</span>` : '') +
       `<span class="nm">${esc(p.name)}</span>` +
+      /* THE NAME SHE IS ACTUALLY CALLED. It could be typed into a card and
+         was then shown nowhere at all — so a family who had written down
+         that Esther is Mai Revai still saw a tree full of names nobody uses
+         out loud. It goes on the pod, under the one on her birth record. */
+      (p.also ? `<span class="also">${esc(p.also)}</span>` : '') +
       (life ? `<span class="dates">${esc(life)}</span>` : '') +
       (p.totem ? `<span class="tot">${esc(p.totem)}</span>` : '') +
       (rank ? `<span class="rank">${rank}</span>` : '') +
@@ -5679,7 +5753,7 @@ function openFamily(){
       return;
     }
     if (!q){ box.innerHTML = ''; return; }
-    const hits = people().filter(p => p.name.toLowerCase().includes(q)).slice(0, 6);
+    const hits = people().filter(p => matchesName(p, q)).slice(0, 6);
     box.innerHTML = hits.length
       ? hits.map(p => `<button type="button" data-for="${p.id}">${esc(p.name)}` +
           `<small>${esc(positionOf(p.id))}</small></button>`).join('')
@@ -6391,6 +6465,17 @@ function shapeLabel(shape){
    rather than of pairs. */
 let lit = null;                 // { term, ids:Set, from }
 
+/* THE TWO THINGS THE PICTURE IS DOING THAT NOTHING ELSE SAYS OUT LOUD.
+ *
+ * WHOSE WORDS THESE ARE. Tapping somebody switches every word on every card
+ * to theirs — which is the thing this app is for, and which nothing
+ * announced. The tree simply changed its mind about what everybody was
+ * called and left you to work out why. It is said only while the words are
+ * actually legible, because otherwise it is explaining something that is not
+ * on the screen.
+ *
+ * AND WHICH WORD IS LIT, if one is.
+ */
 function showLit(){
   const el = $('litbar');
   if (!el) return;
@@ -6400,15 +6485,33 @@ function showLit(){
     lit.ids = new Set([...lit.ids].filter(present));
     if (!present(lit.from) || !lit.ids.size) lit = null;
   }
-  if (!lit){ el.hidden = true; el.innerHTML = ''; return; }
-  const who = lit.from === meId ? 'your' : `${esc((state.people[lit.from] || {}).name || '')}'s`;
-  const n = lit.ids.size;
-  el.innerHTML = `<b>${esc(lit.term)}</b>` +
-    `<span>${n} ${n === 1 ? 'person is' : 'people are'} ${who} ${esc(lit.term)}` +
-    `${n > 1 ? ' — one word, and it reaches all of them' : ''}.</span>` +
-    `<button type="button" id="litOff">Show everyone</button>`;
-  el.hidden = false;
-  $('litOff').onclick = () => { lit = null; render(); };
+
+  const rows = [];
+  const seer = (sel && sel !== meId && present(sel)) ? sel : null;
+  if (seer && titlesShowing){
+    const first = esc((state.people[seer].name || '').split(' ')[0]);
+    rows.push(
+      `<div class="pill"><b>Seen by ${first}</b>` +
+      `<span>Every word on the tree is ${first}'s now — this is the same ` +
+      `family reckoned from where they stand.</span>` +
+      `<button type="button" id="seerWords">${first}'s words</button>` +
+      `<button type="button" id="seerOff">Back to yours</button></div>`);
+  }
+  if (lit){
+    const who = lit.from === meId ? 'your' : `${esc((state.people[lit.from] || {}).name || '')}'s`;
+    const n = lit.ids.size;
+    rows.push(
+      `<div class="pill"><b>${esc(lit.term)}</b>` +
+      `<span>${n} ${n === 1 ? 'person is' : 'people are'} ${who} ${esc(lit.term)}` +
+      `${n > 1 ? ' — one word, and it reaches all of them' : ''}.</span>` +
+      `<button type="button" id="litOff">Show everyone</button></div>`);
+  }
+
+  el.innerHTML = rows.join('');
+  el.hidden = !rows.length;
+  if ($('litOff')) $('litOff').onclick = () => { lit = null; render(); };
+  if ($('seerOff')) $('seerOff').onclick = () => { sel = null; render(); };
+  if ($('seerWords')) $('seerWords').onclick = () => openWords();
 }
 
 function lightWord(from, term, ids){
@@ -6624,9 +6727,7 @@ function openKinship(){
     const list = el.querySelector(`.kinlist[data-for="${side}"]`);
     const show = () => {
       const q = inp.value.trim().toLowerCase();
-      const hits = people()
-        .filter(p => !q || p.name.toLowerCase().includes(q))
-        .slice(0, 6);
+      const hits = people().filter(p => matchesName(p, q)).slice(0, 6);
       list.innerHTML = hits.map(p =>
         `<button type="button" data-pick="${p.id}">${esc(p.name)}` +
         `<small>${esc(positionOf(p.id))}</small></button>`).join('');
@@ -6773,7 +6874,8 @@ function openCard(id){
   const el = document.createElement('div');
   el.id = 'form';
   el.innerHTML =
-    `<p class="cap">${esc(p.name)}</p>` +
+    `<p class="cap">${esc(p.name)}` +
+      `${p.also ? ` <i class="alsocap">${esc(p.also)}</i>` : ''}</p>` +
     (rel ? `<p class="lbl">To you</p>` + kinOnCard(id) : '') +
     `<input id="cName" class="fld" value="${esc(p.name)}" placeholder="Name" autocomplete="off">` +
     /* THE OTHER NAME. One field, not a maiden/married pair — that pair decides
@@ -6786,6 +6888,15 @@ function openCard(id){
        that guess cannot reach. */
     `<input id="cAlso" class="fld" value="${esc(p.also || '')}" ` +
       `placeholder="Also known as — a married name, a church name" autocomplete="off">` +
+    (() => {
+      // Offered, never applied. See teknonym.
+      const t = teknonym(id);
+      if (!t || (p.also || '').trim()) return '';
+      const kid = (state.people[t.child] || {}).name || '';
+      return `<p class="roothint">Since ${esc(kid.split(' ')[0])} was born, most ` +
+        `families would call ${esc((p.name || '').split(' ')[0])} <b>${esc(t.text)}</b>. ` +
+        `<button type="button" class="linkbtn" id="cTek">Use that too</button></p>`;
+    })() +
     `<div class="seg" id="cSex">` +
       `<button type="button" data-sex="f" aria-pressed="${p.sex === 'f'}">She</button>` +
       `<button type="button" data-sex="m" aria-pressed="${p.sex === 'm'}">He</button>` +
@@ -6815,6 +6926,11 @@ function openCard(id){
     btn.onclick = () => seg.querySelectorAll('button')
       .forEach(o => o.setAttribute('aria-pressed', String(o === btn)))));
   wireTotem('cTotem');
+  if ($('cTek')) $('cTek').onclick = () => {
+    const t = teknonym(id);
+    if (t) $('cAlso').value = t.text;
+    $('cTek').remove();
+  };
 
   const commit = () => {
     snapshot();
