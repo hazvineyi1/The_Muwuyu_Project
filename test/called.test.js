@@ -121,11 +121,11 @@ function polygynous(){
 section('EACH WIFE AND HER CHILDREN ARE A HOUSE, AND THE HOUSE IS HERS');
 {
   const h = polygynous();
-  const houses = h.fe.layoutOf().houses;
-  eq('two wives, two houses', houses.length, 2);
-  eq('each named by its own mother', houses.map(x => x.text).sort(),
-     ['Imba yaGrace', 'Imba yaRuth']);
-  eq('and a child knows which house they are of',
+  /* The houses are no longer written over the tree — three of them side by
+     side collided into an unreadable band across the picture. They are said
+     on a person's card instead, which is where a fact about one person
+     belongs. */
+  eq('a child knows which house they are of',
      h.fe.houseOf(h.tendai).text, 'Imba yaRuth');
   eq('as does their half-brother', h.fe.houseOf(h.chipo).text, 'Imba yaGrace');
 }
@@ -145,7 +145,7 @@ section('NOT NUMBERED, because this app does not know when a marriage happened')
    family's own seniority, which is the last thing to guess at. */
 {
   const h = polygynous();
-  const said = h.fe.layoutOf().houses.map(x => x.text).join(' ');
+  const said = [h.fe.houseOf(h.tendai).text, h.fe.houseOf(h.chipo).text].join(' ');
   check('nothing claims to be the first', !/first|1st|yekutanga/i.test(said), said);
   check('nor the second', !/second|2nd|yechipiri/i.test(said), said);
 }
@@ -156,8 +156,7 @@ section('a household with one wife has no houses to tell apart');
   const man = fe.addPerson('Man', 'm', 'Nzou', '1940', '');
   const wife = fe.grow('partner', man, 'Wife', 'f', 'Shava', { born:'1944' });
   const kid = fe.grow('child', man, 'Child', 'm', 'Nzou', { born:'1970' });
-  eq('nothing is drawn', fe.layoutOf().houses.length, 0);
-  eq('and the child is told nothing they did not know', fe.houseOf(kid), null);
+  eq('the child is told nothing they did not know', fe.houseOf(kid), null);
 }
 
 section('nor does a marriage with nobody in it yet');
@@ -168,9 +167,9 @@ section('nor does a marriage with nobody in it yet');
   fe.grow('partner', man, 'First', 'f', 'Shava', { born:'1944' });
   const second = fe.grow('partner', man, 'Second', 'f', 'Moyo', { born:'1955' });
   fe.grow('child', man, 'Only child', 'm', 'Nzou', { born:'1970' });
-  const houses = fe.layoutOf().houses;
-  eq('only the house with children in it is named', houses.length, 1);
-  eq('and it is named by the mother of them', houses[0].called, 'First');
+  const named = fe.unionsOf(man).map(u => fe.houseName(u.id)).filter(Boolean);
+  eq('only the house with children in it is named', named.length, 1);
+  eq('and it is named by the mother of them', named[0].called, 'First');
 }
 
 section('and where both of them married more than once, the app says nothing');
