@@ -382,11 +382,36 @@ body.carrying .pod{transition:none;}
   z-index:2;
 }
 .pod.lit .nm{font-weight:600;}
+/* The bar is a ROW of small things now, not a stack of banners. It only ever
+   holds one of each, and a chip is the width of its own word. */
 #litbar{
   position:fixed; left:50%; bottom:74px; transform:translateX(-50%); z-index:46;
-  display:flex; flex-direction:column; align-items:stretch; gap:7px;
-  max-width:min(92vw,600px);
+  display:flex; flex-wrap:wrap; align-items:center; justify-content:center;
+  gap:7px; max-width:min(92vw,600px); pointer-events:none;
 }
+#litbar > *{pointer-events:auto;}
+/* A lit word: the word, how many it reached, and the way out. No sentence —
+   the tree is already showing which people, which is the whole answer. */
+#litbar .chip{
+  display:flex; align-items:center; gap:7px;
+  padding:4px 4px 4px 13px; border-radius:99px;
+  background:var(--pod); border:1.5px solid var(--gold); box-shadow:var(--shadow);
+}
+#litbar .chip b{
+  font-family:'Fraunces',Georgia,serif; font-size:14px; color:var(--ink);
+  white-space:nowrap;
+}
+#litbar .chip i{
+  font-style:normal; font-family:'Karla',sans-serif; font-size:10.5px;
+  font-weight:700; color:var(--gold); letter-spacing:.04em;
+}
+#litbar .chip button{
+  width:22px; height:22px; padding:0; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  background:var(--pod-hi); border:1px solid var(--pod-edge); color:var(--muted);
+  font-size:13px; line-height:1; cursor:pointer;
+}
+#litbar .chip button:hover{border-color:var(--gold); color:var(--ink);}
 #litbar .pill{
   display:flex; align-items:center; gap:12px;
   padding:9px 9px 9px 16px; border-radius:99px;
@@ -499,11 +524,18 @@ body.carrying .pod{transition:none;}
 .pod .ttl.vantage{
   color:var(--gold); font-family:inherit; font-size:9px; font-weight:700;
   letter-spacing:.1em; text-transform:uppercase;
+  /* It is a handle as well as a label: tapping it opens the whole of that
+     person's vocabulary. Underlined faintly rather than made into a button,
+     because it has to keep reading as a caption on the card. */
+  cursor:pointer; text-decoration:underline; text-decoration-style:dotted;
+  text-underline-offset:2.5px; text-decoration-color:var(--gold-soft);
   /* A word may be trimmed to fit; a name may not. "Tonderai's words" cut to
      "Tonderai's wo…" is the one label on this screen that has to be read
      whole, since it is the one saying whose words all the others are. */
   white-space:normal; line-height:1.3;
 }
+.pod .ttl.vantage:hover{text-decoration-color:var(--gold);}
+.pod .ttl.vantage:focus-visible{outline:2px solid var(--gold); outline-offset:2px; border-radius:3px;}
 .pod .mk{position:absolute; left:9px; top:5px; font-size:10px; color:var(--gold-soft);}
 .pod .rm{
   position:absolute; right:-9px; top:-9px; width:22px; height:22px; border-radius:50%;
@@ -4550,7 +4582,13 @@ function titleFor(anchor, id){
   if (id === anchor){
     const who = anchor === meId ? 'Your words'
               : esc((state.people[anchor].name || '').split(' ')[0]) + "'s words";
-    return `<span class="ttl vantage">${who}</span>`;
+    /* AND IT IS THE HANDLE. Every word on the tree is reckoned from this
+       person, so the line that says so is the right place to ask for the
+       whole of their vocabulary — rather than a banner appearing over the
+       tree to offer it. */
+    return `<span class="ttl vantage" data-vantage="${esc(anchor)}" role="button"` +
+           ` tabindex="0" title="Every word on the tree is reckoned from here.` +
+           ` Tap for all of them.">${who}</span>`;
   }
   const key = anchor + '>' + id;
   const hit = titleCache.map.get(key);
@@ -6892,17 +6930,20 @@ function shapeLabel(shape){
    rather than of pairs. */
 let lit = null;                 // { term, ids:Set, from }
 
-/* THE TWO THINGS THE PICTURE IS DOING THAT NOTHING ELSE SAYS OUT LOUD.
+/* THE ONE THING THE PICTURE IS DOING THAT NOTHING ELSE SAYS OUT LOUD: that
+ * a branch is being built, and the rest of the family is therefore not on the
+ * screen. That has to be said, plainly, for as long as it is true.
  *
- * WHOSE WORDS THESE ARE. Tapping somebody switches every word on every card
- * to theirs — which is the thing this app is for, and which nothing
- * announced. The tree simply changed its mind about what everybody was
- * called and left you to work out why. It is said only while the words are
- * actually legible, because otherwise it is explaining something that is not
- * on the screen.
+ * EVERYTHING ELSE THAT USED TO BE SAID HERE HAS GONE — "these keep popping up
+ * and they are intrusive", and they did. A banner with a bold word, a whole
+ * sentence and a button appeared above the toolbar every time anybody was
+ * tapped, to report something the tree was already showing: the selected card
+ * wears "EVELYN'S WORDS" in gold, and a lit word lights its people. Saying it
+ * again in prose was explaining the picture to somebody who is looking at it.
  *
- * AND WHICH WORD IS LIT, if one is.
- */
+ * So whose words these are is now asked for by tapping the card's own gold
+ * line, which is where the answer already is, and a lit word leaves behind a
+ * chip the size of the word rather than a paragraph about it. */
 function showLit(){
   const el = $('litbar');
   if (!el) return;
@@ -6923,31 +6964,20 @@ function showLit(){
     const n = branchFrom(building.from).size;
     rows.push(
       `<div class="pill"><b>Building from ${who}</b>` +
-      `<span>${n} ${n === 1 ? 'person' : 'people'} on this branch. The rest of the ` +
-      `family is standing aside — nothing has been changed or removed.</span>` +
+      `<span>${n} ${n === 1 ? 'person' : 'people'} here — the rest are standing ` +
+      `aside, not removed.</span>` +
       `<button type="button" id="buildOff">Close build</button></div>`);
   } else if (building){
     building = null;                            // they were set aside or deleted
   }
 
-  const seer = (sel && sel !== meId && present(sel)) ? sel : null;
-  if (seer && titlesShowing){
-    const first = esc((state.people[seer].name || '').split(' ')[0]);
-    rows.push(
-      `<div class="pill"><b>Seen by ${first}</b>` +
-      `<span>Every word on the tree is ${first}'s now — this is the same ` +
-      `family reckoned from where they stand.</span>` +
-      `<button type="button" id="seerWords">${first}'s words</button>` +
-      `<button type="button" id="seerOff">Back to yours</button></div>`);
-  }
+  /* A lit word, as a chip the size of the word. The lighting itself is the
+     message; this is only the way out of it, and tapping bare canvas is the
+     other way. */
   if (lit){
-    const who = lit.from === meId ? 'your' : `${esc((state.people[lit.from] || {}).name || '')}'s`;
-    const n = lit.ids.size;
     rows.push(
-      `<div class="pill"><b>${esc(lit.term)}</b>` +
-      `<span>${n} ${n === 1 ? 'person is' : 'people are'} ${who} ${esc(lit.term)}` +
-      `${n > 1 ? ' — one word, and it reaches all of them' : ''}.</span>` +
-      `<button type="button" id="litOff">Show everyone</button></div>`);
+      `<div class="chip"><b>${esc(lit.term)}</b><i>${lit.ids.size}</i>` +
+      `<button type="button" id="litOff" aria-label="Show everyone again">&times;</button></div>`);
   }
 
   el.innerHTML = rows.join('');
@@ -6956,8 +6986,6 @@ function showLit(){
   if ($('buildOff')) $('buildOff').onclick = () => {
     closeBuild(); render(); fit(); say('The whole family is back.');
   };
-  if ($('seerOff')) $('seerOff').onclick = () => { sel = null; render(); };
-  if ($('seerWords')) $('seerWords').onclick = () => openWords(seer);
 }
 
 function lightWord(from, term, ids){
@@ -8480,7 +8508,7 @@ podsEl.addEventListener('pointerdown', e => {
   e.stopPropagation();
   const pod = e.target.closest('.pod');
   // The small controls on a card are their own targets, not handles.
-  if (!pod || e.target.closest('.rm,.ord,[data-card]')) return;
+  if (!pod || e.target.closest('.rm,.ord,[data-card],[data-vantage]')) return;
   const pressed = pod.dataset.id;
   if (!pressed || !state.people[pressed]) return;
   // The household is what is being reached for; the person who carries it may
@@ -8553,6 +8581,11 @@ addEventListener('pointercancel', () => {
   document.body.classList.remove('carrying');
 });
 podsEl.addEventListener('click', e => {
+  /* Before the pod: the gold line means whose words these are, not the
+     person wearing it. */
+  const vantage = e.target.closest('[data-vantage]');
+  if (vantage){ openWords(vantage.dataset.vantage); return; }
+
   const card = e.target.closest('[data-card]');
   if (card){ openCard(card.dataset.card); return; }
 
@@ -8638,7 +8671,7 @@ const endPointer = e => {
      destroys the thing between mousedown and mouseup, so the click never
      happens and tapping it does nothing at all. */
   if (!wasDrag && !pinch && !e.target.closest('.pod,.bud,#form,#bar,#seed')){
-    sel = null; closeForm(); render();
+    sel = null; lit = null; closeForm(); render();
   }
 };
 stage.addEventListener('pointerup', endPointer);
