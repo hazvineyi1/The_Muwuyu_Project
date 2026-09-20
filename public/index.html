@@ -3880,6 +3880,7 @@ function joinsIn(){
    * seam is still a seam, and the panel of them all can show the rest. */
   const surnameOf = id => ((state.people[id] || {}).name || '').trim().split(/\s+/).pop() || '';
   const mine = surnameOf(here).toLowerCase();
+  const myTotem = totemAt(here);
 
   const out = [];
   for (const id of cutPeople()){
@@ -3888,14 +3889,53 @@ function joinsIn(){
     const away = folk.filter(x => x !== id && !kept.has(x));
     if (away.length < 2) continue;             // one person is not a family to fold
     const name = houseNameFor(away, id);
-    /* Against the reader's own surname where they have one, and against
-       whichever name most of the people still on screen carry where they do
-       not — so a family that records no surnames is never told that all of
-       itself is somebody else. */
-    const against = mine || houseNameFor([...kept].filter(x => x !== here), here).toLowerCase();
-    const theirs = name.toLowerCase();
-    if (!theirs || theirs === against || /'s people$/.test(theirs)) continue;
-    out.push({ id, away: new Set(away), n: away.length, name });
+    /* THE MUTUPO ASKS THE QUESTION BETTER THAN THE SURNAME DOES.
+     *
+     * A surname is what a woman may or may not have kept. Half the women in a
+     * real tree are entered under the name they married into — Idah Musoni,
+     * Bertha Enia Musoni — and by that test their own people are Musoni too,
+     * so the app would never notice they are a whole other family standing
+     * behind one marriage.
+     *
+     * A mutupo is not like that. A woman keeps hers for life; her children
+     * take their father's. So two different mitupo either side of one person
+     * is the plainest possible statement that these are two houses, and it is
+     * already recorded against nearly everybody. It is also, precisely, the
+     * question a Shona family asks a stranger first.
+     *
+     * The surname stays as the fallback for records with no totem yet. */
+    /* THE JOIN'S OWN MUTUPO, not the mutupo of the people behind them. The
+       far side of your own father holds his parents AND whoever his brothers
+       married; count those and a houseful of in-laws can outvote your own
+       grandfather, and the app offers to fold away your father's line. The
+       person standing in the doorway is the one to ask: a mutupo other than
+       yours means they married into this house, and what is behind them is
+       their house. */
+    let another = null;
+    const theirTotem = totemAt(id);
+    if (myTotem && theirTotem) another = theirTotem !== myTotem;
+    if (another === null){
+      const against = mine || houseNameFor([...kept].filter(x => x !== here), here).toLowerCase();
+      const theirs = name.toLowerCase();
+      another = !!theirs && theirs !== against && !/'s people$/.test(theirs);
+    }
+    if (!another) continue;
+
+    /* AND DO NOT CALL THEM BY YOUR OWN NAME. A wife entered under the name
+       she married into brings a family written down as Musoni, so the
+       surname says Musoni and the chip would offer to fold "the Musoni" away
+       from the Musoni. Where the name we landed on is the reader's own, the
+       mutupo is the thing that actually tells the two houses apart, and it is
+       the word the family would use. */
+    let label = name;
+    if (label.toLowerCase() === mine || /'s people$/.test(label)){
+      const raw = commonest(away, x => ((state.people[x] || {}).totem || '').trim());
+      if (raw.value && raw.share >= 0.5){
+        const known = knownTotem(raw.value);
+        label = known ? known.name : raw.value;
+      }
+    }
+    out.push({ id, away: new Set(away), n: away.length, name: label });
   }
   /* NESTED SEAMS: KEEP THE INNERMOST. Ben is a seam too — take him out and
      his wife AND her whole family are cut off — but his fold is only Idah's
@@ -3916,6 +3956,26 @@ function joinsIn(){
 /* What to call a folded family: the surname most of them carry, which is what
    anybody would call them out loud. Where there is no clear one — a household
    of several names — it is said as whose people they are instead. */
+const totemAt = id => totemKey(((state.people[id] || {}).totem) || '');
+
+/* Whatever most of a group has in common, and how much of the group that is.
+   Ordered by the value so that a tie comes out the same way on every draw. */
+function commonest(ids, of){
+  const tally = new Map();
+  let counted = 0;
+  for (const id of ids){
+    const v = of(id);
+    if (!v) continue;
+    counted++;
+    tally.set(v, (tally.get(v) || 0) + 1);
+  }
+  let value = '', most = 0;
+  for (const [v, n] of [...tally].sort((a, b) => a[0] < b[0] ? -1 : 1)){
+    if (n > most){ most = n; value = v; }
+  }
+  return { value, share: ids.length ? most / ids.length : 0, counted };
+}
+
 function houseNameFor(ids, joinId){
   const words = id => ((state.people[id] || {}).name || '').trim().split(/\s+/).filter(Boolean);
 
@@ -3942,6 +4002,16 @@ function houseNameFor(ids, joinId){
     if (n > most){ most = n; best = name; }
   }
   if (best && most * 2 >= ids.length) return best;
+
+  /* No surname most of them share — usually because the women were entered
+     under the name they married into. The mutupo is then the truest thing
+     they have in common, and is what the family would say out loud. */
+  const totem = commonest(ids, totemAt);
+  if (totem.value && totem.share >= 0.5){
+    const known = knownTotem(totem.value);
+    return known ? known.name : totem.value;
+  }
+
   const first = ((state.people[joinId] || {}).name || '').split(' ')[0];
   return first ? `${first}'s people` : 'Another family';
 }

@@ -199,4 +199,88 @@ section('the folded picture is drawn as carefully as the whole one');
                                     JSON.stringify(t.fe.layoutOf().persons));
 }
 
+// ── the signal that decides what is offered ───────────────────────────────
+//
+// "So far Evelyn is the only ring — will it be able to realize other rings?"
+//
+// It will, and it nearly did not. The first test asked whether the surname
+// behind a seam differed from the reader's, and half the women in a real tree
+// are entered under the name they married into: Idah Musoni, Bertha Enia
+// Musoni. By that test their own people are Musoni too, and a whole family
+// standing behind one marriage would never have been noticed.
+//
+// A mutupo is not like that. A woman keeps hers for life and her children
+// take their father's, so a mutupo other than yours in the person standing in
+// the doorway is the plainest possible statement that what is behind them is
+// another house. It is also the first question a Shona family asks a
+// stranger.
+
+section('A WIFE ENTERED UNDER HER MARRIED NAME IS STILL FOUND');
+{
+  const t = twoFamilies();
+  const idah = t.fe.grow('partner', t.thomas, 'Idah Musoni', 'f', 'Soko', { born:'1930' });
+  const hers = t.fe.addPerson('Tarisai Musoni', 'm', 'Soko', '1905', '');
+  t.fe.linkExisting('child', hers, idah);
+  t.fe.grow('child', hers, 'Farai Musoni', 'm', 'Soko', { born:'1935' });
+  t.fe.grow('child', hers, 'Chipo Musoni', 'f', 'Soko', { born:'1938' });
+
+  const offered = t.fe.joinsIn();
+  const hers2 = offered.find(j => nameOf(t.fe, j.id) === 'Idah Musoni');
+  check('she carries a ring even though her surname is yours', !!hers2,
+        JSON.stringify(offered.map(j => nameOf(t.fe, j.id))));
+  eq('with her three people behind her', hers2.n, 3);
+  eq('and they are named by the mutupo, not by your own surname', hers2.name, 'Soko');
+}
+
+section('and it is the mutupo of the person in the doorway, not of the crowd behind them');
+/* The far side of your own father holds his parents AND whoever his brothers
+   married. Count those and a houseful of in-laws outvotes your own
+   grandfather, and the app offers to fold your father's line away — which it
+   did, before this was measured on the join instead. */
+{
+  const t = twoFamilies();
+  const idah = t.fe.grow('partner', t.thomas, 'Idah Musoni', 'f', 'Soko', { born:'1930' });
+  const hers = t.fe.addPerson('Tarisai Musoni', 'm', 'Soko', '1905', '');
+  t.fe.linkExisting('child', hers, idah);
+  ['Farai', 'Chipo', 'Rudo', 'Tendai'].forEach((n, i) =>
+    t.fe.grow('child', hers, `${n} Musoni`, i % 2 ? 'f' : 'm', 'Soko', { born:String(1935 + i*3) }));
+
+  const offered = t.fe.joinsIn().map(j => nameOf(t.fe, j.id));
+  check('your father is still not offered', !offered.includes('Sydney Musoni'), JSON.stringify(offered));
+  check('nor your grandfather', !offered.includes('Thomas Musoni'), JSON.stringify(offered));
+  check('and both wives are', offered.includes('Evelyn Mandaba') && offered.includes('Idah Musoni'),
+        JSON.stringify(offered));
+}
+
+section('a man of your own house is never a door out of it');
+// However deep the line, and whoever his brothers married.
+{
+  const t = twoFamilies();
+  const offered = t.fe.joinsIn();
+  check('nobody sharing your mutupo is offered',
+        offered.every(j => (t.fe.getState().people[j.id].totem || '') !== 'Mwendamberi'),
+        JSON.stringify(offered.map(j => [nameOf(t.fe, j.id),
+                                         t.fe.getState().people[j.id].totem])));
+}
+
+section('and where no totem is recorded, the surname still answers');
+// The fallback, so a family that has not entered mitupo yet loses nothing.
+{
+  const fe = loadFrontend();
+  const P = (n, s, b) => fe.addPerson(n, 'm', '', b, '');
+  const gf = fe.addPerson('Chaitezvi Musoni', 'm', '', '1900', '');
+  const son = fe.grow('child', gf, 'Sydney Musoni', 'm', '', { born:'1940' });
+  const me = fe.grow('child', son, 'Hazvineyi Musoni', 'm', '', { born:'1979' });
+  fe.setMe(me);
+  const wife = fe.grow('partner', son, 'Evelyn Mandaba', 'f', '', { born:'1944' });
+  const her = fe.addPerson('James Mandaba', 'm', '', '1910', '');
+  fe.linkExisting('child', her, wife);
+  fe.grow('child', her, 'Joseph Mandaba', 'm', '', { born:'1946' });
+
+  const offered = fe.joinsIn();
+  eq('one ring', offered.length, 1);
+  eq('on the wife', (fe.getState().people[offered[0].id] || {}).name, 'Evelyn Mandaba');
+  eq('named by the only thing there is to name them by', offered[0].name, 'Mandaba');
+}
+
 report();
