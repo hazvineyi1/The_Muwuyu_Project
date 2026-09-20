@@ -438,6 +438,18 @@ body.carrying .pod{transition:none;}
   font-family:'Fraunces',Georgia,'Times New Roman',serif; font-weight:500; font-size:15px;
   line-height:1.22; text-align:center; color:var(--ink); word-break:break-word;
 }
+/* THE NAME OF A HOUSE. Quiet, unselectable, and above the marriage rather
+   than beside it, so it reads as a label on the pair and not as a person. */
+.house{
+  position:absolute; transform:translate(-50%,-50%); pointer-events:none;
+  padding:2px 10px; border-radius:99px; white-space:nowrap;
+  background:var(--pod-hi); border:1px solid var(--pod-edge);
+  /* Not the small-caps used elsewhere for labels: "yaMai Tendai" is one
+     Shona word carrying a name inside it, and capitalising the whole of it
+     turns it into YAMAI, which is not a word at all. */
+  font-family:'Fraunces',Georgia,serif; font-style:italic; font-size:11.5px;
+  color:var(--muted); opacity:.92;
+}
 .pod .also{
   font-family:'Fraunces',Georgia,serif; font-style:italic; font-size:11.5px;
   line-height:1.2; text-align:center; color:var(--muted); margin-top:1px;
@@ -3034,6 +3046,63 @@ function kinTerms(who, tid){
   return { list, base, shape: base.shape || null, plain: base.plain || null };
 }
 
+/* THE HOUSES OF A HOUSEHOLD — dzimba.
+ *
+ * A man with more than one wife does not have one set of children. He has
+ * houses: each wife and her children are an imba, and the whole family names
+ * them that way — vana vaMai Revai, the children of Mai Revai's house. It is
+ * not a footnote about who the mother was. It decides who is spoken for by
+ * whom, who inherits what, which brother stands up at whose wedding; and
+ * brothers of one house are closer to each other than to brothers of
+ * another, though all of them are brothers.
+ *
+ * A western tree cannot say any of this. It draws one man, several marriage
+ * lines, and a row of children, and the only thing it can tell you about the
+ * difference between two of those children is the word "half" — which is
+ * about fractions of shared blood, and is not what a house is about at all.
+ *
+ * NAMED BY THE MOTHER, which is what the family does, and NOT numbered.
+ * First house and second house are real and they matter, but they are the
+ * order of the MARRIAGES and this app does not record when a marriage
+ * happened. Numbering them by the wives' birth years would be inventing a
+ * fact about a family's own seniority, which is the last thing to guess at.
+ * So the app says what it knows: whose house it is.
+ *
+ * Only where there is more than one house, because with one wife there is no
+ * distinction to draw and the word would be decoration. Only where the
+ * house has children, because it is the children it tells apart. And never
+ * where BOTH partners have married more than once — then there are two sets
+ * of houses crossing, and which set the children belong to is a question for
+ * the family rather than for the drawing. */
+function houseName(unionId){
+  const u = state.unions[unionId];
+  if (!u) return null;
+  const two = (u.partners || []).filter(present);
+  if (two.length !== 2) return null;
+  if (!u.children.filter(present).length) return null;
+
+  const howMany = id => unions().filter(x => x.partners.includes(id) &&
+                                             x.partners.filter(present).length === 2).length;
+  const shared = two.filter(id => howMany(id) > 1);
+  if (shared.length !== 1) return null;                 // none, or both — no answer
+
+  const holder = shared[0];
+  const of = two.find(id => id !== holder);
+  const p = state.people[of];
+  // The name the family uses for her if they have written it down — which is
+  // usually the one the house is actually called by.
+  const called = (p.also || '').trim() || (p.name || '').trim();
+  if (!called) return null;
+  return { union:unionId, of, holder, called, text: `Imba ya${called}` };
+}
+
+/* Which house somebody is a child of, where their household has more than
+   one. Answers nothing where there is nothing to tell apart. */
+function houseOf(id){
+  const pu = parentUnionOf(id);
+  return pu ? houseName(pu.id) : null;
+}
+
 /* WHAT A PARENT IS CALLED AFTER THEIR FIRST CHILD.
  *
  * Esther is Mai Revai. Not a nickname and not an alias: from the day her
@@ -4122,7 +4191,19 @@ function computeLayout(){
     }
   }
 
-  layout = { persons, sockets, links };
+  /* Where to write the name of a house: over the marriage it belongs to, on
+     the side the children are. See houseName. */
+  const houses = [];
+  for (const b of blocks){
+    if (b.socket) continue;
+    for (const u of b.unions){
+      const h = houseName(u.id);
+      const at = unionAt[u.id];
+      if (h && at) houses.push({ ...h, x:at.x, y:at.y });
+    }
+  }
+
+  layout = { persons, sockets, links, houses };
 }
 
 /* ── drawing ────────────────────────────────────────────────────────── */
@@ -4328,6 +4409,14 @@ function draw(){
   }
 
   const html = [];
+  /* The name of a house, written over the marriage it belongs to. Never
+     tappable: it is a caption on two people who are both already there, and
+     a third thing to tap between a husband and a wife would be in the way of
+     both of them. */
+  for (const h of (layout.houses || [])){
+    html.push(`<div class="house" style="left:${h.x}px; top:${h.y - LEVEL * 0.34}px">` +
+              `${esc(h.text)}</div>`);
+  }
   for (const s of layout.sockets){
     html.push(`<div class="pod socket" data-socket="${s.forChild}" tabindex="0" role="button"` +
               ` aria-label="Add the parents of these siblings"` +
@@ -6913,6 +7002,14 @@ function openCard(id){
         'from the tree itself.'
       : 'Mark this if nobody can go back past them — it tells the next person ' +
         'the work ended here rather than leaving them to guess.'}</p>` +
+    (() => {
+      // Which house they are of — see houseName. Said on the child's card
+      // because that is where somebody is trying to tell two brothers apart.
+      const h = houseOf(id);
+      return h ? `<p class="roothint">Of <b>${esc(h.text)}</b> — ` +
+        `${esc((state.people[h.holder] || {}).name || '')} has more than one ` +
+        `house, and these are the children of this one.</p>` : '';
+    })() +
     parentageBlock(id) +
     visibilityBlock(p) +
     `<button class="btn ghost wide${meId === id ? ' on' : ''}" id="cMe">` +

@@ -96,4 +96,98 @@ section('a name that is already written down is not offered again');
   eq('and the derivation itself is unchanged', h.fe.teknonym(h.esther).text, 'Mai Revai');
 }
 
+// ── the houses of a household ──────────────────────────────────────────────
+//
+// A man with more than one wife does not have one set of children. He has
+// houses: each wife and her children are an imba, and the family names them
+// that way — vana vaMai Revai, the children of Mai Revai's house. It decides
+// who is spoken for by whom and who inherits what, and brothers of one house
+// are closer to each other than to brothers of another though all of them
+// are brothers.
+//
+// A western tree has one word for the whole of that, "half", which is about
+// fractions of shared blood and is not what a house is about at all.
+
+function polygynous(){
+  const fe = loadFrontend();
+  const man = fe.addPerson('Sekuru', 'm', 'Nzou', '1935', '');
+  const ruth  = fe.grow('partner', man, 'Ruth', 'f', 'Shava', { born:'1940' });
+  const grace = fe.grow('partner', man, 'Grace', 'f', 'Moyo', { born:'1950' });
+  const tendai = fe.grow('child', ruth,  'Tendai', 'm', 'Nzou', { born:'1962' });
+  const chipo  = fe.grow('child', grace, 'Chipo', 'f', 'Nzou', { born:'1975' });
+  return { fe, man, ruth, grace, tendai, chipo };
+}
+
+section('EACH WIFE AND HER CHILDREN ARE A HOUSE, AND THE HOUSE IS HERS');
+{
+  const h = polygynous();
+  const houses = h.fe.layoutOf().houses;
+  eq('two wives, two houses', houses.length, 2);
+  eq('each named by its own mother', houses.map(x => x.text).sort(),
+     ['Imba yaGrace', 'Imba yaRuth']);
+  eq('and a child knows which house they are of',
+     h.fe.houseOf(h.tendai).text, 'Imba yaRuth');
+  eq('as does their half-brother', h.fe.houseOf(h.chipo).text, 'Imba yaGrace');
+}
+
+section('by the name the family actually calls her');
+// Which is usually the one the house is known by: imba yaMai Tendai.
+{
+  const h = polygynous();
+  h.fe.getState().people[h.ruth].also = 'Mai Tendai';
+  eq('her own name for it', h.fe.houseOf(h.tendai).text, 'Imba yaMai Tendai');
+}
+
+section('NOT NUMBERED, because this app does not know when a marriage happened');
+/* First house and second house are real and they matter. They are the order
+   of the marriages, and nothing in this record says when a marriage was. To
+   number them by the wives' birth years would be inventing a fact about a
+   family's own seniority, which is the last thing to guess at. */
+{
+  const h = polygynous();
+  const said = h.fe.layoutOf().houses.map(x => x.text).join(' ');
+  check('nothing claims to be the first', !/first|1st|yekutanga/i.test(said), said);
+  check('nor the second', !/second|2nd|yechipiri/i.test(said), said);
+}
+
+section('a household with one wife has no houses to tell apart');
+{
+  const fe = loadFrontend();
+  const man = fe.addPerson('Man', 'm', 'Nzou', '1940', '');
+  const wife = fe.grow('partner', man, 'Wife', 'f', 'Shava', { born:'1944' });
+  const kid = fe.grow('child', man, 'Child', 'm', 'Nzou', { born:'1970' });
+  eq('nothing is drawn', fe.layoutOf().houses.length, 0);
+  eq('and the child is told nothing they did not know', fe.houseOf(kid), null);
+}
+
+section('nor does a marriage with nobody in it yet');
+// It is a house when there are children in it to tell apart.
+{
+  const fe = loadFrontend();
+  const man = fe.addPerson('Man', 'm', 'Nzou', '1940', '');
+  fe.grow('partner', man, 'First', 'f', 'Shava', { born:'1944' });
+  const second = fe.grow('partner', man, 'Second', 'f', 'Moyo', { born:'1955' });
+  fe.grow('child', man, 'Only child', 'm', 'Nzou', { born:'1970' });
+  const houses = fe.layoutOf().houses;
+  eq('only the house with children in it is named', houses.length, 1);
+  eq('and it is named by the mother of them', houses[0].called, 'First');
+}
+
+section('and where both of them married more than once, the app says nothing');
+/* Two sets of houses crossing each other. Which set the children belong to
+   is a question for the family, not for the drawing — and a picture that
+   answered it would be answering with a guess. */
+{
+  const fe = loadFrontend();
+  const man = fe.addPerson('Man', 'm', 'Nzou', '1940', '');
+  const her = fe.grow('partner', man, 'Her', 'f', 'Shava', { born:'1944' });
+  fe.grow('partner', man, 'His other wife', 'f', 'Moyo', { born:'1950' });
+  const hers = fe.addPerson('Her other husband', 'm', 'Soko', '1938', '');
+  fe.addUnion([her, hers], []);
+  fe.grow('child', man, 'Their child', 'm', 'Nzou', { born:'1970' });
+  const theirs = Object.keys(fe.getState().people).find(
+    k => fe.getState().people[k].name === 'Their child');
+  eq('no house is claimed', fe.houseOf(theirs), null);
+}
+
 report();
