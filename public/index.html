@@ -949,6 +949,13 @@ body.carrying .pod{transition:none;}
   font-family:'Karla',sans-serif; font-size:12.5px; font-weight:600;
 }
 #bar button:hover{background:var(--pod-hi); color:var(--ink);}
+/* The two zoom buttons. One character each, so they need a shape of their own
+   or they read as punctuation between the words beside them. */
+#bar button.zoom{
+  min-width:32px; padding:6px 0; font-size:16px; line-height:1;
+  background:var(--pod-hi); color:var(--ink); margin-right:2px;
+}
+#bar button.zoom:hover{box-shadow:inset 0 0 0 1.5px var(--gold-soft);}
 /* The Set aside button doubles as the notice that something YOU recorded has
    been taken out of the tree, so in that state it stops looking like the
    other quiet buttons beside it. */
@@ -1114,6 +1121,8 @@ body.carrying .pod{transition:none;}
 
 <div id="bar" hidden>
   <button id="fit">Fit</button>
+  <button class="zoom" id="zout" title="Smaller" aria-label="Show more of the tree">&minus;</button>
+  <button class="zoom" id="zin" title="Bigger" aria-label="Show less of the tree, larger">+</button>
   <button id="undo">Undo</button>
   <button id="clear">Clear</button>
   <button class="who" id="look" title="Light or dark, and which colours">Muwuyu</button>
@@ -4516,6 +4525,17 @@ function draw(){
      the tap. A branch runs a whole row's height and can be tapped anywhere
      along it; a bond is only as long as the gap between two pods. So the bond
      wins the overlap, and neither line loses anything worth having. */
+  /* HOW HEAVY THE WOOD AT THE GROUND IS: how many generations this family
+     has managed to trace, end to end. Not how many rows fall below the
+     horizon — that depends on which person the picture happens to be
+     numbered from, which is not a fact about the family at all. A tree
+     traced six generations is drawn on heavier wood than one traced two,
+     and every elder anybody finds thickens the whole of it. Capped, so a
+     very long line stays a tree rather than a wall. */
+  const ys = Object.values(layout.persons).map(q => q.y);
+  const generations = ys.length ? (Math.max(...ys) - Math.min(...ys)) / LEVEL + 1 : 1;
+  const trunkWood = Math.min(40, 14 + 4 * generations);
+
   const hits = [], bondHits = [];
   for (const l of layout.links){
     if (l.kind === 'bond'){
@@ -4533,12 +4553,39 @@ function draw(){
       svg.push(`<path class="branch unknown" d="${branchPath(l)}"></path>`);
       continue;
     }
-    // A baobab is fattest where it meets the ground, then tapers fast. Swelling
-    // the strokes near the horizon is what gives the whole thing its shape.
-    const flare = 1 + 0.55 * Math.exp(-Math.abs((l.y1 + l.y2) / 2) / 150);
-    const w = (l.root
-      ? Math.max(2.5, Math.min(15, 2.5 + Math.sqrt(l.weight) * 1.9))
-      : Math.max(3.5, Math.min(38, 3.5 + Math.sqrt(l.weight) * 3.8))) * flare;
+    /* HOW THICK A LENGTH OF WOOD IS DRAWN.
+     *
+     * "The branches are big and small, I don't understand why. Branches
+     * should grow stronger as the roots get deeper."
+     *
+     * They were drawn by how many people hung below them, which is a real
+     * fact and the wrong one to draw. Two brothers standing side by side got
+     * a thick branch and a thin one because one of them had children and the
+     * other did not — the same height in the same tree, two different
+     * thicknesses, and nothing on screen to say why. From the outside that is
+     * not information, it is noise.
+     *
+     * A tree does not work that way either. It is thickest where it meets the
+     * ground and thins at a steady rate every time it forks, all the way out
+     * to the twigs; the roots do the same going down. So thickness is now the
+     * one thing anybody looking at a tree already expects it to be: how far
+     * this piece of wood is from the ground. Every branch on a row is drawn
+     * the same, and a family traced four generations back has a visibly
+     * heavier trunk than one traced two — which is the thing that was asked
+     * for.
+     *
+     * AND THE TRUNK ITSELF THICKENS WITH THE ROOTS, which is the sentence
+     * read literally. A family that has traced four generations back is
+     * drawn on heavier wood than one that has traced two: every name anybody
+     * finds further down makes the whole tree visibly stronger, which is
+     * true of a tree and true of a family and is the reason to keep looking.
+     *
+     * TAPER is per generation. ROOT_WOOD is a little finer than the wood
+     * above ground, because a root is not a trunk. */
+    const TAPER = 0.66, ROOT_WOOD = 0.72, TWIG = 2.4;
+    const rows = Math.abs((l.y1 + l.y2) / 2) / LEVEL;
+    const w = Math.max(TWIG,
+      trunkWood * (l.root ? ROOT_WOOD : 1) * Math.pow(TAPER, rows));
     svg.push(`<path class="branch${l.root ? ' root' : ''}${fresh.has(l.id) ? ' grow' : ''}"` +
              ` stroke-width="${w.toFixed(1)}" d="${branchPath(l)}"></path>`);
     if (l.child && l.parents && l.parents.length){
@@ -8484,6 +8531,42 @@ stage.addEventListener('wheel', e => {
  * and the button that should rescue you is the one that cannot. */
 const ZOOM_MIN = 0.25, ZOOM_MAX = 2.4;
 
+/* WHERE TO LAND WHEN THE TREE IS FIRST DRAWN.
+ *
+ * "It is difficult to grow intuitively as this is so small, I need to be able
+ * to see the words."
+ *
+ * Fit shows the whole family, which on fifty-five people is a zoom of about a
+ * quarter: pods four millimetres wide, names unreadable, and the kinship
+ * words — the entire point of the app — hidden, because below half size they
+ * are not words, they are grey marks. That is the right picture for "show me
+ * everything" and the wrong one to be handed on arrival, every time.
+ *
+ * So arriving is different from fitting. If the whole tree cannot be shown at
+ * a size where the words can be read, the page opens on YOU instead, close
+ * enough to read, with everything else one drag away. Fit is still there and
+ * still does what it says. */
+function land(){
+  const pts = Object.values(layout.persons);
+  if (!pts.length) return fit();
+  fit();
+  if (pos.k >= TITLE_LEGIBLE_AT) return;        // it all fits and can be read
+  const on = (meId && layout.persons[meId]) ? meId
+           : (state.rootId && layout.persons[state.rootId]) ? state.rootId
+           : Object.keys(layout.persons)[0];
+  focusOn(on, 0.78);
+  say('Opened where you stand. Fit shows the whole family.');
+}
+
+function focusOn(id, k){
+  const at = layout.persons[id];
+  if (!at) return;
+  pos.k = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, k || 0.78));
+  pos.x = innerWidth/2 - at.x * pos.k;
+  pos.y = (innerHeight + TOPBAR)/2 - at.y * pos.k;
+  applyTransform();
+}
+
 function fit(){
   const pts = Object.values(layout.persons).concat((layout.sockets || []).map(q => ({ x:q.x, y:q.y })));
   if (!pts.length){ pos = { x:innerWidth/2, y:innerHeight*0.6, k:1 }; applyTransform(); return; }
@@ -8547,6 +8630,16 @@ $('family').onclick = openFamily;
 $('totems').onclick = openTotems;
 $('seedFamilyGo').onclick = openFamily;
 
+/* ZOOM YOU CAN DRIVE WITH A FINGER.
+ *
+ * Pinch and the wheel were the only ways in, and on a phone a pinch on a
+ * canvas that also pans is a fight. Two buttons, stepping from the middle of
+ * what is on screen, and they are next to Fit because that is where somebody
+ * goes when the picture is the wrong size. */
+const ZOOM_STEP = 1.5;
+const zoomBy = f => zoomAt(pos.k * f, innerWidth/2, (innerHeight + TOPBAR)/2);
+$('zin').onclick = () => zoomBy(ZOOM_STEP);
+$('zout').onclick = () => zoomBy(1 / ZOOM_STEP);
 $('fit').onclick = fit;
 $('undo').onclick = () => {
   if (!history.length) return;
@@ -8784,7 +8877,7 @@ async function load(){
   showStalled();
   updateWho();
   render();
-  if (people().length) fit();
+  if (people().length) land();
   if (store === 'shared') startPolling();
 }
 

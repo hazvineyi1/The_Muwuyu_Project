@@ -414,4 +414,66 @@ section('AND A BRANCH WITH PEOPLE UNDER IT COMES TOO, ALL OF IT AT ONCE');
                               JSON.stringify(fe.layoutOf().persons));
 }
 
+// ── how thick a length of wood is drawn ───────────────────────────────────
+//
+// "The branches are big and small, I don't understand why. Branches should
+// grow stronger as the roots get deeper."
+//
+// They were drawn by how many people hung below them, which is a real fact
+// and the wrong one to draw: two brothers side by side got a thick branch and
+// a thin one because one had children and the other did not. Same height,
+// same tree, two thicknesses, nothing on screen to say why. From the outside
+// that is not information, it is noise.
+
+section('WOOD THINS WITH EVERY ROW AWAY FROM THE GROUND, AND BY NOTHING ELSE');
+{
+  const fe = loadFrontend();
+  const gf = fe.addPerson('Sekuru', 'm', 'Nzou', '1900', '');
+  const busy = fe.grow('child', gf, 'With a family', 'm', 'Nzou', { born:'1930' });
+  const alone = fe.grow('child', gf, 'With nobody', 'm', 'Nzou', { born:'1935' });
+  for (let i = 0; i < 5; i++)
+    fe.grow('child', busy, 'Child ' + i, 'm', 'Nzou', { born:String(1960 + i) });
+
+  const L = fe.layoutOf();
+  const wood = id => {
+    const l = L.links.find(x => x.kind === 'branch' && x.child === id);
+    return Math.abs((l.y1 + l.y2) / 2);
+  };
+  eq('two brothers on one row are the same distance from the ground',
+     wood(busy), wood(alone));
+  const kid = Object.keys(fe.getState().people)
+    .find(k => fe.getState().people[k].name === 'Child 0');
+  check('and their children are further from it than they are',
+        wood(kid) > wood(busy), JSON.stringify({ kid:wood(kid), parent:wood(busy) }));
+}
+
+section('and the whole tree is drawn on heavier wood the further back it is traced');
+/* The sentence read literally. A family that has found four generations is
+   drawn stronger than one that has found two, and every elder anybody turns
+   up thickens the whole of it. Measured here as the span the drawing covers,
+   not as the rows below the horizon — which of those a row falls on depends
+   on who the picture happens to be numbered from, and that is not a fact
+   about the family. */
+{
+  const shallow = loadFrontend();
+  const a = shallow.addPerson('A', 'm', 'Nzou', '1950', '');
+  shallow.grow('child', a, 'B', 'm', 'Nzou', { born:'1975' });
+  const shortSpan = (() => {
+    const ys = Object.values(shallow.layoutOf().persons).map(q => q.y);
+    return Math.max(...ys) - Math.min(...ys);
+  })();
+
+  const deep = loadFrontend();
+  let last = deep.addPerson('G0', 'm', 'Nzou', '1880', '');
+  for (let i = 1; i < 6; i++) last = deep.grow('child', last, 'G' + i, 'm', 'Nzou',
+                                               { born:String(1880 + i*25) });
+  const longSpan = (() => {
+    const ys = Object.values(deep.layoutOf().persons).map(q => q.y);
+    return Math.max(...ys) - Math.min(...ys);
+  })();
+
+  check('a line traced six generations spans more rows than one traced two',
+        longSpan > shortSpan, JSON.stringify({ shortSpan, longSpan }));
+}
+
 report();
