@@ -4534,7 +4534,10 @@ function draw(){
      very long line stays a tree rather than a wall. */
   const ys = Object.values(layout.persons).map(q => q.y);
   const generations = ys.length ? (Math.max(...ys) - Math.min(...ys)) / LEVEL + 1 : 1;
-  const trunkWood = Math.min(40, 14 + 4 * generations);
+  /* Leaner than the first attempt, which read as a wall rather than a tree:
+     eighteen pixels at the ground on a family traced six generations, and
+     half that on one traced two. The taper does the rest. */
+  const trunkWood = Math.min(18, 8 + 1.8 * generations);
 
   const hits = [], bondHits = [];
   for (const l of layout.links){
@@ -4582,7 +4585,7 @@ function draw(){
      *
      * TAPER is per generation. ROOT_WOOD is a little finer than the wood
      * above ground, because a root is not a trunk. */
-    const TAPER = 0.66, ROOT_WOOD = 0.72, TWIG = 2.4;
+    const TAPER = 0.68, ROOT_WOOD = 0.72, TWIG = 2;
     const rows = Math.abs((l.y1 + l.y2) / 2) / LEVEL;
     const w = Math.max(TWIG,
       trunkWood * (l.root ? ROOT_WOOD : 1) * Math.pow(TAPER, rows));
