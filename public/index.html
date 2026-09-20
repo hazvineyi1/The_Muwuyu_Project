@@ -457,47 +457,97 @@ body.carrying .pod{transition:none;}
   font-family:'Fraunces',Georgia,'Times New Roman',serif; font-weight:500; font-size:15px;
   line-height:1.22; text-align:center; color:var(--ink); word-break:break-word;
 }
-/* THE KNOT: the count worn by a person the tree would split at, and the chip
-   standing where the family behind them used to be.
+/* THE BUD: a whole family, shut, drawn as the one thing on a tree that means
+   exactly that — folded now, a branch when it opens.
 
-   The count is the handle, so it has to look like one — a ring rather than
-   the flat badges beside it, which are labels and are not tappable. Shut, it
-   fills in: the family is behind it rather than beside it. */
-/* The ring hangs outside the pod, so the pod has to sit above the ones drawn
+   A knot was the wrong picture. A knot is where wood is damaged; this is
+   where a family waits. So the mark a person wears is a small bud, and the
+   family standing in the lane beside them is a bigger one with their name
+   under it. Open it and the bud is gone, because the branch is there instead.
+
+   ONE SYMBOL, TWO JOBS — the risk worth naming. The tree already grows from
+   buds (.bud, the four ways to add somebody), so a second kind of bud could
+   read as "tap here to add a person". Three things keep them apart, and all
+   three have to hold:
+     • a growth bud lives in SCREEN space, beside whoever is picked, and
+       vanishes the moment nothing is picked; a family bud lives in TREE
+       space, on the wood, and is there whether or not anyone is selected;
+     • a growth bud is a gold pill with a word in it; a family bud is a bud
+       SHAPE — no pill, no verb;
+     • a family bud carries a number and a surname. Nothing that adds a
+       person ever does.
+   placeBuds() also refuses to put a growth bud on top of a family bud, so
+   the two never occupy the same patch of screen. */
+/* The mark hangs outside the pod, so the pod has to sit above the ones drawn
    after it or its own handle is painted over by a neighbour. */
-.pod.knotted{z-index:2;}
-.pod .knot{
-  position:absolute; right:-11px; top:-11px; z-index:3;
-  min-width:22px; height:22px; padding:0 5px; border-radius:99px;
-  display:flex; align-items:center; justify-content:center; cursor:pointer;
-  background:var(--pod); border:2px solid var(--gold); color:var(--gold);
-  font-family:'Karla',sans-serif; font-size:11px; font-weight:700;
-  box-shadow:var(--shadow);
+.pod.budded{z-index:2;}
+.pod .budmark{
+  position:absolute; right:-14px; top:-15px; z-index:3;
+  width:23px; height:27px; cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+  filter:drop-shadow(0 1px 2px rgba(60,44,20,.28));
+  font-family:'Karla',sans-serif; font-size:10.5px; font-weight:700;
 }
-.pod .knot:hover{background:var(--gold); color:var(--pod);}
-.pod .knot.shut{background:var(--gold); color:var(--pod);}
-.pod .knot:focus-visible{outline:2.5px solid var(--gold); outline-offset:2px;}
-.knotchip{
-  /* The pods layer is pointer-events:none and hands it back per pod; a chip
+/* THE SHAPE IS DRAWN, not rounded off a box. border-radius can make an egg —
+   fattest at the top, which is a seed — and a bud is the other way up: it
+   comes to a point where it will open and swells where the family is. That
+   difference is the whole reading, so it is a path. */
+.budmark svg, .familybud .swell svg{ position:absolute; inset:0; width:100%; height:100%; }
+.budmark .skin{ fill:var(--pod); stroke:var(--gold); stroke-width:3.5; }
+.budmark b{ position:relative; margin-top:3px; color:var(--gold); font-weight:700; }
+.budmark .furl{ display:none; }   /* at 23px across it is only noise */
+/* Folded, it fills in: the family is inside it rather than beside it.
+   NOT called `.shut`. `.pod .shut` is already the private-person dot — 5px
+   square, absolutely placed at the pod's bottom corner — and it is declared
+   further down this sheet at the same specificity, so a mark wearing both
+   class names came out as a 21x5 sliver the moment it was folded. */
+.pod .budmark:hover .skin,
+.pod .budmark.folded .skin{fill:var(--gold);}
+.pod .budmark:hover b,
+.pod .budmark.folded b{color:var(--pod);}
+.pod .budmark:focus-visible{outline:2.5px solid var(--gold); outline-offset:2px;
+                            border-radius:6px;}
+.familybud{
+  /* The pods layer is pointer-events:none and hands it back per pod; a bud
      is a thing to tap, so it has to ask for it too. */
   position:absolute; transform:translate(-50%,-50%); z-index:2; cursor:pointer;
   pointer-events:auto;
-  display:flex; flex-direction:column; align-items:center; justify-content:center;
-  width:132px; min-height:44px; padding:7px 10px;
-  background:var(--pod-hi); border:2px dashed var(--gold); border-radius:14px;
-  box-shadow:var(--shadow);
+  display:flex; flex-direction:column; align-items:center; gap:3px;
+  width:132px;
 }
-.knotchip:hover{border-style:solid;}
-.knotchip:focus-visible{outline:2.5px solid var(--gold); outline-offset:3px;}
-.knotchip .fam{
+/* A family whose generations lie ABOVE the person holding them stands in the
+   lane above her, so the twig arrives from below — and the swell has to be
+   the end it arrives at, or the wood runs through the name to reach it. */
+.familybud.up{flex-direction:column-reverse;}
+.familybud .swell{
+  display:flex; align-items:center; justify-content:center;
+  position:relative; width:54px; height:64px;
+  filter:drop-shadow(0 2px 3px rgba(60,44,20,.24));
+  font-family:'Karla',sans-serif; font-size:16px; font-weight:700;
+  color:var(--gold); letter-spacing:.01em;
+}
+.familybud .swell .skin{ fill:var(--pod-hi); stroke:var(--gold); stroke-width:2.5; }
+/* The furl — the seam a bud opens along. It is the promise that this closes
+   and opens again, made in the drawing rather than in words. */
+.familybud .swell .furl{ fill:none; stroke:var(--gold-soft); stroke-width:1.6;
+                         stroke-dasharray:3 4.5; }
+.familybud .swell b{ position:relative; margin-top:9px; font-weight:700; }
+.familybud:hover .swell .skin{fill:var(--gold);}
+.familybud:hover .swell b{color:var(--pod);}
+.familybud:hover .swell .furl{stroke:var(--pod);}
+.familybud:focus-visible{outline:none;}
+.familybud:focus-visible .swell{outline:2.5px solid var(--gold); outline-offset:3px;}
+.familybud .fam{
   font-family:'Fraunces',Georgia,serif; font-size:14px; color:var(--ink);
   line-height:1.15; text-align:center; word-break:break-word;
 }
-.knotchip .many{
+.familybud .many{
   font-family:'Karla',sans-serif; font-size:9px; letter-spacing:.06em;
-  color:var(--muted); margin-top:2px; text-align:center;
+  color:var(--muted); text-align:center;
 }
-.branch.folded{stroke:var(--gold); stroke-dasharray:5 5; opacity:.8;}
+/* The twig the bud sits on. Solid, not dashed: the join is real wood, and
+   the only thing folded away is what grows out of its far end. */
+.branch.twig{stroke:var(--gold); stroke-linecap:round; opacity:.85;}
 
 /* THE NAME OF A HOUSE. Quiet, unselectable, and above the marriage rather
    than beside it, so it reads as a label on the pair and not as a person. */
@@ -1214,6 +1264,17 @@ body.carrying .pod{transition:none;}
 const KEY = 'muti-baobab-v1';
 
 const POD_W = 132, POD_H = 48;
+/* Half the height of a folded family's bud: the swell, its name and the
+   line of small type under it. The twig stops here rather than at the
+   column's centre, and placeBuds() keeps growth buds off this rectangle. */
+const BUD_HALF = 48;
+/* And how far past the lane point it is nudged, away from the person holding
+   it. A pod is taller than the 48 this file calls POD_H once it has a name, a
+   year and a totem in it, so a bud centred exactly on the lane tucks its
+   swell under the pod's chin and the twig between them is never seen. The
+   whole claim of the drawing is that the join is still a join, so the wood
+   has to show. */
+const BUD_DROP = 34;
 /* How much of the top of the screen the banner occupies. Everything that
    places something on screen — fitting the tree, laying out the buds, nudging
    a selected person into view — has to know, or the first row of a family
@@ -3745,7 +3806,7 @@ function startBuild(id){
 }
 function closeBuild(){ building = null; }
 
-/* ── THE KNOT: A FAMILY THAT HANGS ON ONE PERSON ─────────────────────────
+/* ── THE BUD: A FAMILY THAT HANGS ON ONE PERSON ──────────────────────────
  *
  * "The red line is a different family joined by one person. I want to be able
  * to block out / close one family as I work on the other one, especially when
@@ -4814,7 +4875,7 @@ function computeLayout(){
      uses, on the side of the join their generation lies. It is the lane the
      app already means "these are her people" with, which is exactly what a
      folded family is. */
-  const knots = [];
+  const famBuds = [];
   for (const j of seams){
     const b = ofPerson[j.id];
     if (!b) continue;
@@ -4827,15 +4888,25 @@ function computeLayout(){
     let sum = 0;
     for (const x of j.away) sum += (g[x] ?? 0);
     const below = (sum / j.away.size) <= (g[j.id] ?? 0);
-    knots.push({ id:j.id, name:j.name, n:j.n,
-                 x: personXIn(b, j.id), y: b.y + LEVEL * (below ? 0.5 : -0.5),
-                 from: { x: personXIn(b, j.id), y: b.y } });
+    famBuds.push({ id:j.id, name:j.name, n:j.n, below,
+                   x: personXIn(b, j.id), y: b.y + LEVEL * (below ? 0.5 : -0.5),
+                   from: { x: personXIn(b, j.id), y: b.y } });
   }
 
-  layout = { persons, sockets, links, houses, knots, seams: joinsIn() };
+  layout = { persons, sockets, links, houses, famBuds, seams: joinsIn() };
 }
 
 /* ── drawing ────────────────────────────────────────────────────────── */
+
+/* THE BUD, drawn once and used at both sizes: the small one a person wears,
+   and the big one a folded family stands in. A point at the top where it
+   will open, a swell at the bottom where the family is, and a dashed furl
+   down the middle — the seam. */
+const budShape =
+  '<svg viewBox="0 0 52 62" aria-hidden="true" focusable="false">' +
+  '<path class="skin" d="M26 2C40 18 50 30 50 42c0 11.5-10.8 18-24 18' +
+  'S2 53.5 2 42C2 30 12 18 26 2Z"/>' +
+  '<path class="furl" d="M26 13V51"/></svg>';
 function branchPath(l){
   const dy = l.y2 - l.y1, dx = l.x2 - l.x1;
   const c = Math.abs(dy) * 0.45, s = Math.sign(dy) || 1;
@@ -5053,9 +5124,14 @@ function draw(){
       hits.push(hitPath(branchPath(l), w, l.child, l.parents));
     }
   }
-  for (const k of (layout.knots || [])){
-    svg.push(`<path class="branch folded" stroke-width="4" fill="none" ` +
-             `d="M${k.from.x} ${k.from.y} L ${k.x} ${k.y}"></path>`);
+  /* The twig runs from the person to the OUTER EDGE of the swell, not to the
+     column's middle, so the wood meets the bud instead of disappearing behind
+     the name. Half the column: a 62px swell, a name and a line of small type. */
+  for (const k of (layout.famBuds || [])){
+    const mid = k.y + (k.below ? BUD_DROP : -BUD_DROP);
+    const end = mid + (k.below ? -BUD_HALF : BUD_HALF);
+    svg.push(`<path class="branch twig" stroke-width="3.5" fill="none" ` +
+             `d="M${k.from.x} ${k.from.y} L ${k.x} ${end}"></path>`);
   }
   gtree.innerHTML = svg.concat(hits, bondHits).join('');
   gtree.classList.toggle('hushed', !!lit);
@@ -5087,15 +5163,18 @@ function draw(){
      tappable: it is a caption on two people who are both already there, and
      a third thing to tap between a husband and a wife would be in the way of
      both of them. */
-  /* A folded family: a chip where its people were, and a short stub of wood
-     into the person holding it, so the join is visibly still a join. */
-  for (const k of (layout.knots || [])){
+  /* A folded family: a bud where its people were, on a twig into the person
+     holding it, so the join is visibly still a join and the family is
+     visibly still there — waiting, not deleted. The count goes INSIDE the
+     swell, because what is in the bud is those people. */
+  for (const k of (layout.famBuds || [])){
     html.push(
-      `<div class="knotchip" data-knot="${esc(k.id)}" role="button" tabindex="0"` +
-      ` aria-label="Open the ${esc(k.name)} family — ${k.n} people, joined here"` +
-      ` style="left:${k.x}px; top:${k.y}px">` +
+      `<div class="familybud${k.below ? '' : ' up'}" data-fold="${esc(k.id)}" role="button" tabindex="0"` +
+      ` aria-label="Open the ${esc(k.name)} family — ${k.n} people, folded into a bud here"` +
+      ` style="left:${k.x}px; top:${k.y + (k.below ? BUD_DROP : -BUD_DROP)}px">` +
+      `<span class="swell">${budShape}<b>${k.n}</b></span>` +
       `<span class="fam">${esc(k.name)}</span>` +
-      `<span class="many">${k.n} people · tap to open</span></div>`);
+      `<span class="many">tap to open</span></div>`);
   }
   for (const h of (layout.houses || [])){
     html.push(`<div class="house" style="left:${h.x}px; top:${h.y - LEVEL * 0.34}px">` +
@@ -5117,23 +5196,25 @@ function draw(){
     html.push(
       `<div class="pod${sel === p.id ? ' sel' : ''}${fresh.has(p.id) ? ' sprout' : ''}` +
       `${p.root ? ' taproot' : ''}${meId === p.id ? ' you' : ''}` +
-      `${(layout.seams || []).some(j => j.id === p.id) ? ' knotted' : ''}` +
+      `${(layout.seams || []).some(j => j.id === p.id) ? ' budded' : ''}` +
       `${lit ? (lit.ids.has(p.id) || p.id === lit.from ? ' lit' : ' dim') : ''}"` +
       ` data-id="${p.id}" tabindex="0" role="button"` +
       ` aria-label="${esc(p.name)} — show where the tree can grow from here"` +
       ` style="left:${at.x}px; top:${at.y}px">` +
       badge +
-      /* THE KNOT. A person the tree would split at, with a family behind
-         them: the count is the handle, and tapping it shuts or opens them. */
+      /* THE BUD MARK. A person the tree would split at, with a whole family
+         hanging on them: the count is the handle, and tapping it folds them
+         into a bud or opens them back into a branch. */
       ((layout.seams || []).some(j => j.id === p.id)
         ? (() => {
             const j = layout.seams.find(x => x.id === p.id);
             const where = `Where the ${esc(j.name)} family joins ` +
               `${j.into === 'your family' ? 'yours' : 'the ' + esc(j.into)}` +
               ` — ${j.n} ${j.n === 1 ? 'person' : 'people'}.`;
-            return `<span class="knot${folded.has(p.id) ? ' shut' : ''}" data-knot="${p.id}"` +
+            return `<span class="budmark${folded.has(p.id) ? ' folded' : ''}" data-fold="${p.id}"` +
               ` role="button" tabindex="0" title="${where} Tap to ` +
-              `${folded.has(p.id) ? 'bring them back' : 'fold them away'}.">${j.n}</span>`;
+              `${folded.has(p.id) ? 'open them out' : 'fold them into a bud'}.">` +
+              `${budShape}<b>${j.n}</b></span>`;
           })()
         : '') +
       (titled.has(p.id) ? titleFor(anchor, p.id) : '') +
@@ -5245,6 +5326,14 @@ function placeBuds(){
   })).concat((layout.sockets || []).map(q => ({
     l:sx(q) - 58 * pos.k, r:sx(q) + 58 * pos.k,
     t:sy(q) - 22 * pos.k, b:sy(q) + 22 * pos.k
+  })))
+  /* A FAMILY BUD IS NOT SCENERY. It is the only way back to everyone folded
+     behind it, so a growth bud parked on top of it would bury a whole
+     family — worse than burying a name, which is merely unreadable. Its
+     column is 132 wide and about 110 tall, centred on the point. */
+  .concat((layout.famBuds || []).map(q => ({
+    l:sx(q) - (POD_W / 2 + 4) * pos.k, r:sx(q) + (POD_W / 2 + 4) * pos.k,
+    t:sy(q) - (BUD_HALF + 10) * pos.k, b:sy(q) + (BUD_HALF + 10) * pos.k
   })));
   const placed = [];
 
@@ -7337,14 +7426,15 @@ function showLit(){
     building = null;                            // they were set aside or deleted
   }
 
-  if (folded.size && layout.knots && layout.knots.length){
-    const names = layout.knots.map(k => esc(k.name));
-    const total = layout.knots.reduce((t, k) => t + k.n, 0);
+  if (folded.size && layout.famBuds && layout.famBuds.length){
+    const names = layout.famBuds.map(k => esc(k.name));
+    const total = layout.famBuds.reduce((t, k) => t + k.n, 0);
     rows.push(
       `<div class="pill"><b>${names.join(' · ')}</b>` +
-      `<span>${total} ${total === 1 ? 'person is' : 'people are'} folded away — ` +
-      `still in the tree, just not in the way.</span>` +
-      `<button type="button" id="foldOff">Show them</button></div>`);
+      `<span>${total} ${total === 1 ? 'person is' : 'people are'} folded into ` +
+      `${names.length === 1 ? 'a bud' : 'buds'} — still in the tree, just not ` +
+      `in the way.</span>` +
+      `<button type="button" id="foldOff">Open them</button></div>`);
   }
 
   const seer = (sel && sel !== meId && present(sel)) ? sel : null;
@@ -8899,7 +8989,7 @@ podsEl.addEventListener('pointerdown', e => {
   e.stopPropagation();
   const pod = e.target.closest('.pod');
   // The small controls on a card are their own targets, not handles.
-  if (!pod || e.target.closest('.rm,.ord,[data-card],[data-knot]')) return;
+  if (!pod || e.target.closest('.rm,.ord,[data-card],[data-fold]')) return;
   const pressed = pod.dataset.id;
   if (!pressed || !state.people[pressed]) return;
   // The household is what is being reached for; the person who carries it may
@@ -8972,18 +9062,18 @@ addEventListener('pointercancel', () => {
   document.body.classList.remove('carrying');
 });
 podsEl.addEventListener('click', e => {
-  /* Before the pod, because the knot sits on one and a tap on it means the
-     family behind that person, not the person. */
-  const knot = e.target.closest('[data-knot]');
-  if (knot){
-    const id = knot.dataset.knot;
+  /* Before the pod, because the bud mark sits on one and a tap on it means
+     the family behind that person, not the person. */
+  const fold = e.target.closest('[data-fold]');
+  if (fold){
+    const id = fold.dataset.fold;
     const j = (layout.seams || []).find(x => x.id === id);
     const shutting = !folded.has(id);
     toggleFold(id);
     render();
     say(j ? (shutting
-      ? `${j.name} folded away — ${j.n} people, still in the tree.`
-      : `${j.name} is back.`) : '');
+      ? `${j.name} folded into a bud — ${j.n} people, still in the tree.`
+      : `${j.name} is open again.`) : '');
     return;
   }
 
@@ -9067,11 +9157,11 @@ const endPointer = e => {
   const wasDrag = drag && drag.moved;
   drag = null; stage.classList.remove('dragging');
   /* A tap on bare canvas lets go of whoever was picked. The list is every
-     thing that is NOT bare canvas — and a folded family's chip is one of
+     thing that is NOT bare canvas — and a folded family's bud is one of
      them: leaving it out re-drew the pods on pointerup, which destroyed the
-     chip between mousedown and mouseup, so the click never happened and
+     bud between mousedown and mouseup, so the click never happened and
      tapping it did nothing at all. */
-  if (!wasDrag && !pinch && !e.target.closest('.pod,.bud,.knotchip,#form,#bar,#seed')){
+  if (!wasDrag && !pinch && !e.target.closest('.pod,.bud,.familybud,#form,#bar,#seed')){
     sel = null; closeForm(); render();
   }
 };

@@ -135,20 +135,22 @@ section('and nothing is written down');
   eq('a fold is a view, not an edit', t.fe.diffOps(synced, t.fe.getState()).length, 0);
 }
 
-section('A CHIP STANDS WHERE THEY WERE, SO THE JOIN IS STILL VISIBLY A JOIN');
+section('A BUD STANDS WHERE THEY WERE, SO THE JOIN IS STILL VISIBLY A JOIN');
 {
   const t = twoFamilies();
   t.fe.toggleFold(t.evelyn);
   const L = t.fe.layoutOf();
-  eq('one chip', L.knots.length, 1);
-  eq('carrying their name', L.knots[0].name, 'Mandaba');
-  eq('and how many are behind it', L.knots[0].n, 5);
+  eq('one bud', L.famBuds.length, 1);
+  eq('carrying their name', L.famBuds[0].name, 'Mandaba');
+  eq('and how many are behind it', L.famBuds[0].n, 5);
+  check('it knows which side it is on, so the twig can meet its top',
+        L.famBuds[0].below === true, String(L.famBuds[0].below));
   check('it stands under her, on the side her people came from',
-        L.knots[0].y > L.persons[t.evelyn].y, JSON.stringify({
-          evelyn:L.persons[t.evelyn].y, chip:L.knots[0].y }));
+        L.famBuds[0].y > L.persons[t.evelyn].y, JSON.stringify({
+          evelyn:L.persons[t.evelyn].y, bud:L.famBuds[0].y }));
   check('and within a pod of standing straight below her',
-        Math.abs(L.knots[0].x - L.persons[t.evelyn].x) < 132,
-        String(Math.round(L.knots[0].x - L.persons[t.evelyn].x)));
+        Math.abs(L.famBuds[0].x - L.persons[t.evelyn].x) < 132,
+        String(Math.round(L.famBuds[0].x - L.persons[t.evelyn].x)));
 }
 
 section('opening them again puts the picture back exactly');
@@ -328,7 +330,7 @@ section('a family that has entered no mitupo at all loses nothing');
   fe.grow('child', her, 'Joseph Mandaba', 'm', '', { born:'1946' });
 
   const offered = fe.joinsIn();
-  eq('one ring', offered.length, 1);
+  eq('one bud', offered.length, 1);
   eq('on the wife', (fe.getState().people[offered[0].id] || {}).name, 'Evelyn Mandaba');
   eq('and labelled by the only thing there is to label them by', offered[0].name, 'Mandaba');
 }
@@ -375,9 +377,28 @@ section('and a man who married in carries one just the same');
   fe.grow('child', hisDad, 'Rudo Chombo', 'f', 'Soko', { born:'1972' });
 
   const offered = fe.joinsIn();
-  eq('one ring', offered.length, 1);
+  eq('one bud', offered.length, 1);
   eq('on the husband who married in', (fe.getState().people[offered[0].id] || {}).name, 'Peter Chombo');
   eq('naming his people', offered[0].name, 'Chombo');
+}
+
+section('AND THE PICTURE CAN ACTUALLY BE DRAWN, FOLDED AND OPEN');
+/* The suites above all read the layout, which is a plain object — so a name
+   that only appears in the painting code is never reached by them. That is
+   exactly how a constant used solely by the twig went missing: every test
+   passed, and the tree would not draw. draw() is cheap to call, so call it. */
+{
+  const t = twoFamilies();
+  let open = null, shut = null;
+  try { t.fe.draw(); } catch (e){ open = e.message; }
+  eq('the tree draws with everybody showing', open, null);
+  t.fe.toggleFold(t.evelyn);
+  try { t.fe.draw(); } catch (e){ shut = e.message; }
+  eq('and it draws with a family folded into a bud', shut, null);
+  t.fe.unfoldAll();
+  let back = null;
+  try { t.fe.draw(); } catch (e){ back = e.message; }
+  eq('and again once they are opened', back, null);
 }
 
 report();
