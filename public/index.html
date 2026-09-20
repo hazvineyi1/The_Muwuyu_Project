@@ -364,6 +364,68 @@ body.carrying .pod{transition:none;}
 .pod:focus-visible{outline:2.5px solid var(--gold); outline-offset:3px;}
 .pod.sel{border-color:var(--gold); border-width:2px; box-shadow:var(--lift);}
 .pod.sprout{animation:pop .45s cubic-bezier(.2,1.5,.4,1) backwards;}
+/* WHEN ONE WORD IS BEING SHOWN. Everybody the word reaches is lifted and the
+   rest are set back — not hidden, because the answer to "who are my Baba" is
+   only worth anything if you can still see where they stand among everybody
+   else. */
+.pod.dim{opacity:.22; filter:saturate(.25); box-shadow:none;}
+/* The wood goes back with them. Leaving the branches at full strength while
+   the pods faded left the tree looking like a tree with the people taken out
+   of it, which is the opposite of what is being shown. */
+#gtree.hushed .branch, #gtree.hushed .bond{opacity:.2;}
+.pod.lit{
+  border-color:var(--gold); border-width:2.5px; box-shadow:var(--lift);
+  z-index:2;
+}
+.pod.lit .nm{font-weight:600;}
+#litbar{
+  position:fixed; left:50%; bottom:74px; transform:translateX(-50%); z-index:46;
+  display:flex; align-items:center; gap:12px; max-width:min(92vw,560px);
+  padding:9px 9px 9px 16px; border-radius:99px;
+  background:var(--pod); border:2px solid var(--gold); box-shadow:var(--lift);
+  font-family:'Karla',sans-serif; font-size:12.5px; color:var(--muted);
+}
+#litbar b{font-family:'Fraunces',Georgia,serif; font-size:16px; color:var(--ink);}
+#litbar span{flex:1 1 auto; line-height:1.4;}
+#litbar button{
+  flex:0 0 auto; padding:7px 13px; border-radius:99px; cursor:pointer;
+  background:var(--pod-hi); border:1.5px solid var(--pod-edge); color:var(--ink);
+  font-family:'Karla',sans-serif; font-size:11.5px; font-weight:700;
+}
+#litbar button:hover{border-color:var(--gold);}
+/* The census rows. A word, how many people it reaches, and — small, because
+   it is the thing being argued with — what another reckoning would call
+   them. */
+#form .wordrow{
+  display:flex; align-items:baseline; gap:9px; width:100%; text-align:left;
+  padding:8px 11px; margin-bottom:4px; border-radius:12px 4px 12px 4px;
+  background:var(--pod-hi); border:1.5px solid var(--pod-edge); cursor:pointer;
+  font:inherit; color:var(--ink);
+}
+#form .wordrow:hover{border-color:var(--gold);}
+#form .wordrow b{font-family:'Fraunces',Georgia,serif; font-size:14.5px;}
+#form .wordrow .n{
+  flex:0 0 auto; min-width:22px; text-align:center; padding:1px 6px; border-radius:99px;
+  background:var(--gold); color:var(--pod);
+  font-family:'Karla',sans-serif; font-size:10.5px; font-weight:700;
+}
+#form .wordrow em{
+  flex:1 1 auto; font-style:normal; font-size:10.5px; color:var(--muted);
+  letter-spacing:.02em;
+}
+#form .splitrow{
+  padding:9px 11px; margin-bottom:5px; border-radius:12px;
+  background:var(--pod-hi); border:1.5px solid var(--pod-edge);
+}
+#form .splitrow > b{
+  display:block; font-family:'Karla',sans-serif; font-size:10px;
+  letter-spacing:.14em; text-transform:uppercase; color:var(--muted);
+}
+#form .splitrow i{
+  font-style:normal; font-family:'Fraunces',Georgia,serif; font-size:14px;
+  color:var(--ink);
+}
+#form .splitrow i + i:before{content:' · '; color:var(--gold); font-weight:700;}
 @keyframes pop{from{transform:translate(-50%,-50%) scale(.15); opacity:0;}}
 .pod .nm{
   font-family:'Fraunces',Georgia,'Times New Roman',serif; font-weight:500; font-size:15px;
@@ -589,6 +651,12 @@ body.carrying .pod{transition:none;}
 #form .relline.none{background:var(--pod-hi); color:var(--ink); border:1.5px dashed var(--pod-edge);}
 #form .relline.none b{color:var(--muted);}
 #form .relline.taught{background:var(--gold); color:var(--pod);}
+/* A word on a card is a way into the word itself, and has to look like one
+   without turning a sentence into a row of links. */
+#form .relline b.lightword{cursor:pointer; text-decoration:underline; text-decoration-style:dotted;
+  text-underline-offset:3px; text-decoration-thickness:1.5px;}
+#form .relline b.lightword:hover{color:var(--gold);}
+#form .relline.taught b.lightword:hover{color:var(--pod); opacity:.8;}
 #form .relline.also{margin-top:-6px; border-radius:4px 12px 4px 12px; opacity:.92;}
 #form .relline i{font-style:normal; opacity:.8;}
 #form .overlapnote{
@@ -1000,12 +1068,14 @@ body.carrying .pod{transition:none;}
   <button class="who" id="families" hidden>Other families</button>
   <button class="who" id="totems" hidden>Mitupo</button>
   <button class="who" id="kin">Kinship</button>
+  <button class="who" id="words">Words</button>
   <button class="dupes" id="dupes" hidden></button>
   <span class="tally"><b id="count">0</b> in the tree</span>
 </div>
 
 <p id="hint" hidden>Tap anyone to see where the tree can grow.<br><b>Roots</b> run down into the soil, <b>branches</b> reach up.</p>
 <div id="others" hidden role="status"></div>
+<div id="litbar" hidden role="status"></div>
 
 <div id="stalled" hidden role="alert">
   <b id="stalledHead">The shared tree did not load.</b>
@@ -2949,6 +3019,250 @@ function kinTerms(who, tid){
   return { list, base, shape: base.shape || null, plain: base.plain || null };
 }
 
+/* ONE WORD, MANY PEOPLE — and this is the whole difference.
+ *
+ * A western family tree draws one father. It has a box for him, a line from
+ * him, and if you ask it who your father is it answers with one name. Shona
+ * does not work that way and never has: your father's brothers are your
+ * fathers too — Babamukuru if older than him, Babamunini if younger — your
+ * mother's sisters are your mothers, and the children of all of them are your
+ * brothers and sisters, not your cousins. There is no word for cousin on that
+ * side, because there is no such relation. The only ones held apart are the
+ * crossed pair, your mother's brother and your father's sister, and they are
+ * held apart precisely because everything else is not.
+ *
+ * The app has always KNOWN this — every term on every card is derived from
+ * it. But it said it one card at a time, which is the western way of saying
+ * it: this person is your Babamukuru, that person is your Babamunini. Nobody
+ * reading one card at a time ever sees the shape. You see it the moment you
+ * are told, in one line, that eleven people in this tree are your Mukoma and
+ * four of them are your Baba, and that the app can point at every one.
+ *
+ * So this counts. It reckons from one person — whoever is picked, or whoever
+ * is holding the phone — asks what every other person in the tree is to them,
+ * and gathers the answers by the WORD rather than by the person. It is the
+ * same engine the cards use, asked the other way round.
+ *
+ * Grouped by where people stand in the drawn picture rather than by a
+ * generation number, because a number computed by walking outward from one
+ * person can put a wife a row off her own husband, and because "the row above
+ * yours" is a thing somebody can look up and check. */
+function kinCensus(anchor, budget){
+  budget = budget || 1500;
+  const empty = { anchor, bands: [], terms: [], checked: 0, capped: false, total: 0 };
+  if (!anchor || !state.people[anchor] || !present(anchor)) return empty;
+  computeLayout();
+  const mine = layout.persons[anchor];
+  if (!mine) return empty;
+
+  const ids = people().map(p => p.id).filter(id => id !== anchor && layout.persons[id]);
+  const capped = ids.length > budget;
+  const found = new Map();
+  for (const id of ids.slice(0, budget)){
+    const k = kinTerms(anchor, id);
+    if (!k || !k.list.length) continue;
+    for (const t of k.list){
+      const key = t.term;
+      const e = found.get(key) ||
+        { term:t.term, shape:t.shape || null, ids:[], taught:!!(t.taught || t.affirmed),
+          why:t.why || '', band:0 };
+      e.ids.push(id);
+      found.set(key, e);
+    }
+  }
+
+  /* WHICH ROW A WORD BELONGS TO: where most of the people it reaches are
+     standing. A word like Mukoma reaches one row; a taught word may reach
+     two, and it belongs where it is mostly used. */
+  const rowOfPerson = id => Math.round((mine.y - layout.persons[id].y) / LEVEL);
+  for (const e of found.values()){
+    const tally = new Map();
+    for (const id of e.ids){
+      const r = rowOfPerson(id);
+      tally.set(r, (tally.get(r) || 0) + 1);
+    }
+    e.rows = tally.size;
+    /* A WORD THAT IS NOT ABOUT A GENERATION AT ALL gets a band of its own,
+       and this is not a tidying-up: it is the second half of what this panel
+       is for. Sekuru reaches your mother's father, your mother's brother and
+       your mother's brother's son — three rows of the drawing, one relation.
+       Muzukuru reaches your grandchild and your sister's child. A reckoning
+       that files people by generation cannot hold a word like that, so it
+       splits it into three and loses what the three had in common, which was
+       the whole meaning. Filing it under whichever row most of them happen to
+       stand in would be doing the same thing more quietly. */
+    if (tally.size > 1){ e.band = 'across'; continue; }
+    e.band = [...tally.keys()][0] ?? 0;
+  }
+
+  const terms = [...found.values()].sort((a, b) =>
+    b.ids.length - a.ids.length || (a.term < b.term ? -1 : a.term > b.term ? 1 : 0));
+
+  // Rows, nearest to yours first in each direction, so the two bands somebody
+  // will actually read are at the top.
+  const byBand = new Map();
+  for (const t of terms){
+    const list = byBand.get(t.band) || [];
+    list.push(t);
+    byBand.set(t.band, list);
+  }
+  const bands = [...byBand.entries()]
+    .sort((a, b) => {
+      if (a[0] === 'across') return 1;
+      if (b[0] === 'across') return -1;
+      return Math.abs(a[0]) - Math.abs(b[0]) || a[0] - b[0];
+    })
+    .map(([at, list]) => ({ at, list }));
+
+  return { anchor, bands, terms, capped, total: ids.length,
+           checked: Math.min(ids.length, budget) };
+}
+
+/* WHAT A WESTERN TREE WOULD HAVE CALLED THEM.
+ *
+ * This is the only place in the whole app that reckons kinship by anything
+ * other than Shona, and it is here to be argued with rather than used. Set
+ * the two side by side and the difference stops being a claim somebody makes
+ * about African families and becomes something you can count in your own.
+ *
+ * The western reckoning is genuinely simple, which is the point: find the
+ * nearest ancestor two people share, count the steps up to it from each of
+ * them, and read the answer off a grid. Two steps and two steps is a first
+ * cousin. It does not ask whether the link ran through a brother or a sister,
+ * so your father's brother's son and your mother's brother's son come out
+ * with the same word — and in Shona they are Mukoma, who is your brother and
+ * whose sister you may never marry, and Muzukuru, who is not. One word doing
+ * the work of two that mean opposite things.
+ *
+ * It also does not ask who is older, so it has nothing to say about the thing
+ * this family decides everything by.
+ *
+ * No claim is made that this is the only western reckoning, or that every
+ * English speaker would say "first cousin once removed" rather than counting
+ * on their fingers. It is the standard one, it is what a genealogy program
+ * would print, and it is the thing this app is different from. */
+/* Turn a western word to face somebody else. English marks sex on the noun
+   itself, so there is no way to do this but to know the pairs. */
+const SEXED_PAIRS = [['father', 'mother'], ['son', 'daughter'], ['brother', 'sister'],
+                     ['uncle', 'aunt'], ['nephew', 'niece'], ['husband', 'wife']];
+function reSex(word, sex){
+  if (!word || !sex) return word;
+  for (const [m, f] of SEXED_PAIRS){
+    if (word.endsWith(m)) return sex === 'f' ? word.slice(0, -m.length) + f : word;
+    if (word.endsWith(f)) return sex === 'm' ? word.slice(0, -f.length) + m : word;
+  }
+  return word;
+}
+
+function westernWord(from, to, bloodOnly){
+  if (!from || !to || from === to) return null;
+  const p = state.people[to] || {};
+  const sexed = (m, f, n) => p.sex === 'm' ? m : p.sex === 'f' ? f : n;
+
+  const upFrom = ancestry(from).up, upTo = ancestry(to).up;
+
+  // The nearest ancestor they share, and how far each stands from it.
+  let a = null, b = null;
+  for (const [id, d] of upFrom){
+    const e = upTo.get(id);
+    if (e === undefined) continue;
+    if (a === null || d + e < a + b){ a = d; b = e; }
+  }
+
+  if (a !== null){
+    const great = n => (n > 2 ? 'great-'.repeat(n - 2) : '') + (n > 1 ? 'grand' : '');
+    if (b === 0){                                     // they are the ancestor
+      if (a === 1) return sexed('father', 'mother', 'parent');
+      return great(a) + sexed('father', 'mother', 'parent');
+    }
+    if (a === 0){                                     // the other way round
+      if (b === 1) return sexed('son', 'daughter', 'child');
+      return great(b) + sexed('son', 'daughter', 'child');
+    }
+    if (a === 1 && b === 1){
+      const shared = parentUnionOf(from), theirs = parentUnionOf(to);
+      const half = !shared || !theirs || shared.id !== theirs.id ? 'half-' : '';
+      return half + sexed('brother', 'sister', 'sibling');
+    }
+    /* "great-", not "grand-", for these two. Both are English; a genealogist
+       writes granduncle and everybody else says great-uncle, and this is
+       written to be read. */
+    const greats = n => 'great-'.repeat(Math.max(0, n));
+    if (a === 1) return greats(b - 2) + sexed('nephew', 'niece', 'nibling');
+    if (b === 1) return greats(a - 2) + sexed('uncle', 'aunt', 'uncle or aunt');
+    const degree = Math.min(a, b) - 1, off = Math.abs(a - b);
+    const nth = degree === 1 ? 'first' : degree === 2 ? 'second' :
+                degree === 3 ? 'third' : `${degree}th`;
+    const removed = off === 0 ? '' : off === 1 ? ' once removed' :
+                    off === 2 ? ' twice removed' : ` ${off} times removed`;
+    return `${nth} cousin${removed}`;
+  }
+
+  /* No blood between them. A marriage may still reach — but only one, and
+     this is not a restriction invented to stop the walk: there is no western
+     word for your brother-in-law's wife's father either, and a search that
+     kept stepping through marriages would not find one. It would find its way
+     back to where it started. It did: two unrelated married couples in one
+     tree sent it round A's wife to B, round B's wife to A, and on until the
+     stack gave out. */
+  if (bloodOnly) return null;
+  if (partnersOf(from).includes(to)) return sexed('husband', 'wife', 'spouse');
+  for (const sp of partnersOf(to)){
+    /* Reached through the person they married, so the word is about THEM and
+       has to be turned to face them: a sister's husband is a brother-in-law,
+       not a sister-in-law. */
+    const w = westernWord(from, sp, true);
+    if (w) return `${reSex(w, p.sex)}-in-law`;
+  }
+  for (const sp of partnersOf(from)){
+    const w = westernWord(sp, to, true);
+    if (w) return `${w}-in-law`;
+  }
+  return null;
+}
+
+/* WHERE ONE OF THEIR WORDS DOES THE WORK OF SEVERAL OF OURS.
+   Computed from this family rather than asserted about families in general:
+   every pair is asked both ways and the answers are gathered under the
+   western word, so what comes back is a list of the places where this
+   family's own tree draws a distinction that the other reckoning cannot. */
+function wordSplits(anchor, budget){
+  const c = kinCensus(anchor, budget);
+  const split = new Map();
+  for (const t of c.terms){
+    for (const id of t.ids){
+      const w = westernWord(anchor, id);
+      if (!w) continue;
+      const e = split.get(w) || { word:w, terms:new Map() };
+      const held = e.terms.get(t.term) || [];
+      held.push(id);
+      e.terms.set(t.term, held);
+      split.set(w, e);
+    }
+  }
+  return [...split.values()]
+    .filter(e => e.terms.size > 1)
+    .map(e => ({ word:e.word, terms:[...e.terms.entries()]
+      .map(([term, ids]) => ({ term, ids }))
+      .sort((x, y) => y.ids.length - x.ids.length || (x.term < y.term ? -1 : 1)) }))
+    .sort((x, y) => y.terms.length - x.terms.length ||
+                    (x.word < y.word ? -1 : x.word > y.word ? 1 : 0));
+}
+
+/* What a row of the census is called, said as a place rather than a number.
+   Negative is above in the reckoning and below on the screen, because the
+   tree grows upward out of its roots: your elders are nearer the ground. */
+function bandLabel(at){
+  if (at === 'across') return 'Words that are not about a generation at all';
+  if (at === 0) return 'Standing in your own row';
+  if (at === -1) return 'The row your parents stand in';
+  if (at === 1) return 'The row your children stand in';
+  if (at === -2) return "Your grandparents' row";
+  if (at === 2) return "Your grandchildren's row";
+  const n = Math.abs(at);
+  return at < 0 ? `${n} rows back towards the roots` : `${n} rows further up the tree`;
+}
+
 /* Attach somebody already in the tree instead of typing them again. This is
    what actually stops duplicates: the moment two branches meet, one of them
    points at the person the other already entered. */
@@ -3920,6 +4234,7 @@ function draw(){
     }
   }
   gtree.innerHTML = svg.concat(hits, bondHits).join('');
+  gtree.classList.toggle('hushed', !!lit);
 
   /* WHOSE WORDS THESE ARE. Whoever is picked; you, when nobody is. Picking
      somebody is how you ask "what does this family look like from where THEY
@@ -3959,7 +4274,8 @@ function draw(){
                 : p.root ? '<span class="badge">Root of the line</span>' : '';
     html.push(
       `<div class="pod${sel === p.id ? ' sel' : ''}${fresh.has(p.id) ? ' sprout' : ''}` +
-      `${p.root ? ' taproot' : ''}${meId === p.id ? ' you' : ''}"` +
+      `${p.root ? ' taproot' : ''}${meId === p.id ? ' you' : ''}` +
+      `${lit ? (lit.ids.has(p.id) || p.id === lit.from ? ' lit' : ' dim') : ''}"` +
       ` data-id="${p.id}" tabindex="0" role="button"` +
       ` aria-label="${esc(p.name)} — show where the tree can grow from here"` +
       ` style="left:${at.x}px; top:${at.y}px">` +
@@ -3980,6 +4296,7 @@ function draw(){
   podsEl.innerHTML = html.join('');
 
   $('count').textContent = people().length;
+  showLit();
   updateWho();
   // Reads the cached answer. It does NOT scan: see refreshDuplicates above.
   paintDupeChip();
@@ -6063,6 +6380,119 @@ function shapeLabel(shape){
   return `your ${who}'s ${sexed}`;
 }
 
+/* ── ONE WORD, MANY PEOPLE ──────────────────────────────────────────────
+   The panel that shows the system instead of explaining it. See kinCensus.
+
+   Reckoned from whoever is picked, or from whoever is holding the phone. Both
+   matter: your own words are the ones you check it against, and somebody
+   else's are how you find out that the same tree has a completely different
+   set of words in it depending on where you stand — which is the other thing
+   a western tree cannot show, because its words are properties of people
+   rather than of pairs. */
+let lit = null;                 // { term, ids:Set, from }
+
+function showLit(){
+  const el = $('litbar');
+  if (!el) return;
+  /* A word lit before somebody was set aside or deleted must not go on
+     claiming them. The bar is redrawn from the tree as it now is. */
+  if (lit){
+    lit.ids = new Set([...lit.ids].filter(present));
+    if (!present(lit.from) || !lit.ids.size) lit = null;
+  }
+  if (!lit){ el.hidden = true; el.innerHTML = ''; return; }
+  const who = lit.from === meId ? 'your' : `${esc((state.people[lit.from] || {}).name || '')}'s`;
+  const n = lit.ids.size;
+  el.innerHTML = `<b>${esc(lit.term)}</b>` +
+    `<span>${n} ${n === 1 ? 'person is' : 'people are'} ${who} ${esc(lit.term)}` +
+    `${n > 1 ? ' — one word, and it reaches all of them' : ''}.</span>` +
+    `<button type="button" id="litOff">Show everyone</button>`;
+  el.hidden = false;
+  $('litOff').onclick = () => { lit = null; render(); };
+}
+
+function lightWord(from, term, ids){
+  lit = { from, term, ids:new Set(ids) };
+  closeForm();
+  render();
+  say(`${ids.length} people are ${term}.`);
+}
+
+function openWords(){
+  closeForm();
+  const from = (sel && present(sel)) ? sel : (meId && present(meId) ? meId : state.rootId);
+  if (!from || !state.people[from]){
+    say('Nobody to reckon from yet.');
+    return;
+  }
+  pending = { kind:'dupes', anchorId:from };
+  const c = kinCensus(from);
+  const splits = wordSplits(from);
+  const mine = from === meId;
+  const first = (state.people[from].name || '').split(' ')[0];
+
+  const rows = list => list.map(t => {
+    /* The other reckoning's word for the same people, where it has one. Up to
+       two, because the whole claim is that it has FEWER words, and a row that
+       listed six would be arguing the opposite by accident. */
+    const west = [...new Set(t.ids.map(id => westernWord(from, id)).filter(Boolean))];
+    const said = west.length ? west.slice(0, 2).join(' / ') +
+                               (west.length > 2 ? ` and ${west.length - 2} more` : '') : '';
+    return `<button type="button" class="wordrow" data-word="${esc(t.term)}">` +
+      `<span class="n">${t.ids.length}</span><b>${esc(t.term)}</b>` +
+      `${said ? `<em>elsewhere: ${esc(said)}</em>` : `<em>no word for it elsewhere</em>`}` +
+      `</button>`;
+  }).join('');
+
+  const el = document.createElement('div');
+  el.id = 'form';
+  el.className = 'wide';
+  el.innerHTML =
+    `<p class="cap">One word, many people</p>` +
+    `<p class="covnote">Reckoned from <b>${esc(state.people[from].name)}</b>` +
+      `${mine ? ' — you' : ''}. Tap a word to see everybody it reaches.</p>` +
+
+    (splits.length
+      ? `<p class="lbl">Where one of their words is several of ours</p>` +
+        splits.slice(0, 5).map(sp =>
+          `<div class="splitrow"><b>${esc(sp.word)}</b>` +
+          sp.terms.map(t => `<i>${esc(t.term)}</i>`).join('') +
+          `</div>`).join('') +
+        `<p class="covnote">A tree that only had the word on the left could not ` +
+        `tell these people apart. ${mine ? 'Your family' : 'This family'} never ` +
+        `confuses them, and never has — the words are older than the writing.</p>`
+      : '') +
+
+    (c.bands.length
+      ? c.bands.map(b =>
+          `<p class="lbl" style="margin-top:12px">${esc(bandLabel(b.at))}</p>` +
+          (b.at === 'across'
+            ? `<p class="covnote">One word, reaching several rows of the drawing. ` +
+              `A reckoning that sorts people by generation has to break each of ` +
+              `these into two or three words and loses what they had in common.</p>`
+            : '') +
+          rows(b.list)).join('')
+      : `<p class="warn">Nobody in this tree has a name for ${esc(first)} yet. ` +
+        `Adding the people in between is what gives them one.</p>`) +
+
+    (c.capped
+      ? `<p class="covnote">Counted from the first ${c.checked} of ` +
+        `${c.total.toLocaleString()} people — enough to show the shape.</p>` : '') +
+
+    `<div class="row" style="margin-top:12px">` +
+      `<button class="btn ghost" id="wKin">Ask about any two</button>` +
+      `<button class="btn ghost" id="wNo">Close</button></div>`;
+  document.body.appendChild(el);
+  placeForm(el);
+
+  const byTerm = new Map(c.terms.map(t => [t.term, t.ids]));
+  el.querySelectorAll('[data-word]').forEach(b => b.onclick = () =>
+    lightWord(from, b.dataset.word, byTerm.get(b.dataset.word) || []));
+  $('wKin').onclick = () => { kinA = from; kinB = null; openKinship(); };
+  $('wNo').onclick = closeForm;
+  el.addEventListener('keydown', e => { if (e.key === 'Escape'){ e.preventDefault(); closeForm(); } });
+}
+
 function openKinship(){
   closeForm();
   if (!kinA || !state.people[kinA]) kinA = meId || sel || state.rootId;
@@ -6320,8 +6750,13 @@ function kinOnCard(id){
         return `<p class="relline none"><b>Not named yet</b><span>${esc(rel ? rel.why : '')}` +
           `${gap ? `<br>${esc(gap.text)}` : ''}</span></p>`;
       })()
+    /* The word itself is the button. Tapping Babamukuru on one man's card
+       lights every Babamukuru you have, which is the fastest way anybody has
+       been shown that the word was never about him alone. */
     : k.list.map((t, i) =>
-        `<p class="relline${i ? ' also' : ''}${t.taught ? ' taught' : ''}"><b>${esc(t.term)}</b>` +
+        `<p class="relline${i ? ' also' : ''}${t.taught ? ' taught' : ''}">` +
+        `<b class="lightword" role="button" tabindex="0" ` +
+          `data-lightword="${esc(t.term)}">${esc(t.term)}</b>` +
         `<span>${i ? 'and also — ' : ''}${esc(t.why)}${termCredit(t)}</span></p>`).join('');
   return lines + teachFor(meId, id, { fold:true });
 }
@@ -6393,6 +6828,17 @@ function openCard(id){
   $('cSave').onclick = () => { commit(); closeForm(); render(); save(); };
   // Naming a relationship redraws the card, so the fields go in first.
   wireTeaching(el, () => openCard(id), commit);
+  el.querySelectorAll('[data-lightword]').forEach(b => {
+    const go = () => {
+      commit();
+      const t = kinCensus(meId).terms.find(x => x.term === b.dataset.lightword);
+      if (t) lightWord(meId, t.term, t.ids);
+    };
+    b.onclick = go;
+    b.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); e.stopPropagation(); go(); }
+    });
+  });
   el.querySelectorAll('[data-parents]').forEach(b => b.onclick = () => {
     commit();
     const label = b.textContent.trim();
@@ -7475,6 +7921,7 @@ $('signout').onclick = async () => {
 $('dupes').onclick = openDuplicates;
 $('look').onclick = openLook;
 $('kin').onclick = openKinship;
+$('words').onclick = openWords;
 $('roots').onclick = openRoots;
 // A full reload rather than a re-fetch: the page has been sitting there
 // unable to save, so the tree it holds may be behind whatever else has

@@ -114,7 +114,7 @@ function loadFrontend(){
       nameSimilarity, mustBeDifferent, birthYear, parentUnionOf, partnersOf,
       relationship, kinTerms, kinPath, overlaps, grow, addPerson, addUnion,
       teachTerm, forgetTerm, affirmTerm, lexicon, shapeLabel, kinVerdict,
-      teachFor, termCredit, kinOnCard,
+      teachFor, termCredit, kinOnCard, kinCensus, bandLabel, westernWord, wordSplits,
       frontier, isOpenEnd, descendantsOf, toggleRoot,
       parentageOptions, parentageOf, setParentage, unionForShare, unionsOf, reorder,
       olderThan, seniorityConflicts, birthYear, whyNotNamed,
