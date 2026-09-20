@@ -457,6 +457,48 @@ body.carrying .pod{transition:none;}
   font-family:'Fraunces',Georgia,'Times New Roman',serif; font-weight:500; font-size:15px;
   line-height:1.22; text-align:center; color:var(--ink); word-break:break-word;
 }
+/* THE KNOT: the count worn by a person the tree would split at, and the chip
+   standing where the family behind them used to be.
+
+   The count is the handle, so it has to look like one — a ring rather than
+   the flat badges beside it, which are labels and are not tappable. Shut, it
+   fills in: the family is behind it rather than beside it. */
+/* The ring hangs outside the pod, so the pod has to sit above the ones drawn
+   after it or its own handle is painted over by a neighbour. */
+.pod.knotted{z-index:2;}
+.pod .knot{
+  position:absolute; right:-11px; top:-11px; z-index:3;
+  min-width:22px; height:22px; padding:0 5px; border-radius:99px;
+  display:flex; align-items:center; justify-content:center; cursor:pointer;
+  background:var(--pod); border:2px solid var(--gold); color:var(--gold);
+  font-family:'Karla',sans-serif; font-size:11px; font-weight:700;
+  box-shadow:var(--shadow);
+}
+.pod .knot:hover{background:var(--gold); color:var(--pod);}
+.pod .knot.shut{background:var(--gold); color:var(--pod);}
+.pod .knot:focus-visible{outline:2.5px solid var(--gold); outline-offset:2px;}
+.knotchip{
+  /* The pods layer is pointer-events:none and hands it back per pod; a chip
+     is a thing to tap, so it has to ask for it too. */
+  position:absolute; transform:translate(-50%,-50%); z-index:2; cursor:pointer;
+  pointer-events:auto;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  width:132px; min-height:44px; padding:7px 10px;
+  background:var(--pod-hi); border:2px dashed var(--gold); border-radius:14px;
+  box-shadow:var(--shadow);
+}
+.knotchip:hover{border-style:solid;}
+.knotchip:focus-visible{outline:2.5px solid var(--gold); outline-offset:3px;}
+.knotchip .fam{
+  font-family:'Fraunces',Georgia,serif; font-size:14px; color:var(--ink);
+  line-height:1.15; text-align:center; word-break:break-word;
+}
+.knotchip .many{
+  font-family:'Karla',sans-serif; font-size:9px; letter-spacing:.06em;
+  color:var(--muted); margin-top:2px; text-align:center;
+}
+.branch.folded{stroke:var(--gold); stroke-dasharray:5 5; opacity:.8;}
+
 /* THE NAME OF A HOUSE. Quiet, unselectable, and above the marriage rather
    than beside it, so it reads as a label on the pair and not as a person. */
 .house{
@@ -3703,6 +3745,213 @@ function startBuild(id){
 }
 function closeBuild(){ building = null; }
 
+/* ── THE KNOT: A FAMILY THAT HANGS ON ONE PERSON ─────────────────────────
+ *
+ * "The red line is a different family joined by one person. I want to be able
+ * to block out / close one family as I work on the other one, especially when
+ * joined by one person like via marriage."
+ *
+ * There is a red line down that screenshot with Mandaba on one side and
+ * Musoni on the other, and the only thing holding the two together is Evelyn
+ * Mandaba, who married Sydney. Take Evelyn out and the picture falls into two
+ * families that have never met.
+ *
+ * NOBODY HAS TO MARK THOSE PEOPLE. A person whose removal splits the tree is
+ * a cut vertex, and finding every one of them is a single pass over the same
+ * person-and-marriage graph the app already walks. So the app finds the seams
+ * itself and offers the fold, instead of asking a family to explain their own
+ * tree to it.
+ *
+ * ON THE BIPARTITE GRAPH, people joined to marriages rather than to each
+ * other. A marriage of two partners and three children is five people who are
+ * all connected — as a graph of people that is ten edges and the wrong
+ * answer, because removing a partner would look harmless when in fact the
+ * marriage is what holds the rest together. Keeping the marriage as a node of
+ * its own says the true thing: remove a person, the marriage remains, and
+ * whoever is still tied to it stays joined.
+ *
+ * AND FOLDING IS A VIEW. Same rule as Start build: nothing is hidden from the
+ * app, only from the picture. Kinship, saving and syncing see the whole
+ * family whatever is folded. */
+
+/* Every person the tree would split at, found in one pass. Iterative rather
+   than recursive: a long line of descent is a deep graph and a blown stack in
+   the middle of a draw would take the picture with it. */
+function cutPeople(){
+  const adj = new Map();
+  const link = (a, b) => {
+    if (!adj.has(a)) adj.set(a, []);
+    adj.get(a).push(b);
+  };
+  const folk = people().map(p => p.id);
+  const seenPerson = new Set(folk);
+  for (const u of unions()){
+    const members = [...u.partners, ...u.children].filter(x => seenPerson.has(x));
+    if (!members.length) continue;
+    const un = 'u:' + u.id;
+    for (const m of members){ link(un, 'p:' + m); link('p:' + m, un); }
+  }
+
+  const disc = new Map(), low = new Map(), parent = new Map(), cut = new Set();
+  let clock = 0;
+  for (const start of folk.map(id => 'p:' + id)){
+    if (disc.has(start)) continue;
+    disc.set(start, ++clock); low.set(start, clock); parent.set(start, null);
+    let rootKids = 0;
+    const stack = [[start, 0]];
+    while (stack.length){
+      const top = stack[stack.length - 1];
+      const v = top[0], nbrs = adj.get(v) || [];
+      if (top[1] < nbrs.length){
+        const w = nbrs[top[1]++];
+        if (!disc.has(w)){
+          parent.set(w, v);
+          disc.set(w, ++clock); low.set(w, clock);
+          if (v === start) rootKids++;
+          stack.push([w, 0]);
+        } else if (w !== parent.get(v)){
+          low.set(v, Math.min(low.get(v), disc.get(w)));
+        }
+      } else {
+        stack.pop();
+        const up = parent.get(v);
+        if (up){
+          low.set(up, Math.min(low.get(up), low.get(v)));
+          // The root of a walk is a cut only if it has more than one child;
+          // everybody else, if any child cannot reach above them.
+          if (up !== start && low.get(v) >= disc.get(up)) cut.add(up);
+        }
+      }
+    }
+    if (rootKids > 1) cut.add(start);
+  }
+  return new Set([...cut].filter(n => n.startsWith('p:')).map(n => n.slice(2)));
+}
+
+/* WHO IS BEHIND EACH OF THEM — the people who would be cut off from the rest
+   of the family if that one person were taken out. Reckoned from whoever is
+   holding the phone, because "the rest of the family" means theirs. */
+function joinsIn(){
+  const folk = people().map(p => p.id);
+  if (folk.length < 4) return [];
+  const here = (meId && present(meId)) ? meId
+             : (state.rootId && present(state.rootId)) ? state.rootId : folk[0];
+
+  const byPerson = new Map();
+  for (const u of unions()){
+    for (const m of [...u.partners, ...u.children]){
+      if (!present(m)) continue;
+      if (!byPerson.has(m)) byPerson.set(m, []);
+      byPerson.get(m).push(u);
+    }
+  }
+  const reach = (blocked) => {
+    const seen = new Set([here]);
+    const q = [here];
+    while (q.length){
+      const v = q.shift();
+      for (const u of (byPerson.get(v) || [])){
+        for (const m of [...u.partners, ...u.children]){
+          if (m === blocked || seen.has(m) || !present(m)) continue;
+          seen.add(m); q.push(m);
+        }
+      }
+    }
+    return seen;
+  };
+
+  /* WHICH SEAMS ARE WORTH OFFERING, and this is the whole judgement.
+   *
+   * Every cut vertex is a true seam, and most of them are useless: your
+   * father is one, because taking him out cuts you off from his parents.
+   * Nobody wants "fold away your father's line" on a badge. Structurally he
+   * is identical to the woman who married in — both are joined to one side by
+   * a marriage and to the other by their own parents — so the shape cannot
+   * tell them apart.
+   *
+   * What tells them apart is the name, which is also exactly how the family
+   * said it: "a different family joined by one person". A seam is offered
+   * when the people behind it mostly carry a different surname from the
+   * person the tree is being read by. Evelyn's people are Mandaba and yours
+   * are Musoni, so that one is offered; your father's people are Musoni and
+   * so are you, so that one is not.
+   *
+   * It is a judgement about what to OFFER, never about what is true — every
+   * seam is still a seam, and the panel of them all can show the rest. */
+  const surnameOf = id => ((state.people[id] || {}).name || '').trim().split(/\s+/).pop() || '';
+  const mine = surnameOf(here).toLowerCase();
+
+  const out = [];
+  for (const id of cutPeople()){
+    if (id === here) continue;                 // you are not a door out of your own family
+    const kept = reach(id);
+    const away = folk.filter(x => x !== id && !kept.has(x));
+    if (away.length < 2) continue;             // one person is not a family to fold
+    const name = houseNameFor(away, id);
+    /* Against the reader's own surname where they have one, and against
+       whichever name most of the people still on screen carry where they do
+       not — so a family that records no surnames is never told that all of
+       itself is somebody else. */
+    const against = mine || houseNameFor([...kept].filter(x => x !== here), here).toLowerCase();
+    const theirs = name.toLowerCase();
+    if (!theirs || theirs === against || /'s people$/.test(theirs)) continue;
+    out.push({ id, away: new Set(away), n: away.length, name });
+  }
+  /* NESTED SEAMS: KEEP THE INNERMOST. Ben is a seam too — take him out and
+     his wife AND her whole family are cut off — but his fold is only Idah's
+     fold with Idah herself added to it, and hiding the woman who married into
+     your own household along with her people is not what anybody meant. So a
+     seam whose far side is another seam's far side plus that seam's own
+     person is dropped in favour of the tighter one. */
+  const inner = out.filter(x => !out.some(y => {
+    if (y === x || y.n >= x.n) return false;
+    if (!x.away.has(y.id)) return false;
+    for (const id of y.away) if (!x.away.has(id)) return false;
+    return y.away.size + 1 === x.away.size;
+  }));
+
+  return inner.sort((a, b) => b.n - a.n || (a.id < b.id ? -1 : 1));
+}
+
+/* What to call a folded family: the surname most of them carry, which is what
+   anybody would call them out loud. Where there is no clear one — a household
+   of several names — it is said as whose people they are instead. */
+function houseNameFor(ids, joinId){
+  const words = id => ((state.people[id] || {}).name || '').trim().split(/\s+/).filter(Boolean);
+
+  /* THE NAME THE PERSON WHO JOINS THEM CARRIES, first. A woman keeps her
+     father's name when she marries, so Evelyn Mandaba standing in a row of
+     Musoni is holding the answer in her own name — and it is the answer the
+     family would give out loud. */
+  const ws = words(joinId);
+  const hers = ws.length > 1 ? ws[ws.length - 1] : '';
+  if (hers){
+    const hits = ids.filter(id =>
+      words(id).some(w => w.toLowerCase() === hers.toLowerCase())).length;
+    if (hits * 2 >= ids.length) return hers;
+  }
+
+  const tally = new Map();
+  for (const id of ids){
+    const last = ((state.people[id] || {}).name || '').trim().split(/\s+/).pop();
+    if (!last || last.length < 2) continue;
+    tally.set(last, (tally.get(last) || 0) + 1);
+  }
+  let best = null, most = 0;
+  for (const [name, n] of [...tally].sort((a, b) => a[0] < b[0] ? -1 : 1)){
+    if (n > most){ most = n; best = name; }
+  }
+  if (best && most * 2 >= ids.length) return best;
+  const first = ((state.people[joinId] || {}).name || '').split(' ')[0];
+  return first ? `${first}'s people` : 'Another family';
+}
+
+let folded = new Set();                        // join ids whose family is shut
+function toggleFold(id){
+  if (folded.has(id)) folded.delete(id); else folded.add(id);
+}
+function unfoldAll(){ folded = new Set(); }
+
 function computeLayout(){
   const g = generations();
   const blocks = [], ofPerson = {};
@@ -3710,7 +3959,17 @@ function computeLayout(){
   /* The whole of the narrowing, in one place. `shown` stands in for `present`
      for the rest of this function and nowhere else in the app. */
   const inBuild = building ? branchFrom(building.from) : null;
-  const shown = id => (!inBuild || inBuild.has(id)) && present(id);
+
+  /* AND THE FOLDED FAMILIES. Each one is everybody behind a join that has
+     been shut. The join stays: she married into this household and belongs
+     in it — it is her people who step out of the picture. */
+  const seams = folded.size ? joinsIn().filter(j => folded.has(j.id)) : [];
+  const shut = new Set();
+  for (const j of seams) for (const id of j.away) shut.add(id);
+  // A fold whose join has gone is no fold at all.
+  for (const id of [...folded]) if (!seams.some(j => j.id === id)) folded.delete(id);
+
+  const shown = id => (!inBuild || inBuild.has(id)) && !shut.has(id) && present(id);
   const width = b => b.socket ? 112 : b.members.length * POD_W + (b.members.length - 1) * COUPLE_GAP;
 
   /* The unions as the DRAWN tree sees them: set-aside people are filtered out
@@ -4454,7 +4713,29 @@ function computeLayout(){
     }
   }
 
-  layout = { persons, sockets, links, houses };
+  /* WHERE A FOLDED FAMILY STANDS: the same half-level lane a visiting house
+     uses, on the side of the join their generation lies. It is the lane the
+     app already means "these are her people" with, which is exactly what a
+     folded family is. */
+  const knots = [];
+  for (const j of seams){
+    const b = ofPerson[j.id];
+    if (!b) continue;
+    /* Which side of her they stood on, by where their generations sit on
+       average rather than by a head count — a woman's parents and her three
+       brothers are mostly her own row, and it is her parents who decide that
+       these are people from further back. Level with her counts as below,
+       because the lane under somebody is where this app already puts "these
+       are their people". */
+    let sum = 0;
+    for (const x of j.away) sum += (g[x] ?? 0);
+    const below = (sum / j.away.size) <= (g[j.id] ?? 0);
+    knots.push({ id:j.id, name:j.name, n:j.n,
+                 x: personXIn(b, j.id), y: b.y + LEVEL * (below ? 0.5 : -0.5),
+                 from: { x: personXIn(b, j.id), y: b.y } });
+  }
+
+  layout = { persons, sockets, links, houses, knots, seams: joinsIn() };
 }
 
 /* ── drawing ────────────────────────────────────────────────────────── */
@@ -4675,6 +4956,10 @@ function draw(){
       hits.push(hitPath(branchPath(l), w, l.child, l.parents));
     }
   }
+  for (const k of (layout.knots || [])){
+    svg.push(`<path class="branch folded" stroke-width="4" fill="none" ` +
+             `d="M${k.from.x} ${k.from.y} L ${k.x} ${k.y}"></path>`);
+  }
   gtree.innerHTML = svg.concat(hits, bondHits).join('');
   gtree.classList.toggle('hushed', !!lit);
 
@@ -4705,6 +4990,16 @@ function draw(){
      tappable: it is a caption on two people who are both already there, and
      a third thing to tap between a husband and a wife would be in the way of
      both of them. */
+  /* A folded family: a chip where its people were, and a short stub of wood
+     into the person holding it, so the join is visibly still a join. */
+  for (const k of (layout.knots || [])){
+    html.push(
+      `<div class="knotchip" data-knot="${esc(k.id)}" role="button" tabindex="0"` +
+      ` aria-label="Open the ${esc(k.name)} family, ${k.n} people"` +
+      ` style="left:${k.x}px; top:${k.y}px">` +
+      `<span class="fam">${esc(k.name)}</span>` +
+      `<span class="many">${k.n} people · tap to open</span></div>`);
+  }
   for (const h of (layout.houses || [])){
     html.push(`<div class="house" style="left:${h.x}px; top:${h.y - LEVEL * 0.34}px">` +
               `${esc(h.text)}</div>`);
@@ -4725,11 +5020,22 @@ function draw(){
     html.push(
       `<div class="pod${sel === p.id ? ' sel' : ''}${fresh.has(p.id) ? ' sprout' : ''}` +
       `${p.root ? ' taproot' : ''}${meId === p.id ? ' you' : ''}` +
+      `${(layout.seams || []).some(j => j.id === p.id) ? ' knotted' : ''}` +
       `${lit ? (lit.ids.has(p.id) || p.id === lit.from ? ' lit' : ' dim') : ''}"` +
       ` data-id="${p.id}" tabindex="0" role="button"` +
       ` aria-label="${esc(p.name)} — show where the tree can grow from here"` +
       ` style="left:${at.x}px; top:${at.y}px">` +
       badge +
+      /* THE KNOT. A person the tree would split at, with a family behind
+         them: the count is the handle, and tapping it shuts or opens them. */
+      ((layout.seams || []).some(j => j.id === p.id)
+        ? (() => {
+            const j = layout.seams.find(x => x.id === p.id);
+            return `<span class="knot${folded.has(p.id) ? ' shut' : ''}" data-knot="${p.id}"` +
+              ` role="button" tabindex="0" title="${folded.has(p.id) ? 'Open' : 'Fold away'}` +
+              ` the ${esc(j.name)} family — ${j.n} people">${j.n}</span>`;
+          })()
+        : '') +
       (titled.has(p.id) ? titleFor(anchor, p.id) : '') +
       (mark ? `<span class="mk">${mark}</span>` : '') +
       (p.shown === false ? `<span class="shut" title="Not in the public record">·</span>` : '') +
@@ -6931,6 +7237,16 @@ function showLit(){
     building = null;                            // they were set aside or deleted
   }
 
+  if (folded.size && layout.knots && layout.knots.length){
+    const names = layout.knots.map(k => esc(k.name));
+    const total = layout.knots.reduce((t, k) => t + k.n, 0);
+    rows.push(
+      `<div class="pill"><b>${names.join(' · ')}</b>` +
+      `<span>${total} ${total === 1 ? 'person is' : 'people are'} folded away — ` +
+      `still in the tree, just not in the way.</span>` +
+      `<button type="button" id="foldOff">Show them</button></div>`);
+  }
+
   const seer = (sel && sel !== meId && present(sel)) ? sel : null;
   if (seer && titlesShowing){
     const first = esc((state.people[seer].name || '').split(' ')[0]);
@@ -6954,6 +7270,9 @@ function showLit(){
   el.innerHTML = rows.join('');
   el.hidden = !rows.length;
   if ($('litOff')) $('litOff').onclick = () => { lit = null; render(); };
+  if ($('foldOff')) $('foldOff').onclick = () => {
+    unfoldAll(); render(); say('Everybody is back.');
+  };
   if ($('buildOff')) $('buildOff').onclick = () => {
     closeBuild(); render(); fit(); say('The whole family is back.');
   };
@@ -8480,7 +8799,7 @@ podsEl.addEventListener('pointerdown', e => {
   e.stopPropagation();
   const pod = e.target.closest('.pod');
   // The small controls on a card are their own targets, not handles.
-  if (!pod || e.target.closest('.rm,.ord,[data-card]')) return;
+  if (!pod || e.target.closest('.rm,.ord,[data-card],[data-knot]')) return;
   const pressed = pod.dataset.id;
   if (!pressed || !state.people[pressed]) return;
   // The household is what is being reached for; the person who carries it may
@@ -8553,6 +8872,21 @@ addEventListener('pointercancel', () => {
   document.body.classList.remove('carrying');
 });
 podsEl.addEventListener('click', e => {
+  /* Before the pod, because the knot sits on one and a tap on it means the
+     family behind that person, not the person. */
+  const knot = e.target.closest('[data-knot]');
+  if (knot){
+    const id = knot.dataset.knot;
+    const j = (layout.seams || []).find(x => x.id === id);
+    const shutting = !folded.has(id);
+    toggleFold(id);
+    render();
+    say(j ? (shutting
+      ? `${j.name} folded away — ${j.n} people, still in the tree.`
+      : `${j.name} is back.`) : '');
+    return;
+  }
+
   const card = e.target.closest('[data-card]');
   if (card){ openCard(card.dataset.card); return; }
 
@@ -8632,7 +8966,12 @@ const endPointer = e => {
   if (touches.size < 2) pinch = null;
   const wasDrag = drag && drag.moved;
   drag = null; stage.classList.remove('dragging');
-  if (!wasDrag && !pinch && !e.target.closest('.pod,.bud,#form,#bar,#seed')){
+  /* A tap on bare canvas lets go of whoever was picked. The list is every
+     thing that is NOT bare canvas — and a folded family's chip is one of
+     them: leaving it out re-drew the pods on pointerup, which destroyed the
+     chip between mousedown and mouseup, so the click never happened and
+     tapping it did nothing at all. */
+  if (!wasDrag && !pinch && !e.target.closest('.pod,.bud,.knotchip,#form,#bar,#seed')){
     sel = null; closeForm(); render();
   }
 };
