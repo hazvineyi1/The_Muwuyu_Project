@@ -700,6 +700,14 @@ body.carrying .pod{transition:none;}
 #form .teach .fld{margin-bottom:0;}
 #form .teach .btn{flex:0 0 92px;}
 #form .taughtnote{margin:-4px 0 10px; font-size:10.5px; color:var(--muted);}
+/* The one-house note. Marked out from the totem suggestions above it, and
+   deliberately not styled as a warning: nothing here is being refused. */
+#form .kinnote.housenote{
+  margin-top:5px; padding:8px 10px; line-height:1.5;
+  border-left:3px solid var(--gold);
+}
+#form .kinnote.housenote b{color:var(--ink);}
+#form .dupe small.onehouse{color:var(--gold); font-weight:700;}
 /* The folded box, on a person's card. A word the app already has is not a
    question, so the invitation is one line and the two fields wait behind it;
    the summary carries the whole offer, which is why it is worded as one. */
@@ -5563,12 +5571,47 @@ function totemSuggestions(typed){
 
 /* Attach a suggestion list to a totem input. Never rewrites what was typed
    unless the person picks something. */
-function wireTotem(inputId){
+/* MARRYING INSIDE ONE MUTUPO, said at the moment it is being written down.
+ *
+ * Two people of one mutupo are of one house, and among Shona that is the
+ * oldest rule there is about who may marry whom — it is why the first thing
+ * asked of a stranger is their totem. The app already reports it, in the
+ * Mitupo panel, which is where somebody goes AFTERWARDS. This says it while
+ * the marriage is being typed in, which is the only moment at which anybody
+ * would want to know.
+ *
+ * NEVER A REFUSAL, and not even a warning. Families differ: the chidawo —
+ * the praise name that tells one Shava line from another — is what actually
+ * decides it, and this app does not record chidawo; a household that has
+ * settled the question has settled it, and a record that argued with them
+ * would be worth less than one that kept quiet. It is a note, in their
+ * hands. The app records what the family says happened. */
+function wireTotem(inputId, marrying){
   const input = $(inputId);
   if (!input) return;
   const list = document.createElement('div');
   list.className = 'kinlist';
   input.insertAdjacentElement('afterend', list);
+
+  /* What the person being married carries, so the note can be raised as the
+     totem is typed rather than after it is saved. */
+  const theirs = marrying && state.people[marrying]
+    ? totemKey((state.people[marrying].totem || '')) : null;
+  const clash = () => {
+    if (!theirs) return '';
+    const mine = totemKey(input.value);
+    if (!mine || mine !== theirs) return '';
+    /* Named the way THEY wrote it, not by the app's canonical form. Somebody
+       who has just typed Shava and is told "Tendai is Mhofu too" has been
+       told something true in a word they did not use. */
+    const name = ((state.people[marrying] || {}).totem || '').trim();
+    const first = ((state.people[marrying] || {}).name || '').split(' ')[0];
+    return `<div class="kinnote housenote">` +
+      `<b>${esc(first)} is ${esc(name)} too</b> — one house. Many families ask ` +
+      `about that before a marriage, and the chidawo is what tells two lines ` +
+      `of one mutupo apart. Nothing is refused here; this records what the ` +
+      `family says happened.</div>`;
+  };
 
   const draw = () => {
     const hits = totemSuggestions(input.value);
@@ -5576,12 +5619,13 @@ function wireTotem(inputId){
     // Once it is recognised there is nothing to suggest — say what it is
     // instead, so the person can see the app understood them.
     if (known && known.name.toLowerCase() === input.value.trim().toLowerCase()){
-      list.innerHTML = `<div class="kinnote">${esc(known.name)} — ${esc(known.means)}</div>`;
+      list.innerHTML = `<div class="kinnote">${esc(known.name)} — ${esc(known.means)}</div>` +
+                       clash();
       return;
     }
     list.innerHTML = hits.map(h =>
       `<button type="button" class="kinopt" data-totem="${esc(h.name)}">` +
-      `${esc(h.name)} <small>${esc(h.means)}</small></button>`).join('');
+      `${esc(h.name)} <small>${esc(h.means)}</small></button>`).join('') + clash();
     list.querySelectorAll('[data-totem]').forEach(b => b.onclick = () => {
       input.value = b.dataset.totem;
       draw();
@@ -7142,7 +7186,7 @@ function openForm(kind, anchorId){
   el.querySelectorAll('.seg').forEach(seg => seg.querySelectorAll('button').forEach(b =>
     b.onclick = () => seg.querySelectorAll('button')
       .forEach(o => o.setAttribute('aria-pressed', String(o === b)))));
-  wireTotem('fTotem');
+  wireTotem('fTotem', kind === 'partner' ? anchorId : null);
   $('fGo').onclick = submitForm;
   $('fNo').onclick = closeForm;
   el.addEventListener('keydown', e => {
@@ -7176,10 +7220,13 @@ function openForm(kind, anchorId){
       const life = q.born ? `b. ${esc(q.born)} · ` : '';
       const rel = meId ? (relationship(meId, id) || {}) : {};
       const tag = rel.term ? ` · your ${esc(rel.term)}` : '';
+      // One house, where a marriage is what is being made. See wireTotem.
+      const house = kind === 'partner' ? sameHouse(anchorId, id) : null;
       return `<button type="button" class="dupe" data-link="${id}"${blocked ? ' disabled' : ''}` +
         ` title="${esc(blocked || 'Link this person in rather than adding a second record')}">` +
-        `<u>${esc(q.name)}<small>${life}${esc(positionOf(id))}${tag}</small></u>` +
-        `<em>${blocked ? 'can’t link' : 'use this one'}</em></button>`;
+        `<u>${esc(q.name)}<small>${life}${esc(positionOf(id))}${tag}</small>` +
+        (house ? `<small class="onehouse">both ${esc(house.name)} — one house</small>` : '') +
+        `</u><em>${blocked ? 'can’t link' : 'use this one'}</em></button>`;
     }).join('');
     box.querySelectorAll('.dupe:not([disabled])').forEach(btn => btn.onclick = () => {
       const otherId = btn.dataset.link;
