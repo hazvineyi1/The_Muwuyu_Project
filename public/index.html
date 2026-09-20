@@ -403,6 +403,25 @@ body.carrying .pod{transition:none;}
 /* The census rows. A word, how many people it reaches, and — small, because
    it is the thing being argued with — what another reckoning would call
    them. */
+/* A word you can add somebody by. The word leads, because the word is what
+   somebody came here with; what it turns into is said underneath in smaller
+   type, so the app is never doing something unannounced. */
+#form .wayrow{
+  display:flex; align-items:baseline; gap:9px; width:100%; text-align:left;
+  padding:8px 11px; margin-bottom:4px; border-radius:12px 4px 12px 4px;
+  background:var(--pod-hi); border:1.5px solid var(--pod-edge); cursor:pointer;
+  font:inherit; color:var(--ink);
+}
+#form .wayrow:hover{border-color:var(--gold);}
+#form .wayrow b{
+  flex:0 0 auto; font-family:'Fraunces',Georgia,serif; font-size:14.5px;
+}
+#form .wayrow em{flex:1 1 auto; font-style:normal; font-size:11px; color:var(--muted);}
+#form .wayrow small{
+  flex:0 0 auto; font-size:10px; letter-spacing:.06em; color:var(--muted); opacity:.8;
+}
+#form .wayrow.waiting{opacity:.5; cursor:default;}
+#form .wayrow.waiting:hover{border-color:var(--pod-edge);}
 #form .wordrow{
   display:flex; align-items:baseline; gap:9px; width:100%; text-align:left;
   padding:8px 11px; margin-bottom:4px; border-radius:12px 4px 12px 4px;
@@ -4746,6 +4765,12 @@ function placeBuds(){
   const parFirst = leftBusy && !rightBusy ? [180, -140, 140, 0] : [0, -40, 40, 180];
 
   const out = [
+    /* The word first. Parent, sibling, partner and child are positions in a
+       diagram; Tete and Sekuru are what the family actually says, and a
+       person looking for somewhere to put their Tete should not have to work
+       out that she is a sibling of their father. */
+    { kind:'ways', label:'By what you call them', icon:'✦',
+      at:place([-140, -180, -100, 140, 180]) },
     { kind:'child',   label:'Child',   icon:'↑', at:place([-90, -60, -120, -35, -145]) },
     { kind:'sibling', label:'Sibling', icon:'↔', at:place(sibFirst) },
     { kind:'partner', label:mates.length ? 'Another partner' : 'Partner', icon:'⚭', at:place(parFirst) }
@@ -6779,7 +6804,7 @@ function showLit(){
   el.hidden = !rows.length;
   if ($('litOff')) $('litOff').onclick = () => { lit = null; render(); };
   if ($('seerOff')) $('seerOff').onclick = () => { sel = null; render(); };
-  if ($('seerWords')) $('seerWords').onclick = () => openWords();
+  if ($('seerWords')) $('seerWords').onclick = () => openWords(seer);
 }
 
 function lightWord(from, term, ids){
@@ -6789,9 +6814,16 @@ function lightWord(from, term, ids){
   say(`${ids.length} people are ${term}.`);
 }
 
-function openWords(){
+function openWords(who){
   closeForm();
-  const from = (sel && present(sel)) ? sel : (meId && present(meId) ? meId : state.rootId);
+  /* YOUR OWN WORDS, unless you asked for somebody else's. This used to
+     reckon from whoever was selected, and since tapping anybody selects them,
+     opening it after a tap answered a question nobody had asked — headed
+     with a stranger's name and a vocabulary that was not yours. The pill on
+     the tree is where somebody else's words are asked for, by name. */
+  const from = (who && present(who)) ? who
+             : (meId && present(meId)) ? meId
+             : (sel && present(sel)) ? sel : state.rootId;
   if (!from || !state.people[from]){
     say('Nobody to reckon from yet.');
     return;
@@ -6819,20 +6851,10 @@ function openWords(){
   el.id = 'form';
   el.className = 'wide';
   el.innerHTML =
-    `<p class="cap">One word, many people</p>` +
-    `<p class="covnote">Reckoned from <b>${esc(state.people[from].name)}</b>` +
-      `${mine ? ' — you' : ''}. Tap a word to see everybody it reaches.</p>` +
-
-    (splits.length
-      ? `<p class="lbl">Where one of their words is several of ours</p>` +
-        splits.slice(0, 5).map(sp =>
-          `<div class="splitrow"><b>${esc(sp.word)}</b>` +
-          sp.terms.map(t => `<i>${esc(t.term)}</i>`).join('') +
-          `</div>`).join('') +
-        `<p class="covnote">A tree that only had the word on the left could not ` +
-        `tell these people apart. ${mine ? 'Your family' : 'This family'} never ` +
-        `confuses them, and never has — the words are older than the writing.</p>`
-      : '') +
+    `<p class="cap">${mine ? 'Your words' : esc(first) + '\u2019s words'}</p>` +
+    `<p class="covnote">Every word ${mine ? 'you' : esc(first)} would use for somebody ` +
+    `in this tree, and how many people each one reaches. <b>Tap a word</b> to ` +
+    `light up everybody it reaches.</p>` +
 
     (c.bands.length
       ? c.bands.map(b =>
@@ -6849,6 +6871,18 @@ function openWords(){
     (c.capped
       ? `<p class="covnote">Counted from the first ${c.checked} of ` +
         `${c.total.toLocaleString()} people — enough to show the shape.</p>` : '') +
+
+    (splits.length
+      ? `<details class="teachfold" style="margin-top:14px"><summary>` +
+        `Where a western tree would use one word for several of these</summary>` +
+        `<div class="teach">` +
+        splits.slice(0, 5).map(sp =>
+          `<div class="splitrow"><b>${esc(sp.word)}</b>` +
+          sp.terms.map(t => `<i>${esc(t.term)}</i>`).join('') +
+          `</div>`).join('') +
+        `<p>A record that only had the word on the left could not tell these ` +
+        `people apart. This family never confuses them.</p></div></details>`
+      : '') +
 
     `<div class="row" style="margin-top:12px">` +
       `<button class="btn ghost" id="wKin">Ask about any two</button>` +
@@ -7259,11 +7293,188 @@ function openCard(id){
   $('cName').focus();
 }
 
+/* ── ADDING SOMEBODY BY WHAT YOU CALL THEM ──────────────────────────────
+ *
+ * "I want to be able to simply add the right relationship based on what they
+ * are known [as]."
+ *
+ * Until now the only way to add a person was to say what POSITION they held:
+ * parent, sibling, partner, child. Four words, and none of them is a word
+ * this family uses. Nobody says "I will add a sibling of my father"; they say
+ * "this is my Tete". The app knew every one of those words and would tell you
+ * one after the fact — it would not take one from you.
+ *
+ * So the words become the way in. Pick Tete and the app works out that a
+ * father's sister is a sister of your father, checks that your father is
+ * recorded, and opens the ordinary form pointed at him — with the sex and the
+ * seniority already answered, because the word answered them.
+ *
+ * WHAT IT WILL NOT DO is invent the person in between. Tete is your father's
+ * sister; with no father recorded there is no sister to add her to, and a tree
+ * that quietly created a father nobody named would be making up a man. It says
+ * what is missing and offers to add him first, which is one tap and is the
+ * truth.
+ *
+ * TWO WORDS ARE TWO RELATIONS, and both are offered rather than guessed at:
+ * Sekuru is your mother's brother AND your mother's father, Muzukuru is your
+ * grandchild AND your sister's child. A reckoning that had to pick one would
+ * be picking wrong half the time. */
+
+function parentBySex(id, sex){
+  const pu = parentUnionOf(id);
+  if (!pu) return null;
+  return pu.partners.filter(present)
+           .find(x => (state.people[x] || {}).sex === sex) || null;
+}
+
+/* Every word this app can be told to add somebody by, and the shape each one
+   turns into. `on` is whose record the new person hangs off — which is very
+   often not the person you tapped, and is the whole reason this exists. */
+function waysToAdd(anchorId){
+  const me = state.people[anchorId];
+  if (!me) return [];
+  const father = parentBySex(anchorId, 'm');
+  const mother = parentBySex(anchorId, 'f');
+  const first = id => ((state.people[id] || {}).name || '').split(' ')[0];
+  const kids = unionsOf(anchorId).flatMap(u => u.children).filter(present);
+  const sons = kids.filter(k => state.people[k].sex === 'm');
+  const daughters = kids.filter(k => state.people[k].sex === 'f');
+  const sisters = (() => {
+    const pu = parentUnionOf(anchorId);
+    if (!pu) return [];
+    return pu.children.filter(c => c !== anchorId && present(c) &&
+                                   state.people[c].sex === 'f');
+  })();
+  const out = [];
+  const add = (term, gloss, band, on, kind, preset, missing) =>
+    out.push({ term, gloss, band, on, kind, preset:preset || {}, missing:missing || null,
+               done:false });
+  const done = (term, gloss, band) => out.push({ term, gloss, band, done:true, preset:{} });
+
+  /* THE WORDS ARE THE ENGINE'S OWN. Amaiguru, not Maiguru: whichever form
+     this app derives is the form it must offer, or a family picks one word
+     and is handed back a different one by the card it just made. */
+  // ── the row above ──
+  if (father) done('Baba', 'your father', 'up');
+  else add('Baba', 'your father', 'up', anchorId, 'parent', { sex:'m' });
+  if (mother) done('Amai', 'your mother', 'up');
+  else add('Amai', 'your mother', 'up', anchorId, 'parent', { sex:'f' });
+  add('Babamukuru', "your father's older brother", 'up', father, 'sibling',
+      { sex:'m', position:'older' }, father ? null : 'your father');
+  add('Babamunini', "your father's younger brother", 'up', father, 'sibling',
+      { sex:'m', position:'younger' }, father ? null : 'your father');
+  add('Tete', "your father's sister", 'up', father, 'sibling',
+      { sex:'f' }, father ? null : 'your father');
+  add('Amaiguru', "your mother's older sister", 'up', mother, 'sibling',
+      { sex:'f', position:'older' }, mother ? null : 'your mother');
+  add('Amainini', "your mother's younger sister", 'up', mother, 'sibling',
+      { sex:'f', position:'younger' }, mother ? null : 'your mother');
+  add('Sekuru', "your mother's brother", 'up', mother, 'sibling',
+      { sex:'m' }, mother ? null : 'your mother');
+  add('Sekuru', "your father's father", 'up', father, 'parent',
+      { sex:'m' }, father ? null : 'your father');
+  add('Ambuya', "your father's mother", 'up', father, 'parent',
+      { sex:'f' }, father ? null : 'your father');
+  add('Sekuru', "your mother's father", 'up', mother, 'parent',
+      { sex:'m' }, mother ? null : 'your mother');
+  add('Ambuya', "your mother's mother", 'up', mother, 'parent',
+      { sex:'f' }, mother ? null : 'your mother');
+
+  // ── your own row ──
+  /* Mukoma and Munin'ina are the same-sex pair, so they cannot be offered to
+     somebody whose own sex is not recorded — the word would be a guess. */
+  if (me.sex){
+    const same = me.sex, other = me.sex === 'm' ? 'f' : 'm';
+    add('Mukoma', me.sex === 'm' ? 'your older brother' : 'your older sister',
+        'own', anchorId, 'sibling', { sex:same, position:'older' });
+    add("Munin'ina", me.sex === 'm' ? 'your younger brother' : 'your younger sister',
+        'own', anchorId, 'sibling', { sex:same, position:'younger' });
+    add('Hanzvadzi', me.sex === 'm' ? 'your sister' : 'your brother',
+        'own', anchorId, 'sibling', { sex:other });
+  } else {
+    add('Mukoma', 'your older brother or sister', 'own', anchorId, 'sibling',
+        { position:'older' }, 'whether ' + (me.name || 'this person').split(' ')[0] +
+        ' is a he or a she');
+  }
+  add('Mukadzi', 'your wife', 'own', anchorId, 'partner', { sex:'f' });
+  add('Murume', 'your husband', 'own', anchorId, 'partner', { sex:'m' });
+
+  // ── the row below ──
+  add('Mwanakomana', 'your son', 'down', anchorId, 'child', { sex:'m' });
+  add('Mwanasikana', 'your daughter', 'down', anchorId, 'child', { sex:'f' });
+  add('Muroora', "your son's wife", 'down', sons[0], 'partner',
+      { sex:'f' }, sons.length ? null : 'a son');
+  add('Mukwasha', "your daughter's husband", 'down', daughters[0], 'partner',
+      { sex:'m' }, daughters.length ? null : 'a daughter');
+  add('Muzukuru', "your son's child", 'down', sons[0], 'child',
+      {}, sons.length ? null : 'a son');
+  add('Muzukuru', "your daughter's child", 'down', daughters[0], 'child',
+      {}, daughters.length ? null : 'a daughter');
+  add('Muzukuru', "your sister's child", 'down', sisters[0], 'child',
+      {}, sisters.length ? null : 'a sister');
+
+  return out.map(w => ({ ...w, ready: !w.done && !w.missing && !!w.on }));
+}
+
+const BANDS = { up: 'Older than you', own: 'Your own row', down: 'Younger than you' };
+
+function openWays(anchorId){
+  closeForm();
+  const who = state.people[anchorId];
+  if (!who) return;
+  pending = { kind:'dupes', anchorId };
+  const ways = waysToAdd(anchorId);
+  const mine = anchorId === meId;
+  const theirs = (who.name || '').split(' ')[0];
+  // "your father" reads wrong when the card is somebody else's.
+  const facing = t => mine ? t : t.replace(/\byour\b/g, esc(theirs) + "'s");
+
+  const row = w =>
+    `<button type="button" class="wayrow${w.ready ? '' : ' waiting'}" ` +
+      `data-way="${esc(w.term)}|${esc(w.gloss)}"${w.ready ? '' : ' disabled'}>` +
+      `<b>${esc(w.term)}</b><em>${facing(esc(w.gloss))}</em>` +
+      `${w.ready
+        ? `<small>recorded on ${esc((state.people[w.on] || {}).name || '')}</small>`
+        : w.done
+        ? `<small>already in the tree</small>`
+        : `<small>${esc(facing(w.missing || 'somebody in between'))} is not recorded yet</small>`}` +
+    `</button>`;
+
+  const el = document.createElement('div');
+  el.id = 'form';
+  el.className = 'wide';
+  el.innerHTML =
+    `<p class="cap">Add someone you call…</p>` +
+    `<p class="covnote">Pick the word your family uses for them. The app works ` +
+    `out where they go — you only type the name.</p>` +
+    ['up', 'own', 'down'].map(b => {
+      const list = ways.filter(w => w.band === b);
+      if (!list.length) return '';
+      return `<p class="lbl" style="margin-top:12px">${esc(BANDS[b])}</p>` +
+             list.map(row).join('');
+    }).join('') +
+    `<div class="row" style="margin-top:12px">` +
+      `<button class="btn ghost" id="wayNo">Close</button></div>`;
+  document.body.appendChild(el);
+  placeForm(el);
+
+  el.querySelectorAll('[data-way]').forEach(b => b.onclick = () => {
+    const [term, gloss] = b.dataset.way.split('|');
+    const w = ways.find(x => x.term === term && x.gloss === gloss);
+    if (!w || !w.ready) return;
+    closeForm();
+    openForm(w.kind, w.on, { ...w.preset, term, gloss: facing(gloss) });
+  });
+  $('wayNo').onclick = closeForm;
+  el.addEventListener('keydown', e => { if (e.key === 'Escape'){ e.preventDefault(); closeForm(); } });
+}
+
 /* ── grow form ──────────────────────────────────────────────────────── */
 const LABEL = { parent:'parent of', sibling:'sibling of', partner:'partner of', child:'child of' };
 
-function openForm(kind, anchorId){
+function openForm(kind, anchorId, said){
   closeForm();
+  said = said || {};
   pending = { kind, anchorId };
   const anchor = state.people[anchorId];
 
@@ -7271,8 +7482,9 @@ function openForm(kind, anchorId){
   // is the whole point of the row — so ask while the name is being typed.
   const order = kind !== 'sibling' ? '' :
     `<p class="lbl">Born</p><div class="seg" id="fOrder">` +
-    `<button type="button" data-pos="older" aria-pressed="false">Before ${esc(anchor.name.split(' ')[0])}</button>` +
-    `<button type="button" data-pos="younger" aria-pressed="true">After</button></div>`;
+    `<button type="button" data-pos="older" aria-pressed="${said.position === 'older'}">` +
+      `Before ${esc(anchor.name.split(' ')[0])}</button>` +
+    `<button type="button" data-pos="younger" aria-pressed="${said.position !== 'older'}">After</button></div>`;
 
   /* WHOSE CHILD a new brother or sister is — asked, not assumed.
 
@@ -7301,12 +7513,18 @@ function openForm(kind, anchorId){
   const el = document.createElement('div');
   el.id = 'form';
   el.innerHTML =
-    `<p class="cap">New <b>${LABEL[kind]}</b><br>${esc(anchor.name)}</p>` +
+    (said.term
+      /* Named by the word, because the word is what was asked for. The line
+         under it says where they will actually be written down, so nobody is
+         ever surprised by what the app did with their answer. */
+      ? `<p class="cap">New <b>${esc(said.term)}</b><br>${esc(said.gloss || '')}</p>` +
+        `<p class="covnote">Recorded as ${esc(LABEL[kind])} <b>${esc(anchor.name)}</b>.</p>`
+      : `<p class="cap">New <b>${LABEL[kind]}</b><br>${esc(anchor.name)}</p>`) +
     `<input id="fName" class="fld" placeholder="Name" autocomplete="off">` +
     `<div class="seg" id="fSex">` +
-      `<button type="button" data-sex="f" aria-pressed="false">She</button>` +
-      `<button type="button" data-sex="m" aria-pressed="false">He</button>` +
-      `<button type="button" data-sex="" aria-pressed="true">—</button></div>` +
+      `<button type="button" data-sex="f" aria-pressed="${said.sex === 'f'}">She</button>` +
+      `<button type="button" data-sex="m" aria-pressed="${said.sex === 'm'}">He</button>` +
+      `<button type="button" data-sex="" aria-pressed="${!said.sex}">—</button></div>` +
     order + whose + withWho +
     `<input id="fTotem" class="fld" placeholder="Totem / mutupo (optional)" autocomplete="off">` +
     `<div class="row">` +
@@ -8052,6 +8270,7 @@ budsEl.addEventListener('click', e => {
     openForm('parent', id);
     return;
   }
+  if (bud.dataset.bud === 'ways'){ openWays(bud.dataset.anchor); return; }
   openForm(bud.dataset.bud, bud.dataset.anchor);
 });
 budsEl.addEventListener('keydown', e => {
