@@ -3831,6 +3831,28 @@ function cutPeople(){
 /* WHO IS BEHIND EACH OF THEM — the people who would be cut off from the rest
    of the family if that one person were taken out. Reckoned from whoever is
    holding the phone, because "the rest of the family" means theirs. */
+/* Which sex the house descends through. Used by the layout to decide which
+   parents a household hangs from, and by the fold to decide whose line is
+   your own — one constant, so a people who reckon the house through women
+   change it here and both follow. */
+const HOUSE_THROUGH = 'm';
+
+/* The line of your own house: you, and back through the parent of that sex
+   for as long as the tree knows one. */
+function houseLine(from){
+  const line = new Set();
+  let at = from;
+  let guard = 0;
+  while (at && !line.has(at) && guard++ < 200){
+    line.add(at);
+    const pu = parentUnionOf(at);
+    if (!pu) break;
+    at = pu.partners.filter(present)
+           .find(x => (state.people[x] || {}).sex === HOUSE_THROUGH) || null;
+  }
+  return line;
+}
+
 function joinsIn(){
   const folk = people().map(p => p.id);
   if (folk.length < 4) return [];
@@ -3880,7 +3902,7 @@ function joinsIn(){
    * seam is still a seam, and the panel of them all can show the rest. */
   const surnameOf = id => ((state.people[id] || {}).name || '').trim().split(/\s+/).pop() || '';
   const mine = surnameOf(here).toLowerCase();
-  const myTotem = totemAt(here);
+  const ours = houseLine(here);
 
   const out = [];
   for (const id of cutPeople()){
@@ -3889,44 +3911,36 @@ function joinsIn(){
     const away = folk.filter(x => x !== id && !kept.has(x));
     if (away.length < 2) continue;             // one person is not a family to fold
     const name = houseNameFor(away, id);
-    /* THE MUTUPO ASKS THE QUESTION BETTER THAN THE SURNAME DOES.
+    /* WHICH SEAMS ARE A DOOR OUT OF YOUR OWN HOUSE.
      *
-     * A surname is what a woman may or may not have kept. Half the women in a
-     * real tree are entered under the name they married into — Idah Musoni,
-     * Bertha Enia Musoni — and by that test their own people are Musoni too,
-     * so the app would never notice they are a whole other family standing
-     * behind one marriage.
+     * The first two attempts asked an attribute — first the surname, then the
+     * mutupo — and both were wrong for the same reason, which the family put
+     * plainly: "the mutupo is not easy to predict. It does not necessarily
+     * change for the woman when she gets married, it depends on that family."
+     * That is exactly right, and this project's own mutupoNotes had already
+     * said as much: a totem that does not follow the father's line is
+     * perfectly ordinary, and is a question rather than a finding. Deciding
+     * anything on it made a finding of it. A woman recorded under her
+     * husband's mutupo because that is how her family does it would simply
+     * never be noticed, and her people would never be foldable.
      *
-     * A mutupo is not like that. A woman keeps hers for life; her children
-     * take their father's. So two different mitupo either side of one person
-     * is the plainest possible statement that these are two houses, and it is
-     * already recorded against nearly everybody. It is also, precisely, the
-     * question a Shona family asks a stranger first.
+     * So nothing is asked of the records at all. The graph already knows: a
+     * seam standing on your own house line — you, your father, his father —
+     * is not a door OUT of the house, it is the house. Every other seam is
+     * somebody through whom another family arrived. Evelyn is not on that
+     * line; Sydney and Thomas are.
      *
-     * The surname stays as the fallback for records with no totem yet. */
-    /* THE JOIN'S OWN MUTUPO, not the mutupo of the people behind them. The
-       far side of your own father holds his parents AND whoever his brothers
-       married; count those and a houseful of in-laws can outvote your own
-       grandfather, and the app offers to fold away your father's line. The
-       person standing in the doorway is the one to ask: a mutupo other than
-       yours means they married into this house, and what is behind them is
-       their house. */
-    let another = null;
-    const theirTotem = totemAt(id);
-    if (myTotem && theirTotem) another = theirTotem !== myTotem;
-    if (another === null){
-      const against = mine || houseNameFor([...kept].filter(x => x !== here), here).toLowerCase();
-      const theirs = name.toLowerCase();
-      another = !!theirs && theirs !== against && !/'s people$/.test(theirs);
-    }
-    if (!another) continue;
+     * HOUSE_THROUGH is the same constant the layout hangs households from, so
+     * a people who reckon the house through women change one line and both
+     * the picture and the folds turn over together. */
+    if (ours.has(id)) continue;
 
     /* AND DO NOT CALL THEM BY YOUR OWN NAME. A wife entered under the name
        she married into brings a family written down as Musoni, so the
        surname says Musoni and the chip would offer to fold "the Musoni" away
-       from the Musoni. Where the name we landed on is the reader's own, the
-       mutupo is the thing that actually tells the two houses apart, and it is
-       the word the family would use. */
+       from the Musoni. The mutupo is a better label there — as a LABEL, which
+       is only a report of what somebody wrote down, and not as the test of
+       who is whose, which is the thing it cannot be trusted to answer. */
     let label = name;
     if (label.toLowerCase() === mine || /'s people$/.test(label)){
       const raw = commonest(away, x => ((state.people[x] || {}).totem || '').trim());
@@ -4197,7 +4211,6 @@ function computeLayout(){
    * father is still drawn, and the panel still traces her mother's side
    * exactly as far. What changes is only which way the picture leans, and it
    * now leans the way the family does. */
-  const HOUSE_THROUGH = 'm';
 
   const parentUnionIn = m => us.find(u => u.children.includes(m));
 

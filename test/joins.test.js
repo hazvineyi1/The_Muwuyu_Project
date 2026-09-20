@@ -201,19 +201,27 @@ section('the folded picture is drawn as carefully as the whole one');
 
 // ── the signal that decides what is offered ───────────────────────────────
 //
-// "So far Evelyn is the only ring — will it be able to realize other rings?"
+// TWO WRONG ANSWERS BEFORE THIS ONE, and they failed the same way.
 //
-// It will, and it nearly did not. The first test asked whether the surname
-// behind a seam differed from the reader's, and half the women in a real tree
-// are entered under the name they married into: Idah Musoni, Bertha Enia
-// Musoni. By that test their own people are Musoni too, and a whole family
-// standing behind one marriage would never have been noticed.
+// The first asked whether the SURNAME behind a seam differed from the
+// reader's. Half the women in a real tree are entered under the name they
+// married into — Idah Musoni, Bertha Enia Musoni — so by that test their own
+// people are Musoni too, and a whole family standing behind one marriage was
+// never noticed.
 //
-// A mutupo is not like that. A woman keeps hers for life and her children
-// take their father's, so a mutupo other than yours in the person standing in
-// the doorway is the plainest possible statement that what is behind them is
-// another house. It is also the first question a Shona family asks a
-// stranger.
+// The second asked the MUTUPO, on the reasoning that a woman keeps hers for
+// life. The family who use this app put that right: "the mutupo is not easy
+// to predict. It does not necessarily change for the woman when she gets
+// married, it depends on that family." This project's own mutupoNotes had
+// already said as much — a totem that does not follow the father's line is
+// perfectly ordinary, and is a question rather than a finding. Deciding
+// anything on it made a finding of it.
+//
+// So nothing is asked of the records at all. The GRAPH already knows: a seam
+// standing on your own house line — you, your father, his father — is not a
+// door out of the house, it is the house. Every other seam is somebody
+// through whom another family arrived. Nothing anybody typed can make that
+// wrong.
 
 section('A WIFE ENTERED UNDER HER MARRIED NAME IS STILL FOUND');
 {
@@ -229,14 +237,34 @@ section('A WIFE ENTERED UNDER HER MARRIED NAME IS STILL FOUND');
   check('she carries a ring even though her surname is yours', !!hers2,
         JSON.stringify(offered.map(j => nameOf(t.fe, j.id))));
   eq('with her three people behind her', hers2.n, 3);
-  eq('and they are named by the mutupo, not by your own surname', hers2.name, 'Soko');
+  /* The mutupo is still a fine LABEL — it is a report of what somebody wrote
+     down. It is only as a TEST of who is whose that it cannot be trusted. */
+  eq('and they are labelled by the mutupo, not by your own surname', hers2.name, 'Soko');
 }
 
-section('and it is the mutupo of the person in the doorway, not of the crowd behind them');
-/* The far side of your own father holds his parents AND whoever his brothers
-   married. Count those and a houseful of in-laws outvotes your own
-   grandfather, and the app offers to fold your father's line away — which it
-   did, before this was measured on the join instead. */
+section('however the wife\u2019s own mutupo happens to have been written down');
+/* The case that killed the mutupo rule. Some families record a woman under
+   the totem she married into; some do not. The fold must not depend on which
+   kind of family this is, because the app cannot know and the record does not
+   say. */
+{
+  const each = totem => {
+    const t = twoFamilies();
+    for (const id of [t.evelyn, t.james, ...t.sibs]) t.fe.getState().people[id].totem = totem;
+    return t.fe.joinsIn().map(j => [nameOf(t.fe, j.id), j.n]);
+  };
+  eq('recorded under her own house', each('Moyondizvo'), [['Evelyn Mandaba', 5]]);
+  eq('recorded under her husband\u2019s, exactly the same answer',
+     each('Mwendamberi'), [['Evelyn Mandaba', 5]]);
+  eq('and with no totem recorded at all, still the same',
+     each(''), [['Evelyn Mandaba', 5]]);
+}
+
+section('the crowd behind a seam never decides anything either');
+/* An earlier attempt measured the far side. The far side of your own father
+   holds his parents AND whoever his brothers married — count those and a
+   houseful of in-laws outvotes your own grandfather, and the app offers to
+   fold your father's line away. It did exactly that. */
 {
   const t = twoFamilies();
   const idah = t.fe.grow('partner', t.thomas, 'Idah Musoni', 'f', 'Soko', { born:'1930' });
@@ -253,18 +281,40 @@ section('and it is the mutupo of the person in the doorway, not of the crowd beh
 }
 
 section('a man of your own house is never a door out of it');
-// However deep the line, and whoever his brothers married.
+/* However deep the line, whoever his brothers married, and whatever anybody
+   wrote in his totem field. This is the assertion the structural rule buys:
+   it cannot be broken by a record. */
 {
   const t = twoFamilies();
+  // give the whole line a totem nobody would expect, to prove it is not read
+  for (const id of [t.sydney, t.thomas, t.chai]) t.fe.getState().people[id].totem = 'Nzou';
+  const line = new Set([t.sydney, t.thomas, t.chai]);
   const offered = t.fe.joinsIn();
-  check('nobody sharing your mutupo is offered',
-        offered.every(j => (t.fe.getState().people[j.id].totem || '') !== 'Mwendamberi'),
-        JSON.stringify(offered.map(j => [nameOf(t.fe, j.id),
-                                         t.fe.getState().people[j.id].totem])));
+  check('nobody on your father\u2019s line is offered',
+        offered.every(j => !line.has(j.id)),
+        JSON.stringify(offered.map(j => nameOf(t.fe, j.id))));
+  check('and your mother still is',
+        offered.some(j => j.id === t.evelyn),
+        JSON.stringify(offered.map(j => nameOf(t.fe, j.id))));
 }
 
-section('and where no totem is recorded, the surname still answers');
-// The fallback, so a family that has not entered mitupo yet loses nothing.
+section('and a brother is not offered either, his wife is');
+// He is not on your house line, but the nest rule puts the ring where the
+// other family actually joined: on the person who married in.
+{
+  const t = twoFamilies();
+  const ben = t.fe.grow('child', t.thomas, 'Ben Musoni', 'm', 'Mwendamberi', { born:'1932' });
+  const idah = t.fe.grow('partner', ben, 'Idah Musoni', 'f', 'Soko', { born:'1936' });
+  const hers = t.fe.addPerson('Tarisai Musoni', 'm', 'Soko', '1908', '');
+  t.fe.linkExisting('child', hers, idah);
+  t.fe.grow('child', hers, 'Farai Musoni', 'm', 'Soko', { born:'1940' });
+  const offered = t.fe.joinsIn().map(j => nameOf(t.fe, j.id));
+  check('the wife carries it', offered.includes('Idah Musoni'), JSON.stringify(offered));
+  check('not her husband', !offered.includes('Ben Musoni'), JSON.stringify(offered));
+}
+
+section('a family that has entered no mitupo at all loses nothing');
+// Nothing in the decision reads a totem, so there is nothing to lose.
 {
   const fe = loadFrontend();
   const P = (n, s, b) => fe.addPerson(n, 'm', '', b, '');
@@ -280,7 +330,7 @@ section('and where no totem is recorded, the surname still answers');
   const offered = fe.joinsIn();
   eq('one ring', offered.length, 1);
   eq('on the wife', (fe.getState().people[offered[0].id] || {}).name, 'Evelyn Mandaba');
-  eq('named by the only thing there is to name them by', offered[0].name, 'Mandaba');
+  eq('and labelled by the only thing there is to label them by', offered[0].name, 'Mandaba');
 }
 
 report();
