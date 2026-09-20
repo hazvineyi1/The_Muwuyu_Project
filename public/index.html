@@ -3265,7 +3265,139 @@ function computeLayout(){
     blocks.push(b);
   }
 
+  /* WHICH HOUSE A HOUSEHOLD HANGS FROM.
+   *
+   * THE COMPLAINT THIS ANSWERS, said three different ways over three days:
+   * "one part of the family is on the other side instead of continuing to
+   * grow on the same side", "my dads siblings are growing on the other side",
+   * "all family aligned and on the same side, not across the screen with no
+   * reasoning". The last two words are the whole of it. The picture WAS
+   * reasoned — just not by anything the family could see.
+   *
+   * A married couple is one row, and that row can have two sets of parents
+   * wanting it: his and hers, when both were entered. The drawing can only
+   * hang it under one. It used to be whichever was reached first as the
+   * blocks were walked, which is the order people happened to be typed in —
+   * so a man's household could hang under his wife's father, his own father
+   * would be left as a family of his own somewhere else on the canvas, and
+   * his brothers and sisters would appear to be growing on the other side.
+   * Nothing on screen explained it, because nothing had decided it.
+   *
+   * SO IT IS DECIDED, and decided the way this family reckons rather than the
+   * way an algorithm arrives. A Shona household belongs to a dzinza — a house
+   * — and the house descends through its men: children take their father's
+   * mutupo, a wife marries into her husband's house, and it is her husband's
+   * father whose compound the household is part of. That is not a western
+   * tree's "primary parent"; it is the rule the family is already living by,
+   * and drawing it is the difference between a picture of a family and a
+   * picture of a database.
+   *
+   * HOUSE_THROUGH is the sex the house runs through, one constant, because
+   * this is the one thing that is not universal: peoples who reckon the house
+   * through women change it here and the whole picture turns over with it.
+   * Everything else — the terms, the seniority, the sibling rows — is
+   * untouched by it. A woman's own line is never cut: the descent line to her
+   * father is still drawn, and the panel still traces her mother's side
+   * exactly as far. What changes is only which way the picture leans, and it
+   * now leans the way the family does. */
+  const HOUSE_THROUGH = 'm';
+
+  const parentUnionIn = m => us.find(u => u.children.includes(m));
+
+  /* HOW MUCH OF A SIDE THIS TREE ACTUALLY HOLDS: how far back it goes and how
+     wide it is up there. Depth alone is not enough — a man with one recorded
+     father and a woman with one recorded father are level on depth, and if
+     his three brothers and her only sibling are not counted the tie falls
+     through to the house rule and takes her away from a row of siblings the
+     tree plainly knows. Counting what her father bore settles it the way
+     anybody looking at the picture would. */
+  const borne = new Map();
+  for (const u of us){
+    for (const pp of u.partners) borne.set(pp, (borne.get(pp) || 0) + u.children.length);
+  }
+  const knownCache = new Map();
+  const houseKnown = m => {
+    if (knownCache.has(m)) return knownCache.get(m);
+    let n = 0;
+    // .up is a Map of person -> how far up, and it counts the person
+    // themselves at nought. Neither the keys nor that first entry are what is
+    // being measured here.
+    for (const a of ancestry(m).up.keys()){
+      if (a === m) continue;
+      n += 1 + (borne.get(a) || 0);
+    }
+    knownCache.set(m, n);
+    return n;
+  };
+  const isAncestorBlock = (maybe, b) => { while (b){ if (b === maybe) return true; b = b.parent; } return false; };
+
+  for (const b of blocks){
+    // Everybody in the row whose own parents this tree knows.
+    const claims = [];
+    for (const m of b.members){
+      const pu = parentUnionIn(m);
+      if (!pu || !pu.partners.length) continue;
+      const home = ofPerson[pu.partners.find(pp => ofPerson[pp])];
+      if (!home || home === b) continue;
+      claims.push({ home, child:m, union:pu.id });
+    }
+    if (!claims.length) continue;
+    /* The house's own, then the elder, then the id — the same shape of rule
+       as everywhere else in this file, and the same reason for the last one:
+       two candidates the rule cannot separate must still come out the same
+       way on every draw. */
+    claims.sort((c1, c2) => {
+      /* THE SIDE THIS TREE KNOWS MORE OF, first. A family enters its own line
+         generation by generation and its in-laws one name at a time, so the
+         depth of what is recorded above somebody is a fair reading of whose
+         tree this is. Hanging the household under the side with four
+         generations above it, rather than under the one lone father-in-law
+         somebody typed in last week, is what keeps a woman standing among her
+         own brothers and sisters instead of drifting off under a man nobody
+         else in the picture is related to.
+
+         This is the rule that was missing. "My dad's siblings are growing on
+         the other side" was one of dad's sisters being claimed by her
+         husband's father — correct by the house rule, and the wrong picture
+         for the family looking at it, because this is THEIR tree. */
+      if (houseKnown(c1.child) !== houseKnown(c2.child))
+        return houseKnown(c2.child) - houseKnown(c1.child);
+
+      /* Then the house. Two lines equally traced — the case where a tree
+         really does hold both families — and the household belongs to the
+         dzinza it is part of, which descends through its men. */
+      const house = x => (state.people[x] || {}).sex === HOUSE_THROUGH ? 0 : 1;
+      if (house(c1.child) !== house(c2.child)) return house(c1.child) - house(c2.child);
+
+      const y1 = birthYear(c1.child), y2 = birthYear(c2.child);
+      if (y1 !== null && y2 !== null && y1 !== y2) return y1 - y2;
+      return c1.child < c2.child ? -1 : c1.child > c2.child ? 1 : 0;
+    });
+    // A household cannot hang beneath its own descendants.
+    const pick = claims.find(c => !isAncestorBlock(b, c.home));
+    if (!pick) continue;
+    b.parent = pick.home; b.viaChild = pick.child; b.viaUnion = pick.union;
+    pick.home.kids.push(b);
+  }
+
+  /* AND WHICH WAY THE ROW THEN FACES. Rule 1 of seniorSide is that the line's
+     own stands nearer the senior end than the one who married in — but until
+     the claim above is settled there is no way to tell which is which, and
+     "has parents recorded" is not the same question. A woman married to a man
+     whose own father is in the tree stood on whichever side her birth year
+     put her, with the descent line from HER father crossing over her husband
+     to reach her. Now the person the household hangs from leads it, and the
+     line drops straight down. */
+  for (const b of blocks){
+    if (!b.viaChild || b.members.length < 2) continue;
+    const i = b.members.indexOf(b.viaChild);
+    const fromSeniorEnd = SENIOR_LEFT ? i : b.members.length - 1 - i;
+    if (fromSeniorEnd > (b.members.length - 1) / 2) b.members.reverse();
+  }
+
   // Which marriages belong to which row, in the order they sit along it.
+  // After the turn above, so a reversed row's marriages are read back the
+  // same way round as its people.
   for (const b of blocks){
     b.unions = us
       .filter(u => u.partners.length && u.partners.every(pp => b.members.includes(pp)))
@@ -3273,16 +3405,77 @@ function computeLayout(){
                         Math.min(...u2.partners.map(x => b.members.indexOf(x))));
   }
 
+  /* THE CHILDREN OF A HOUSE STAND IN THE ORDER THE HOUSE COUNTS THEM: by the
+     marriage they belong to, left to right along their parents' row, and
+     within it by birth order — the row the family itself keeps. The claims
+     above were gathered block by block, which is no order at all. */
   for (const b of blocks){
-    for (const u of b.unions){
-      for (const c of u.children){            // union.children is already eldest-first
+    b.kids.sort((k1, k2) => {
+      const at = k => b.unions.findIndex(u => u.id === k.viaUnion);
+      const nth = k => {
+        const u = b.unions.find(x => x.id === k.viaUnion);
+        return u ? u.children.indexOf(k.viaChild) : 0;
+      };
+      /* A natal family standing over the row goes to the side its own child
+         stands on, so the short line it came here for stays short. */
+      const side = k => {
+        if (!k.visiting) return 0;
+        const i = b.members.indexOf(k.forPerson);
+        return i * 2 < b.members.length - 1 ? -1 : 1;
+      };
+      if (side(k1) !== side(k2)) return side(k1) - side(k2);
+      return (at(k1) - at(k2)) || (nth(k1) - nth(k2)) ||
+             (k1.id < k2.id ? -1 : k1.id > k2.id ? 1 : 0);
+    });
+  }
+  /* THE FAMILY A WIFE CAME FROM STANDS OVER HER, not at the end of the world.
+   *
+   * THE LINE ACROSS THE SCREEN, and the last of "not across the screen with
+   * no reasoning". When a woman who married in has her own father recorded,
+   * his household is claimed by nobody: her household hangs under her
+   * husband's people, so her father is left as a family of his own. Top-level
+   * families are then laid out in order of seniority, so he lands wherever
+   * his birth year puts him — often the far side of the canvas — and the line
+   * to his daughter crosses everything between. Seven pods wide, in a tree of
+   * eighteen people. The family reads that as a branch growing in the wrong
+   * place, and they are right: nothing put him there but a sort.
+   *
+   * So a household that gave a child away and kept none is not a top-level
+   * family at all. It is that child's own people, and it stands directly over
+   * the household they married into — one short line, on the row where their
+   * generation belongs, beside the house they joined. Which is also what the
+   * family would say out loud: she is a Nzou, of that house over there, and
+   * these are her people.
+   *
+   * It keeps its pods, its name, its mutupo and every line it had. What it
+   * loses is the pretence of being a separate family, which is what put it
+   * across the canvas in the first place. */
+  for (const b of blocks){
+    if (b.parent || b.socket || b.kids.length) continue;
+    // Somebody this household bore who stands in another house's row.
+    const given = [];
+    for (const u of us){
+      if (!u.partners.length || !u.partners.some(pp => b.members.includes(pp))) continue;
+      for (const c of u.children){
         const cb = ofPerson[c];
-        if (!cb || cb === b || cb.parent) continue;
-        cb.parent = b; cb.viaChild = c; cb.viaUnion = u.id;
-        b.kids.push(cb);
+        if (cb && cb !== b && cb.parent && cb.parent !== b) given.push({ block:cb, child:c });
       }
     }
+    if (!given.length) continue;
+    /* The eldest such child, when there are several — a father whose two
+       daughters married into two different houses can only stand over one of
+       them, and the senior marriage is the one the family would name. */
+    given.sort((g1, g2) => {
+      const y1 = birthYear(g1.child), y2 = birthYear(g2.child);
+      if (y1 !== null && y2 !== null && y1 !== y2) return y1 - y2;
+      return g1.child < g2.child ? -1 : 1;
+    });
+    const host = given[0].block;
+    if (isAncestorBlock(b, host)) continue;          // never under its own line
+    b.parent = host; b.visiting = true; b.forPerson = given[0].child;
+    host.kids.push(b);
   }
+
   // Siblings whose parents nobody has named yet: stand an empty socket in
   // their place so they hang together and the gap is visible.
   for (const u of us){
@@ -3296,21 +3489,29 @@ function computeLayout(){
   }
 
   function place(b, left){
-    if (!b.kids.length){ b.x = left + width(b)/2; return width(b); }
+    /* A visiting house takes no room here. It is placed afterwards, in its
+       own lane, wherever its child ended up standing — so reserving a slot
+       for it in the row below would only leave a hole. It left one: an uncle
+       with no wife and no children was pushed a whole pod clear of his own
+       brothers and sisters to make space for a father-in-law who was then
+       drawn somewhere else entirely, and the branch out to him swung halfway
+       across the canvas to say so. */
+    const kids = b.kids.filter(k => !k.visiting);
+    if (!kids.length){ b.x = left + width(b)/2; return width(b); }
     let cursor = left, span = 0;
-    b.kids.forEach((k, i) => {
+    kids.forEach((k, i) => {
       const w = place(k, cursor);
       cursor += w + SIB_GAP;
       span += w + (i ? SIB_GAP : 0);
     });
-    b.x = (b.kids[0].x + b.kids[b.kids.length - 1].x) / 2;
-    const own = width(b);
-    if (own > span){
-      const shift = (own - span) / 2;
+    b.x = (kids[0].x + kids[kids.length - 1].x) / 2;
+    const mine = width(b);
+    if (mine > span){
+      const shift = (mine - span) / 2;
       const move = (n, d) => { n.x += d; n.kids.forEach(k => move(k, d)); };
-      b.kids.forEach(k => move(k, shift));
-      b.x = left + own/2;
-      return own;
+      kids.forEach(k => move(k, shift));
+      b.x = left + mine/2;
+      return mine;
     }
     return span;
   }
@@ -3384,11 +3585,75 @@ function computeLayout(){
     cursor += place(b, cursor) + SIB_GAP * 2;
   }
 
-  const persons = {}, sockets = [], links = [], unionAt = {};
-  const countBelow = b => b.members.length + b.kids.reduce((n, k) => n + countBelow(k), 0);
+  /* AND NOBODY STANDS ON ANYBODY.
+   *
+   * A visiting family belongs one generation below the household it came to
+   * stand over — the same row as that household's own parents, and that row
+   * is a row of brothers and sisters. Dropping a father-in-law into the
+   * nearest free place on it put him between two of them: a stranger from
+   * another house standing in the middle of a sibling row, which is the same
+   * complaint this whole pass exists to answer, one generation up.
+   *
+   * There is no free place on that row that is not between somebody, because
+   * the row is a family. So the visitors get a lane of their own — half a
+   * level under their child, between the two rows, clear of both. It reads
+   * the way the family says it: she is of that house, they are her people,
+   * they stand just behind her. And it leaves every row of brothers and
+   * sisters in the picture unbroken, which is the whole point.
+   *
+   * They still give way to each other: two women in one household's row who
+   * both brought their fathers get one place each, nearest the daughter. */
+  const IN_LAW_LANE = 0.5;
 
   for (const b of blocks){
-    b.y = -b.gen * LEVEL;
+    b.y = b.visiting && b.parent ? b.parent.y + LEVEL * IN_LAW_LANE : -b.gen * LEVEL;
+  }
+
+  const personXIn = (b, id) => {
+    const i = b.members.indexOf(id);
+    return i < 0 ? b.x : b.x - width(b)/2 + i*(POD_W + COUPLE_GAP) + POD_W/2;
+  };
+  const lanes = new Map();
+  for (const b of blocks){
+    if (!b.visiting) continue;
+    const r = lanes.get(b.y) || [];
+    lanes.set(b.y, r);
+  }
+  for (const b of blocks.filter(x => x.visiting)
+                        .sort((b1, b2) => b1.y - b2.y || b1.x - b2.x)){
+    const taken = (lanes.get(b.y) || []).slice().sort((p, q) => p[0] - q[0]);
+    const w = width(b), step = w/2 + SIB_GAP;
+    /* A quarter of a pod towards the outside of the row, so the short drop to
+       their own child is a line somebody can see and tap. Straight underneath
+       hid it behind two pods and the house looked like it had arrived on its
+       own. A quarter, not a half: any further and it starts to look like it
+       belongs to whoever is standing next along. */
+    const at = b.parent.members.indexOf(b.forPerson);
+    const out = at * 2 < b.parent.members.length - 1 ? -1 : 1;
+    const want = personXIn(b.parent, b.forPerson) + out * POD_W * 0.25;
+    const clear = x => taken.every(t => x + w/2 + SIB_GAP <= t[0] || x - w/2 - SIB_GAP >= t[1]);
+    let best = want;
+    if (!clear(want)){
+      best = null;
+      for (const t of taken){
+        for (const c of [t[0] - step, t[1] + step]){
+          if (!clear(c)) continue;
+          if (best === null || Math.abs(c - want) < Math.abs(best - want)) best = c;
+        }
+      }
+      if (best === null) best = want;                 // nowhere to go; draw it anyway
+    }
+    b.x = best;
+    lanes.get(b.y).push([b.x - w/2, b.x + w/2]);
+  }
+
+  const persons = {}, sockets = [], links = [], unionAt = {};
+  // How much hangs below — which is what decides how thick the branch is
+  // drawn. A house standing over the row is not hanging from it.
+  const countBelow = b => b.members.length +
+    b.kids.reduce((n, k) => n + (k.visiting ? 0 : countBelow(k)), 0);
+
+  for (const b of blocks){
     if (b.socket){ sockets.push(b); continue; }
     b.members.forEach((m, i) => {
       persons[m] = { x:b.x - width(b)/2 + i*(POD_W + COUPLE_GAP) + POD_W/2, y:b.y };

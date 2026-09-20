@@ -111,13 +111,35 @@ section('CONNECTED HOUSEHOLDS ARE NOT SEPARATED BY A STRANGER');
         JSON.stringify({ hisFather:a, grandfather:b, stranger:s }));
 }
 
-section('a father far older than the rest is still kept with the family he reaches');
+section('a father far older than the rest stands over his own son, not at the edge');
+/* This used to assert that the two elders were neighbours on the top row,
+   which was the best that could be done while every family had to be a
+   top-level family sorted by seniority. It is no longer the best: a house
+   that gave a child to another house and kept none of its own now stands in
+   the lane directly over that child, so the line is a short drop rather than
+   a reach across whatever happens to lie between two birth years. The
+   property the old assertion was protecting — he is kept with the family he
+   reaches — is the one asserted here, and harder. */
 {
   const f = family('1900');
-  const order = Object.entries(f.L.persons)
-    .filter(([, q]) => q.y === 0).sort((x, y) => x[1].x - y[1].x)
-    .map(([id]) => nm(f.fe, id));
-  eq('the two elders are neighbours on the top row', order, ['His father', 'Grandfather']);
+  const him = f.L.persons[f.hisDad], son = f.L.persons[f.husb];
+  check('he is not standing among the elders of the other house',
+        him.y !== f.L.persons[f.gf].y, JSON.stringify({ him:him.y, gf:f.L.persons[f.gf].y }));
+  check('he is between his son and that row',
+        him.y > son.y && him.y < f.L.persons[f.gf].y,
+        JSON.stringify({ son:son.y, him:him.y, elders:f.L.persons[f.gf].y }));
+  check('and he is within a pod of standing straight under him',
+        Math.abs(him.x - son.x) < 162, String(Math.round(Math.abs(him.x - son.x))));
+}
+
+section('and a visiting house never breaks a row of brothers and sisters');
+/* The first attempt at this put him in the nearest free place on the elders'
+   row. Every free place on a row of siblings is between two of them. */
+{
+  const f = family('1900');
+  const row = Object.entries(f.L.persons).filter(([, q]) => q.y === f.L.persons[f.gf].y);
+  eq('the elders row holds only the elders of that house',
+     row.map(([id]) => nm(f.fe, id)).sort(), ['Grandfather']);
 }
 
 // ── the things that must not have changed ──────────────────────────────────
