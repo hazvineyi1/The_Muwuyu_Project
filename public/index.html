@@ -3903,6 +3903,20 @@ function joinsIn(){
   const surnameOf = id => ((state.people[id] || {}).name || '').trim().split(/\s+/).pop() || '';
   const mine = surnameOf(here).toLowerCase();
   const ours = houseLine(here);
+  /* What to call the reader's own house, so a join can say what it is a join
+     TO. The family said it in one sentence — "that is where the Mandaba
+     family joins the Musoni family" — and the app should be able to say the
+     same thing back. */
+  const ourName = (() => {
+    const sn = surnameOf(here);
+    if (sn) return sn;
+    const raw = commonest([...ours], x => ((state.people[x] || {}).totem || '').trim());
+    if (raw.value && raw.share >= 0.5){
+      const known = knownTotem(raw.value);
+      return known ? known.name : raw.value;
+    }
+    return 'your family';
+  })();
 
   const out = [];
   for (const id of cutPeople()){
@@ -3949,7 +3963,7 @@ function joinsIn(){
         label = known ? known.name : raw.value;
       }
     }
-    out.push({ id, away: new Set(away), n: away.length, name: label });
+    out.push({ id, away: new Set(away), n: away.length, name: label, into: ourName });
   }
   /* NESTED SEAMS: KEEP THE INNERMOST. Ben is a seam too — take him out and
      his wife AND her whole family are cut off — but his fold is only Idah's
@@ -5078,7 +5092,7 @@ function draw(){
   for (const k of (layout.knots || [])){
     html.push(
       `<div class="knotchip" data-knot="${esc(k.id)}" role="button" tabindex="0"` +
-      ` aria-label="Open the ${esc(k.name)} family, ${k.n} people"` +
+      ` aria-label="Open the ${esc(k.name)} family — ${k.n} people, joined here"` +
       ` style="left:${k.x}px; top:${k.y}px">` +
       `<span class="fam">${esc(k.name)}</span>` +
       `<span class="many">${k.n} people · tap to open</span></div>`);
@@ -5114,9 +5128,12 @@ function draw(){
       ((layout.seams || []).some(j => j.id === p.id)
         ? (() => {
             const j = layout.seams.find(x => x.id === p.id);
+            const where = `Where the ${esc(j.name)} family joins ` +
+              `${j.into === 'your family' ? 'yours' : 'the ' + esc(j.into)}` +
+              ` — ${j.n} ${j.n === 1 ? 'person' : 'people'}.`;
             return `<span class="knot${folded.has(p.id) ? ' shut' : ''}" data-knot="${p.id}"` +
-              ` role="button" tabindex="0" title="${folded.has(p.id) ? 'Open' : 'Fold away'}` +
-              ` the ${esc(j.name)} family — ${j.n} people">${j.n}</span>`;
+              ` role="button" tabindex="0" title="${where} Tap to ` +
+              `${folded.has(p.id) ? 'bring them back' : 'fold them away'}.">${j.n}</span>`;
           })()
         : '') +
       (titled.has(p.id) ? titleFor(anchor, p.id) : '') +

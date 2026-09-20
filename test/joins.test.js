@@ -333,4 +333,51 @@ section('a family that has entered no mitupo at all loses nothing');
   eq('and labelled by the only thing there is to label them by', offered[0].name, 'Mandaba');
 }
 
+section('THE RING APPEARS WHEN THE SECOND OF THEIR OWN PEOPLE IS RECORDED');
+/* "The ring is on Evelyn because we started building her parents and her
+   parents' family. That is where the Mandaba family joins the Musoni
+   family." Which is the whole of it — so this follows that sentence one
+   person at a time. One parent alone is not a family to fold. */
+{
+  const fe = loadFrontend();
+  const P = (n, s, t, b) => fe.addPerson(n, s, t, b, '');
+  const chai = P('Chaitezvi Musoni', 'm', 'Mwendamberi', '1900');
+  const thomas = fe.grow('child', chai, 'Thomas Musoni', 'm', 'Mwendamberi', { born:'1927' });
+  const sydney = fe.grow('child', thomas, 'Sydney Musoni', 'm', 'Mwendamberi', { born:'1940' });
+  const me = fe.grow('child', sydney, 'Hazvineyi Musoni', 'm', 'Mwendamberi', { born:'1979' });
+  fe.setMe(me);
+  const evelyn = fe.grow('partner', sydney, 'Evelyn Mandaba', 'f', 'Moyondizvo', { born:'1934' });
+
+  eq('a woman who married in, with none of her own people yet', fe.joinsIn().length, 0);
+  const james = P('James Mandaba', 'm', 'Moyondizvo', '1900');
+  fe.linkExisting('child', james, evelyn);
+  eq('her father alone is still not a family', fe.joinsIn().length, 0);
+  fe.grow('partner', james, 'Janet Mandaba', 'f', 'Shava', { born:'1905' });
+  eq('her mother makes two, and the ring appears', fe.joinsIn().length, 1);
+  eq('on her', (fe.getState().people[fe.joinsIn()[0].id] || {}).name, 'Evelyn Mandaba');
+  eq('and it says what it is a join to', fe.joinsIn()[0].into, 'Musoni');
+  eq('naming the family that arrived through her', fe.joinsIn()[0].name, 'Mandaba');
+}
+
+section('and a man who married in carries one just the same');
+// It was never about women. It is about who is not on your house line.
+{
+  const fe = loadFrontend();
+  const P = (n, s, t, b) => fe.addPerson(n, s, t, b, '');
+  const gf = P('Thomas Musoni', 'm', 'Mwendamberi', '1927');
+  const me = fe.grow('child', gf, 'Hazvineyi Musoni', 'm', 'Mwendamberi', { born:'1979' });
+  fe.setMe(me);
+  const sister = fe.grow('child', gf, 'Agnes Musoni', 'f', 'Mwendamberi', { born:'1975' });
+  const hus = P('Peter Chombo', 'm', 'Soko', '1970');
+  fe.linkExisting('partner', sister, hus);
+  const hisDad = P('Farai Chombo', 'm', 'Soko', '1940');
+  fe.linkExisting('child', hisDad, hus);
+  fe.grow('child', hisDad, 'Rudo Chombo', 'f', 'Soko', { born:'1972' });
+
+  const offered = fe.joinsIn();
+  eq('one ring', offered.length, 1);
+  eq('on the husband who married in', (fe.getState().people[offered[0].id] || {}).name, 'Peter Chombo');
+  eq('naming his people', offered[0].name, 'Chombo');
+}
+
 report();
