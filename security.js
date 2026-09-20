@@ -90,6 +90,23 @@ function securityHeaders({ enabled = true } = {}) {
        was never at risk; this is about the tokens that cannot be. */
     res.setHeader('Referrer-Policy', 'no-referrer');
 
+    /* NOTHING THIS SERVER GENERATES MAY BE STORED BY A CACHE, and there are
+       two separate reasons, either of which would be enough.
+
+       The page carries a per-request CSP nonce. A cached copy is a nonce an
+       attacker can read off one response and reuse in the next — the index
+       route says exactly that in a comment and then had nothing stopping it,
+       because no Cache-Control was ever set anywhere in this codebase. An
+       ETag alone does not stop a browser reusing a response; it only makes
+       revalidation cheap IF the browser chooses to revalidate.
+
+       And every other response is a family's own records, behind a gate.
+
+       express.static sets its own Cache-Control after this, so the pictures
+       and the zip keep their ordinary caching. This covers what we generate:
+       the page, the gate, the invitations, the API. */
+    res.setHeader('Cache-Control', 'no-store');
+
     res.setHeader('Permissions-Policy',
       'geolocation=(), microphone=(), camera=(), payment=(), usb=(), interest-cohort=()');
     res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');

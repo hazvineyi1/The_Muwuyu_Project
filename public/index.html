@@ -27,6 +27,10 @@
 <meta name="twitter:description" content="A Shona family tree. Mitupo, kinship, and the ancestors we share.">
 <meta name="twitter:image" content="%ORIGIN%/preview.jpg">
 <title>The Muwuyu Project</title>
+<!-- Which build is answering. Filled in by the server; 'dev' when the page is
+     opened straight off disk. Shown in the Muwuyu panel so that "is this the
+     new one?" can be answered by looking rather than by guessing. -->
+<meta name="mw-build" content="%BUILD%">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Karla:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -460,6 +464,11 @@ body.carrying .pod{transition:none;}
 .pod .also{
   font-family:'Fraunces',Georgia,serif; font-style:italic; font-size:11.5px;
   line-height:1.2; text-align:center; color:var(--muted); margin-top:1px;
+}
+#form .build{
+  margin:12px 0 0; text-align:center;
+  font-family:'Karla',sans-serif; font-size:10px; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--muted); opacity:.7;
 }
 #form .cap i.alsocap{
   font-family:'Fraunces',Georgia,serif; font-style:italic; text-transform:none;
@@ -1158,6 +1167,16 @@ body.carrying .pod{transition:none;}
    ═══════════════════════════════════════════════════════════════════════ */
 
 const KEY = 'muti-baobab-v1';
+
+/* Which build of this page is running — put in the <head> by the server. A
+   family who has been told something is fixed needs to be able to see that
+   they are looking at the fixed one, and an unreloaded tab looks exactly like
+   a deploy that never happened. */
+const BUILD = (() => {
+  const m = document.querySelector('meta[name="mw-build"]');
+  const v = String((m && m.content) || '');
+  return /^%|^$/.test(v) ? '' : v;        // un-substituted means opened off disk
+})();
 
 const POD_W = 132, POD_H = 48;
 /* How much of the top of the screen the banner occupies. Everything that
@@ -8105,7 +8124,8 @@ function openLook(){
             `<u>${p.label}<small>${esc(p.note)}</small></u></button>`;
         }).join('') +
       `</div>` +
-      `<div class="row"><button class="btn" id="lookNo">Done</button></div>`;
+      `<div class="row"><button class="btn" id="lookNo">Done</button></div>` +
+      (BUILD ? `<p class="build">Build ${esc(BUILD)}</p>` : '');
     placeForm(el);
 
     el.querySelectorAll('[data-theme]').forEach(b => b.onclick = () => {

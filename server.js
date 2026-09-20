@@ -370,6 +370,18 @@ app.get('/health', (req, res) => res.send('ok'));
 let pageHtml = null;
 const INDEX = path.join(__dirname, 'public', 'index.html');
 
+/* WHICH BUILD IS ANSWERING. "No changes, the tree still looks the same" is
+   unanswerable without this: from outside there is no way to tell a deploy
+   that did not happen from a browser still holding yesterday's page. Railway
+   hands us the commit; failing that, the page's own timestamp. It is shown
+   quietly in the Muwuyu panel, and it is not a secret — it says which of our
+   own commits is running, which anyone can read on the repository anyway. */
+const BUILD = ((process.env.RAILWAY_GIT_COMMIT_SHA || '').slice(0, 7)) ||
+  (() => {
+    try { return require('fs').statSync(INDEX).mtime.toISOString().slice(0, 16).replace('T', ' '); }
+    catch (e) { return 'dev'; }
+  })();
+
 app.get(['/', '/index.html'], (req, res, next) => {
   try {
     if (pageHtml === null) pageHtml = require('fs').readFileSync(INDEX, 'utf8');
@@ -381,10 +393,19 @@ app.get(['/', '/index.html'], (req, res, next) => {
   // a baked-in nonce would be a nonce an attacker can read off one response
   // and reuse in the next.
   res.type('html').send(
-    withNonce(pageHtml.split('%ORIGIN%').join(origin), req.cspNonce));
+    withNonce(pageHtml.split('%ORIGIN%').join(origin).split('%BUILD%').join(BUILD),
+              req.cspNonce));
 });
 
-app.use(express.static(path.join(__dirname, 'public')));
+/* The headers above put no-store on everything, which is the right default:
+   anything this server generates is either a page carrying a one-use nonce or
+   a family's own records. These files are neither — a background picture and
+   the link-preview card — and re-fetching them on every load is waste. So the
+   static handler puts ordinary caching back, and it says `private` because
+   even a picture on this deployment sits behind the gate. */
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders: res => res.setHeader('Cache-Control', 'private, max-age=3600')
+}));
 
 setupDatabase()
   .then(() => {

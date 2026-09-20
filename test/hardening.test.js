@@ -62,6 +62,32 @@ const directive = (csp, name) => {
     eq(`${p}: no referrer`, r.headers['referrer-policy'], 'no-referrer');
   }
 
+  section('nothing this server generates may be stored by a cache');
+  /* The page carries a per-request CSP nonce, so a cached copy of it is a
+     nonce that can be read off one response and reused in the next. There was
+     no Cache-Control anywhere in this codebase, and an ETag is not a
+     substitute: it makes revalidation cheap, it does not make it happen. The
+     symptom that led here was milder and just as bad — a family told the
+     picture had changed, still being served yesterday's page. */
+  for (const p of ['/', '/nonce']) {
+    eq(`${p}: no-store`, (await get(server, p)).headers['cache-control'], 'no-store');
+  }
+  section('but a picture is still an ordinary file');
+  {
+    const st = express();
+    st.use(securityHeaders());
+    st.use(express.static(path.join(__dirname, '..', 'public'), {
+      setHeaders: res => res.setHeader('Cache-Control', 'private, max-age=3600')
+    }));
+    const sv = await listen(st);
+    const r = await get(sv, '/preview.jpg');
+    check('the static handler puts ordinary caching back',
+          /max-age/.test(r.headers['cache-control'] || ''), r.headers['cache-control']);
+    check('and keeps it off shared caches, because it is behind the gate',
+          /private/.test(r.headers['cache-control'] || ''), r.headers['cache-control']);
+    sv.close();
+  }
+
   section('the referrer header is off, which is what protects an invitation');
   // /join/<token> puts the token in the PATH, because the server has to see
   // it. Without this, following any outbound link from that page would hand
