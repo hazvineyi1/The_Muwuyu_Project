@@ -258,4 +258,160 @@ section('and the same family draws the same way twice');
                   JSON.stringify(h.fe.layoutOf().persons));
 }
 
+// ── strung out by one brother's household ─────────────────────────────────
+//
+// THE COMPLAINT, third time in different words, with a photograph and an
+// arrow drawn on it: "this is the siblings. They are on the other side. Look
+// at the arrow and put the siblings in line with the Chaitezvi-Mavhu family."
+// Chaitezvi and Mavhu sat alone in the middle of the canvas; their children
+// were at both far edges of it, joined to them by lines a thousand pixels
+// long.
+//
+// IT WAS NOT A BUG, which is why the last two passes left it alone. The
+// picture is a tidy tree: every child of a marriage is given room for
+// everything hanging below it before the next child is placed. So one
+// brother with four wives and eleven children takes a thousand pixels of the
+// row, and a brother and sister with nobody below them at all are pushed out
+// past the far end of his family to make room for it. Every line in that
+// picture is correct and the picture is still wrong: it is showing the size
+// of one man's household as though it were distance between his family.
+
+function strungOut(){
+  const fe = loadFrontend();
+  const P = (n, s, t, b) => fe.addPerson(n, s, t, b, '');
+  const chai = P('Chaitezvi', 'm', 'Mwendamberi', '1900');
+  fe.grow('partner', chai, 'Mavhu', 'f', 'Shava', { born:'1905' });
+  const baya = fe.grow('child', chai, 'Baya', 'm', 'Mwendamberi', { born:'1925' });
+  fe.grow('partner', baya, 'Maitiewa', 'f', 'Nzou', { born:'1928' });
+  const ben  = fe.grow('child', chai, 'Ben', 'm', 'Mwendamberi', { born:'1932' });
+  const thom = fe.grow('child', chai, 'Thomas', 'm', 'Mwendamberi', { born:'1937' });
+  fe.grow('partner', thom, 'Idah', 'f', 'Soko', { born:'1940' });
+  ['Esther', 'Roslyn', 'Emma', 'Evelyn'].forEach((w, i) => {
+    const wife = fe.grow('partner', ben, w, 'f', ['Shava', 'Nzou', 'Soko', 'Moyo'][i],
+                         { born:String(1935 + i*4) });
+    for (let j = 0; j < 3; j++)
+      fe.grow('child', wife, `${w}'s ${j + 1}`, j % 2 ? 'f' : 'm', 'Mwendamberi',
+              { born:String(1960 + i*3 + j) });
+  });
+  return { fe, chai, baya, ben, thom, L: fe.layoutOf() };
+}
+
+section('A BROTHER WITH NOBODY BELOW HIM IS NOT PUSHED PAST HIS BROTHER’S FAMILY');
+{
+  const t = strungOut();
+  const gap = Math.abs(xOf(t.L, t.baya) - xOf(t.L, t.thom)) / POD_W;
+  check('the eldest and the youngest are within a few pods of each other',
+        gap < 12, `${gap.toFixed(1)} pods apart`);
+  const from = Math.abs(xOf(t.L, t.baya) - xOf(t.L, t.chai)) / POD_W;
+  check('and the eldest stands near his own parents',
+        from < 6, `${from.toFixed(1)} pods from his father`);
+}
+
+section('but he keeps his place among his brothers and sisters');
+/* The row is a statement about seniority — Mukoma and Munin’ina are read
+   off it — so tidying the picture must never reorder it. The eldest does not
+   end up standing to the right of the younger brother whose family pushed
+   him out. */
+{
+  const t = strungOut();
+  check('eldest, then the brother with the household, then the youngest',
+        xOf(t.L, t.baya) < xOf(t.L, t.ben) && xOf(t.L, t.ben) < xOf(t.L, t.thom),
+        JSON.stringify({ baya:Math.round(xOf(t.L, t.baya)), ben:Math.round(xOf(t.L, t.ben)),
+                         thomas:Math.round(xOf(t.L, t.thom)) }));
+  check('and all three are on the one row',
+        yOf(t.L, t.baya) === yOf(t.L, t.ben) && yOf(t.L, t.ben) === yOf(t.L, t.thom));
+}
+
+section('the brother with the household does not move, because he cannot');
+/* He is standing over his own wives and children. Anybody with a family
+   below them has a reason for where they are; the ones who get pushed out
+   are exactly the ones whose position was never carrying any information. */
+{
+  const t = strungOut();
+  const kids = Object.keys(t.fe.getState().people)
+    .filter(id => /'s \d$/.test(t.fe.getState().people[id].name));
+  const lo = Math.min(...kids.map(k => xOf(t.L, k)));
+  const hi = Math.max(...kids.map(k => xOf(t.L, k)));
+  const ben = xOf(t.L, t.ben);
+  check('he is still over his eleven children',
+        ben > lo - POD_W * 2 && ben < hi + POD_W * 2,
+        JSON.stringify({ ben:Math.round(ben), from:Math.round(lo), to:Math.round(hi) }));
+}
+
+section('and a family that is already gathered round its parents is left alone');
+/* A rescue, not a rearrangement. A picture that shuffled itself every time
+   somebody was added would be worse than the one it fixed. */
+{
+  const fe = loadFrontend();
+  const dad = fe.addPerson('Dad', 'm', 'Nzou', '1940', '');
+  ['A', 'B', 'C', 'D'].forEach((n, i) =>
+    fe.grow('child', dad, n, 'm', 'Nzou', { born:String(1965 + i*3) }));
+  const before = JSON.stringify(fe.layoutOf().persons);
+  eq('nothing moved', JSON.stringify(fe.layoutOf().persons), before);
+  const L = fe.layoutOf();
+  const xs = ['A', 'B', 'C', 'D'].map(n =>
+    L.persons[Object.keys(fe.getState().people).find(k => fe.getState().people[k].name === n)].x);
+  check('and they are still in birth order, evenly spaced',
+        xs.every((x, i) => i === 0 || x > xs[i-1]), JSON.stringify(xs.map(Math.round)));
+}
+
+section('AND A BRANCH WITH PEOPLE UNDER IT COMES TOO, ALL OF IT AT ONCE');
+/* The shape in the photograph: it was not the childless ones who had been
+   pushed out, it was an eldest son with a son of his own. A branch is one
+   thing and moves as one thing — the household, everybody below it, and the
+   shape they make together, shifted by the same amount, with nothing inside
+   it changed at all. It goes as far in as there is room for on every row it
+   occupies, which is sometimes none. */
+{
+  const fe = loadFrontend();
+  const P = (n, s, t, b) => fe.addPerson(n, s, t, b, '');
+  const chai = P('Chaitezvi', 'm', 'Mwendamberi', '1900');
+  fe.grow('partner', chai, 'Mavhu', 'f', 'Shava', { born:'1905' });
+  const baya = fe.grow('child', chai, 'Baya', 'm', 'Mwendamberi', { born:'1925' });
+  fe.grow('partner', baya, 'Maitiewa', 'f', 'Nzou', { born:'1928' });
+  const tsowhe = fe.grow('child', baya, 'Tsowhe', 'm', 'Mwendamberi', { born:'1955' });
+  const thom = fe.grow('child', chai, 'Thomas', 'm', 'Mwendamberi', { born:'1932' });
+  fe.grow('partner', thom, 'Idah', 'f', 'Soko', { born:'1935' });
+  const ben = fe.grow('child', thom, 'Ben', 'm', 'Mwendamberi', { born:'1958' });
+  const mavis = fe.grow('child', chai, 'Mavis', 'f', 'Mwendamberi', { born:'1941' });
+  ['Esther', 'Roslyn', 'Emma', 'Evelyn'].forEach((w, i) => {
+    const wife = fe.grow('partner', ben, w, 'f', ['Shava', 'Nzou', 'Soko', 'Moyo'][i],
+                         { born:String(1960 + i*4) });
+    for (let j = 0; j < 3; j++)
+      fe.grow('child', wife, `${w} ${j + 1}`, j % 2 ? 'f' : 'm', 'Mwendamberi',
+              { born:String(1985 + i*3 + j) });
+  });
+
+  const L = fe.layoutOf();
+  /* Five pods wide is what these three ARE — two couples and a woman on her
+     own — so the closest they can ever stand is about four and a half pods
+     between the first and the last. Eight is shoulder to shoulder. Before
+     this they were the width of the canvas apart. */
+  const span = Math.abs(xOf(L, baya) - xOf(L, mavis)) / POD_W;
+  check('the eldest and the youngest of the three are shoulder to shoulder',
+        span < 8, `${span.toFixed(1)} pods`);
+  check('all three stand over their own parents',
+        [baya, thom, mavis].every(k =>
+          Math.abs(xOf(L, k) - xOf(L, chai)) < POD_W * 5),
+        JSON.stringify([baya, thom, mavis].map(k =>
+          Math.round((xOf(L, k) - xOf(L, chai)) / POD_W * 10) / 10)));
+  check('in birth order, eldest first',
+        xOf(L, baya) < xOf(L, thom) && xOf(L, thom) < xOf(L, mavis));
+  check("and the eldest's own son came with him",
+        Math.abs(xOf(L, tsowhe) - xOf(L, baya)) < POD_W * 4,
+        `${Math.round(Math.abs(xOf(L, tsowhe) - xOf(L, baya)) / POD_W * 10) / 10} pods`);
+
+  // the thing a slide must never do
+  const rows = {};
+  for (const [id, q] of Object.entries(L.persons)) (rows[q.y] = rows[q.y] || []).push(q.x);
+  let overlaps = 0;
+  for (const y of Object.keys(rows)){
+    const r = rows[y].sort((a, b) => a - b);
+    for (let i = 1; i < r.length; i++) if (r[i] - r[i-1] < POD_W - 0.5) overlaps++;
+  }
+  eq('and nobody is standing on anybody', overlaps, 0);
+  eq('drawn twice, the same', JSON.stringify(fe.layoutOf().persons),
+                              JSON.stringify(fe.layoutOf().persons));
+}
+
 report();

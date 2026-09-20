@@ -4045,6 +4045,151 @@ function computeLayout(){
     cursor += place(b, cursor) + SIB_GAP * 2;
   }
 
+  /* WHERE EVERYBODY ENDS UP STANDING, before anything is moved on purpose. */
+  const IN_LAW_LANE = 0.5;
+  for (const b of blocks){
+    b.y = b.visiting && b.parent ? b.parent.y + LEVEL * IN_LAW_LANE : -b.gen * LEVEL;
+  }
+
+  const personXIn = (b, id) => {
+    const i = b.members.indexOf(id);
+    return i < 0 ? b.x : b.x - width(b)/2 + i*(POD_W + COUPLE_GAP) + POD_W/2;
+  };
+
+  /* CHILDREN WITH NOTHING BELOW THEM STAND WITH THEIR PARENTS.
+   *
+   * THE COMPLAINT, and it is the third time the same one has come back in
+   * different words: "this is the siblings. They are on the other side. Look
+   * at the arrow and put the siblings in line with the Chaitezvi-Mavhu
+   * family." Three brothers and sisters of one marriage, with their parents
+   * sitting alone in the middle of the canvas and the children scattered to
+   * both edges of it, joined to them by lines a thousand pixels long.
+   *
+   * IT WAS NOT A BUG, which is why it survived the last two passes. The
+   * picture is a tidy tree: a row of people stands over its own descendants,
+   * and each child of a marriage is given room for everything hanging below
+   * it before the next child is placed. So one brother with four wives and
+   * eleven children takes a thousand pixels of the row, and his brother and
+   * sister — who have nobody below them at all — are pushed out past the far
+   * end of his family to make room for it. Every line in that picture is
+   * correct and the picture is still wrong, because it is showing the size of
+   * one man's household as though it were distance between his family.
+   *
+   * The ones who get pushed out are exactly the ones whose position was never
+   * carrying any information. A row of people with descendants below them has
+   * to stand over them. A couple with nobody below them is standing wherever
+   * the packing left them, and can stand anywhere — so they stand with their
+   * parents, in birth order, as near the marriage they came from as there is
+   * room for.
+   *
+   * ONLY WHEN THEY ARE ACTUALLY STRANDED. A family where the children are
+   * already gathered round their parents is left alone; this is a rescue, not
+   * a rearrangement, and a picture that shuffled itself every time somebody
+   * was added would be worse than the one it fixed. */
+  const STRAY = 3 * (POD_W + SIB_GAP);
+  const unionXIn = (p, uid) => {
+    const u = (p.unions || []).find(x => x.id === uid);
+    if (!u || !u.partners.length) return p.x;
+    const xs = u.partners.filter(pp => p.members.includes(pp)).map(pp => personXIn(p, pp));
+    return xs.length ? xs.reduce((t, v) => t + v, 0) / xs.length : p.x;
+  };
+
+  /* Every block holds its place until somewhere better is found for it, so
+     that a branch which turns out to have nowhere to go is never left
+     standing where another one has already been given its space. */
+  const held = new Map();
+  const hold = n => {
+    const r = held.get(n.y) || [];
+    r.push({ lo:n.x - width(n)/2, hi:n.x + width(n)/2, of:n });
+    held.set(n.y, r);
+  };
+  for (const b of blocks){ if (!b.visiting) hold(b); }
+
+  /* A branch is one thing and moves as one thing: the household, everybody
+     below it, and the shape they make together, all shifted by the same
+     amount. Nothing inside it changes at all. */
+  const branchOf = b => {
+    const out = [];
+    (function walk(n){ out.push(n); n.kids.forEach(k => { if (!k.visiting) walk(k); }); })(b);
+    return out;
+  };
+  const roomFor = (nodes, dx) => {
+    const mine = new Set(nodes);
+    return nodes.every(n => {
+      const lo = n.x + dx - width(n)/2, hi = n.x + dx + width(n)/2;
+      return (held.get(n.y) || []).every(t =>
+        mine.has(t.of) || hi + SIB_GAP <= t.lo || lo - SIB_GAP >= t.hi);
+    });
+  };
+  const slide = (nodes, dx) => {
+    const mine = new Set(nodes);
+    for (const [y, row] of held) held.set(y, row.filter(t => !mine.has(t.of)));
+    nodes.forEach(n => { n.x += dx; });
+    nodes.forEach(hold);
+  };
+
+  const brood = new Map();
+  for (const b of blocks){
+    if (b.visiting || b.socket || !b.parent || !b.viaUnion) continue;
+    const key = b.parent.id + '>' + b.viaUnion;
+    if (!brood.has(key)) brood.set(key, []);
+    brood.get(key).push(b);
+  }
+
+  for (const key of [...brood.keys()].sort()){
+    const all = brood.get(key);
+    const p = all[0].parent, uid = all[0].viaUnion, y = all[0].y;
+    const u = (p.unions || []).find(x => x.id === uid);
+    const kids = all.filter(b => b.y === y).sort((a, c) => {
+      const ia = u ? u.children.indexOf(a.viaChild) : 0;
+      const ic = u ? u.children.indexOf(c.viaChild) : 0;
+      return (ia - ic) || (a.id < c.id ? -1 : a.id > c.id ? 1 : 0);
+    });
+    if (kids.length < 2) continue;
+
+    /* STRUNG OUT, which is a different question from far away. A row of
+       brothers and sisters spread to both edges of the canvas has its
+       MIDDLE directly over its parents — that is what a tidy tree does — so
+       measuring the distance from the parents finds nothing wrong with it.
+       What is wrong is the emptiness between them: the room they take up
+       against the room they need. */
+    const lo = Math.min(...kids.map(k => k.x - width(k)/2));
+    const hi = Math.max(...kids.map(k => k.x + width(k)/2));
+    const packed = kids.reduce((t, k) => t + width(k), 0) + SIB_GAP * (kids.length - 1);
+    if ((hi - lo) - packed <= STRAY) continue;
+
+    const target = unionXIn(p, uid);
+
+    /* Furthest first, so the outermost can come in and the ones behind can
+       follow into the room it leaves. */
+    const order = kids.slice().sort((a, c) =>
+      Math.abs(c.x - target) - Math.abs(a.x - target) || (a.id < c.id ? -1 : 1));
+
+    for (const c of order){
+      const at = kids.indexOf(c), prev = kids[at - 1], next = kids[at + 1];
+      let want = target - c.x;
+      /* NOBODY OVERTAKES A BROTHER. The row is a statement about seniority —
+         Mukoma and Munin'ina are read off it — so tidying the picture must
+         never reorder it. The eldest does not end up standing to the right of
+         the younger brother whose family pushed him out. */
+      if (want < 0 && prev)
+        want = Math.max(want, (prev.x + width(prev)/2 + SIB_GAP) - (c.x - width(c)/2));
+      if (want > 0 && next)
+        want = Math.min(want, (next.x - width(next)/2 - SIB_GAP) - (c.x + width(c)/2));
+      if (Math.abs(want) < POD_W) continue;           // not worth the churn
+
+      // As far in as there is room for, which may be none at all.
+      const nodes = branchOf(c);
+      for (let step = 32; step >= 1; step--){
+        const dx = want * step / 32;
+        if (Math.abs(dx) < POD_W) break;
+        if (!roomFor(nodes, dx)) continue;
+        slide(nodes, dx);
+        break;
+      }
+    }
+  }
+
   /* AND NOBODY STANDS ON ANYBODY.
    *
    * A visiting family belongs one generation below the household it came to
@@ -4063,16 +4208,6 @@ function computeLayout(){
    *
    * They still give way to each other: two women in one household's row who
    * both brought their fathers get one place each, nearest the daughter. */
-  const IN_LAW_LANE = 0.5;
-
-  for (const b of blocks){
-    b.y = b.visiting && b.parent ? b.parent.y + LEVEL * IN_LAW_LANE : -b.gen * LEVEL;
-  }
-
-  const personXIn = (b, id) => {
-    const i = b.members.indexOf(id);
-    return i < 0 ? b.x : b.x - width(b)/2 + i*(POD_W + COUPLE_GAP) + POD_W/2;
-  };
   const lanes = new Map();
   for (const b of blocks){
     if (!b.visiting) continue;
