@@ -605,6 +605,20 @@ body.carrying .pod{transition:none;}
 #form .teach .fld{margin-bottom:0;}
 #form .teach .btn{flex:0 0 92px;}
 #form .taughtnote{margin:-4px 0 10px; font-size:10.5px; color:var(--muted);}
+/* The folded box, on a person's card. A word the app already has is not a
+   question, so the invitation is one line and the two fields wait behind it;
+   the summary carries the whole offer, which is why it is worded as one. */
+#form .teachfold{margin:-4px 0 10px;}
+#form .teachfold>summary{
+  list-style:none; cursor:pointer; padding:7px 11px; border-radius:0 0 12px 12px;
+  background:var(--pod-hi); border:1.5px solid var(--pod-edge); border-top:none;
+  font-family:'Karla',sans-serif; font-size:10.5px; font-weight:700;
+  letter-spacing:.02em; color:var(--gold);
+}
+#form .teachfold>summary::-webkit-details-marker{display:none;}
+#form .teachfold>summary::marker{content:'';}
+#form .teachfold[open]>summary{border-radius:0; color:var(--muted);}
+#form .teachfold[open] .teach{margin:0; border-radius:0 0 12px 12px;}
 .linkbtn{
   background:none; border:none; padding:0; cursor:pointer; color:var(--gold);
   font-family:'Karla',sans-serif; font-size:10.5px; font-weight:700; text-decoration:underline;
@@ -2233,8 +2247,15 @@ function whyNotNamed(who, tid){
       return { text: 'Nothing joins them in this tree yet — add the people in between.',
                fix: null, need: 'people' };
     }
-    return { text: 'This app has no word for it. If your family uses one, name it below.',
-             fix: null, need: 'word' };
+    /* Only where there is a shape to file a word under. Without one there is
+       nothing for a taught word to carry to, so the box is not offered and
+       the sentence must not say it is — a promise of a "below" that is not
+       there is what sent somebody looking for it. */
+    return { text: r.shape
+      ? 'This app has no word for it. If your family uses one, name it below.'
+      : 'This app has no word for it, and no place to file one until the ' +
+        'people in between are recorded.',
+      fix: null, need: r.shape ? 'word' : 'people' };
   }
   return null;
 }
@@ -5550,6 +5571,48 @@ function kinPicker(side, chosen){
     `<div class="kinlist" data-for="${side}"></div>`;
 }
 
+/* THE HANDLERS BEHIND A TEACH BOX, wherever it was drawn.
+
+   `again` redraws the panel the box is in, because a word changes every line
+   above it. `keep` is whatever that panel would otherwise throw away in the
+   redraw — a card has a name, a birth year and a mutupo half-typed in it, and
+   teaching a word must not cost somebody the sentence they were in the middle
+   of. */
+function wireTeaching(el, again, keep){
+  const hold = () => { if (keep) keep(); };
+  el.querySelectorAll('.teach').forEach(box => {
+    const input = box.querySelector('.teachterm');
+    const why = box.querySelector('.teachwhy');
+    const commit = () => {
+      if (!input.value.trim()) { input.focus(); return; }
+      hold();
+      teachTerm(box.dataset.shape, input.value, why ? why.value : '');
+      render(); save();
+      say(`${input.value.trim()} recorded. Every pair related this way now carries it.`);
+      again();
+    };
+    box.querySelector('.teachgo').onclick = commit;
+    const yes = box.querySelector('.affirmgo');
+    if (yes) yes.onclick = () => {
+      hold();
+      affirmTerm(box.dataset.shape, box.dataset.term, why ? why.value : '');
+      render(); save();
+      say(`${box.dataset.term} agreed. It will not be asked about again.`);
+      again();
+    };
+    /* Enter in either field names the word and does nothing else. On a card
+       Enter means "save and close", and a panel that shut on the word being
+       typed would look exactly like the app refusing to take it. */
+    [input, why].forEach(f => f && f.addEventListener('keydown', e => {
+      if (e.key === 'Enter'){ e.preventDefault(); e.stopPropagation(); commit(); }
+    }));
+  });
+  el.querySelectorAll('[data-forget]').forEach(b => b.onclick = () => {
+    hold();
+    forgetTerm(b.dataset.forget); render(); save(); again();
+  });
+}
+
 function kinVerdict(from, to, how){
   how = how || {};
   if (!from || !to) return '';
@@ -5569,10 +5632,7 @@ function kinVerdict(from, to, how){
           `<b>${esc(t.term)}${i === 0 && k.list.length > 1 ? '' : ''}</b>` +
           `<span>${i === 0 ? `${esc(kinName(to))} is ${esc(kinName(from))}'s ` : 'and also '}` +
           `${esc(t.term)} — ${facing(esc(t.why), from)}` +
-          `${t.affirmed ? ` <i>· agreed by your family${t.by ? ', ' + esc(t.by) : ''}` +
-                          `${t.note ? ' — ' + esc(t.note) : ''}</i>` : ''}` +
-          `${t.taught ? ` <i>· your family's word${t.by ? ', from ' + esc(t.by) : ''}` +
-                        `${t.note ? ' — ' + esc(t.note) : ''}</i>` : ''}</span>` +
+          `${termCredit(t)}</span>` +
         `</p>`).join('') +
       (k.list.length > 1
         ? `<p class="overlapnote">${esc(kinName(to))} is ${k.list.length} things to ` +
@@ -5590,21 +5650,68 @@ function kinVerdict(from, to, how){
             : '');
       })());
 
-  // Where the app has a shape but no word for it, ask. This is the whole
-  // mechanism: it never guesses, and it never stays ignorant either.
-  if (!k.list.length && r.shape){
-    return head +
-      `<div class="teach" data-shape="${esc(r.shape)}">` +
-        `<p>Shona may have a word for <b>${facing(esc(r.plain || 'this'), from)}</b> that this app ` +
-        `does not know. If your family uses one, name it — every pair related ` +
-        `this way will carry it from then on.</p>` +
-        `<div class="row">` +
-          `<input class="fld teachterm" placeholder="The word your family uses" autocomplete="off">` +
-        `</div>` +
-        `<input class="fld teachwhy" placeholder="Why — the rule behind it, in your own words" autocomplete="off">` +
-        `<div class="row"><button type="button" class="btn teachgo">Name it</button></div>` +
-      `</div>`;
+  // Where the app has a shape but no word for it, ask; where it has one, let
+  // the family agree with it or put it right. This is the whole mechanism: it
+  // never guesses, and it never stays ignorant either. The boxes themselves
+  // live in teachFor, because a person's card needs the same ones.
+  return head + teachFor(from, to, how);
+}
+
+/* THE CREDIT ON A WORD. Whose word it is, said wherever the word is shown.
+   A family's own term with no name on it is indistinguishable from one the
+   app guessed, and the whole point of taking the word was that the family
+   knows better than the app. */
+function termCredit(t){
+  const who = t.by ? ', from ' + esc(t.by) : '';
+  const note = t.note ? ' — ' + esc(t.note) : '';
+  if (t.affirmed) return ` <i>· agreed by your family${t.by ? ', ' + esc(t.by) : ''}${note}</i>`;
+  if (t.taught) return ` <i>· your family's word${who}${note}</i>`;
+  return '';
+}
+
+/* THE BOX THAT TAKES A WORD.
+
+   One implementation, two places. It was written for the kinship panel and
+   only ever appeared there, while a person's card — the thing a family
+   actually taps — has been ending the sentence "If your family uses one, name
+   it below" with nothing below it since the day it was written. Somebody read
+   that, looked below, and found a name field and a birth year. So the box
+   goes where the sentence is.
+
+   FOLDED, on the card. A word the app already has is not a question, and two
+   text fields under every relative would bury the card the moment anybody is
+   three things at once. The box waits behind one line there. Where the app
+   has NO word it stands open, because there the sentence has just asked for
+   one and a family that has to find a disclosure first will not answer.
+
+   Filed under the shape either way, so what a family teaches carries to every
+   pair standing in the same place rather than to these two names. */
+function teachFor(from, to, how){
+  how = how || {};
+  const k = kinTerms(from, to);
+  if (!k) return '';
+
+  const fields = (go, forget) =>
+    `<div class="row">` +
+      `<input class="fld teachterm" placeholder="The word your family uses" autocomplete="off">` +
+    `</div>` +
+    `<input class="fld teachwhy" placeholder="Why — the rule behind it, in your own words" autocomplete="off">` +
+    `<div class="row"><button type="button" class="btn teachgo">${go}</button>` +
+      (forget ? `<button type="button" class="btn ghost" data-forget="${esc(forget)}">Reset</button>` : '') +
+    `</div>`;
+
+  // Nothing named: ask outright, open.
+  if (!k.list.length){
+    const r = k.base;
+    if (!r.shape) return '';
+    return `<div class="teach" data-shape="${esc(r.shape)}">` +
+      `<p>Shona may have a word for <b>${facing(esc(r.plain || 'this'), from)}</b> that this app ` +
+      `does not know. If your family uses one, name it — every pair related ` +
+      `this way will carry it from then on.</p>` +
+      fields('Name it', null) +
+    `</div>`;
   }
+
   /* AFFIRM OR PUT RIGHT — and this is where the system gets taught.
 
      Every word above is this app's reading of a rule. A family that agrees
@@ -5612,13 +5719,10 @@ function kinVerdict(from, to, how){
      replace it AND say why — because the explanation is the part worth
      keeping. A bare override teaches nobody; "we call her Mainini, she is of
      my mother's house" is the rule itself, written down by the people who
-     hold it.
-
-     Filed under the shape, so it carries to every pair standing in the same
-     place rather than to these two names. */
-  const editable = k.list.filter(t => t.shape);
-  if (editable.length){
-    return head + editable.map(t =>
+     hold it. */
+  return k.list.filter(t => t.shape).map(t => {
+    const settled = t.taught || t.affirmed;
+    const box =
       `<div class="teach" data-shape="${esc(t.shape)}" data-term="${esc(t.term)}">` +
         `<p>${t.taught
               ? `Your family calls this <b>${esc(t.term)}</b>.`
@@ -5626,23 +5730,17 @@ function kinVerdict(from, to, how){
               ? `Your family has agreed that <b>${esc(t.term)}</b> is the word here.`
               : `This app read <b>${esc(t.term)}</b> from ` +
                 `<b>${facing(esc(t.plain || 'this'), from)}</b>. Is that what your family says?`}</p>` +
-        (t.taught || t.affirmed ? '' :
+        (settled ? '' :
           `<div class="row"><button type="button" class="btn affirmgo">` +
             `Yes, that is the word</button></div>`) +
-        `<p class="teachlbl">${t.taught || t.affirmed
-              ? 'Change it' : 'Or tell it the word your family uses'}</p>` +
-        `<div class="row">` +
-          `<input class="fld teachterm" placeholder="The word your family uses" autocomplete="off">` +
-        `</div>` +
-        `<input class="fld teachwhy" placeholder="Why — the rule behind it, in your own words" autocomplete="off">` +
-        `<div class="row">` +
-          `<button type="button" class="btn teachgo">${t.taught || t.affirmed ? 'Change it' : 'Correct it'}</button>` +
-          (t.taught || t.affirmed
-            ? `<button type="button" class="btn ghost" data-forget="${esc(t.shape)}">Reset</button>` : '') +
-        `</div>` +
-      `</div>`).join('');
-  }
-  return head;
+        `<p class="teachlbl">${settled ? 'Change it' : 'Or tell it the word your family uses'}</p>` +
+        fields(settled ? 'Change it' : 'Correct it', settled ? t.shape : null) +
+      `</div>`;
+    if (!how.fold) return box;
+    return `<details class="teachfold"><summary>` +
+      `${settled ? `Change ${esc(t.term)}` : `Is ${esc(t.term)} your family's word?`}` +
+      `</summary>${box}</details>`;
+  }).join('');
 }
 
 // A plain-language rendering of a shape, for the list of what has been taught.
@@ -5847,29 +5945,7 @@ function openKinship(){
   });
   el.querySelectorAll('[data-ask]').forEach(b => b.onclick = () => openCard(b.dataset.ask));
   el.querySelectorAll('[data-fix]').forEach(b => b.onclick = () => openCard(b.dataset.fix));
-  el.querySelectorAll('.teach').forEach(box => {
-    const input = box.querySelector('.teachterm');
-    const why = box.querySelector('.teachwhy');
-    const commit = () => {
-      if (!input.value.trim()) { input.focus(); return; }
-      teachTerm(box.dataset.shape, input.value, why ? why.value : '');
-      render(); save();
-      say(`${input.value.trim()} recorded. Every pair related this way now carries it.`);
-      openKinship();
-    };
-    box.querySelector('.teachgo').onclick = commit;
-    const yes = box.querySelector('.affirmgo');
-    if (yes) yes.onclick = () => {
-      affirmTerm(box.dataset.shape, box.dataset.term, why ? why.value : '');
-      render(); save();
-      say(`${box.dataset.term} agreed. It will not be asked about again.`);
-      openKinship();
-    };
-    input.addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); commit(); } });
-  });
-  el.querySelectorAll('[data-forget]').forEach(b => b.onclick = () => {
-    forgetTerm(b.dataset.forget); render(); save(); openKinship();
-  });
+  wireTeaching(el, openKinship);
   $('kNo').onclick = closeForm;
   el.addEventListener('keydown', e => { if (e.key === 'Escape'){ e.preventDefault(); closeForm(); } });
 }
@@ -5919,9 +5995,18 @@ function openLine(fromId, toIds){
         `${RESTATES.test(bare) ? '' : ` — ${trace}`}</span></p>`;
     }
     const gap = whyNotNamed(a, b);
+    /* "name it below" has to mean this panel too. There is no room here for
+       two text fields per pair — this panel can hold eight of these lines —
+       so the offer is a button and the box is one tap away, opened on exactly
+       the pair the line is about rather than on whoever was asked about last. */
+    const askable = gap && gap.need === 'word' && k && k.base && k.base.shape;
     return `<p class="relline none"><b>Not named yet</b><span>` +
       `${nameOf(b)} is ${nameOf(a)}'s relative` +
-      `${gap ? ` — ${esc(gap.text)}` : ''}</span></p>`;
+      `${gap ? ` — ${esc(gap.text)}` : ''}</span></p>` +
+      (askable
+        ? `<div class="row"><button type="button" class="btn ghost wide" ` +
+          `data-name="${esc(a)}|${esc(b)}">Name it</button></div>`
+        : '');
   };
 
   const el = document.createElement('div');
@@ -5938,8 +6023,42 @@ function openLine(fromId, toIds){
     kinA = others[0]; kinB = fromId;
     openKinship();
   };
+  el.querySelectorAll('[data-name]').forEach(btn => btn.onclick = () => {
+    // The line asks what THEM is to SEER; the panel asks it as Person / Seen
+    // by, and answers that way round first.
+    const [seer, them] = btn.dataset.name.split('|');
+    kinA = them; kinB = seer;
+    openKinship();
+  });
   $('lnNo').onclick = closeForm;
   el.addEventListener('keydown', e => { if (e.key === 'Escape'){ e.preventDefault(); closeForm(); } });
+}
+
+/* WHAT THEY ARE TO YOU, on their own card — and the word, if your family
+   has one, or the box to give it one if it does not.
+
+   The reckoning here always starts from whoever is reading, so the sentences
+   are written in the second person and nobody's name is repeated back at
+   them: the card is already headed with the name. The kinship panel says
+   "Esther is Hazvineyi's Mainini" because there both people may be strangers
+   to whoever is holding the phone. Here one of them is holding it.
+
+   The box underneath is the same one the panel uses, so a word taught from a
+   card is a word taught, filed under the shape and carried to every pair
+   standing in the same place. */
+function kinOnCard(id){
+  const k = kinTerms(meId, id);
+  const rel = relationship(meId, id);
+  const lines = (!k || !k.list.length)
+    ? (() => {
+        const gap = whyNotNamed(meId, id);
+        return `<p class="relline none"><b>Not named yet</b><span>${esc(rel ? rel.why : '')}` +
+          `${gap ? `<br>${esc(gap.text)}` : ''}</span></p>`;
+      })()
+    : k.list.map((t, i) =>
+        `<p class="relline${i ? ' also' : ''}${t.taught ? ' taught' : ''}"><b>${esc(t.term)}</b>` +
+        `<span>${i ? 'and also — ' : ''}${esc(t.why)}${termCredit(t)}</span></p>`).join('');
+  return lines + teachFor(meId, id, { fold:true });
 }
 
 /* The card behind a person: the details that aren't worth room on the pod,
@@ -5955,17 +6074,7 @@ function openCard(id){
   el.id = 'form';
   el.innerHTML =
     `<p class="cap">${esc(p.name)}</p>` +
-    (rel ? `<p class="lbl">To you</p>` + (() => {
-      const k = kinTerms(meId, id);
-      if (!k || !k.list.length){
-        const gap = whyNotNamed(meId, id);
-        return `<p class="relline none"><b>Not named yet</b><span>${esc(rel.why)}` +
-          `${gap ? `<br>${esc(gap.text)}` : ''}</span></p>`;
-      }
-      return k.list.map((t, i) =>
-        `<p class="relline${i ? ' also' : ''}"><b>${esc(t.term)}</b>` +
-        `<span>${i ? 'and also — ' : ''}${esc(t.why)}</span></p>`).join('');
-    })() : '') +
+    (rel ? `<p class="lbl">To you</p>` + kinOnCard(id) : '') +
     `<input id="cName" class="fld" value="${esc(p.name)}" placeholder="Name" autocomplete="off">` +
     /* THE OTHER NAME. One field, not a maiden/married pair — that pair decides
        which of the two is the real one, and different families answer that
@@ -6017,6 +6126,8 @@ function openCard(id){
     p.totem = $('cTotem').value.trim();
   };
   $('cSave').onclick = () => { commit(); closeForm(); render(); save(); };
+  // Naming a relationship redraws the card, so the fields go in first.
+  wireTeaching(el, () => openCard(id), commit);
   el.querySelectorAll('[data-parents]').forEach(b => b.onclick = () => {
     commit();
     const label = b.textContent.trim();
