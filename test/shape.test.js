@@ -388,11 +388,14 @@ section('and a younger brother of the line is not a family that crossed');
 
 section('DIVIDING THE PICTURE DOES NOT LAY ANYBODY ON ANYBODY');
 /* The sort moves whole households across the canvas, which is the move that
-   causes an overlap when the room is not accounted for. Checked on this
-   tree as well as the straight one, because this is the tree where the
-   households actually travel. */
-{
+   causes an overlap when the room is not accounted for. Checked on this tree
+   as well as the straight one, because this is the tree where the households
+   actually travel — and on BOTH shapes, because the division is made before
+   either of them is chosen. Somebody reading in Muti was looking at the same
+   crossing and is owed the same fix. */
+for (const shape of ['', 'muti']){
   const t = halves();
+  t.fe.setShape(shape);
   const L = t.fe.layoutOf();
   const rows = new Map();
   for (const [id, q] of Object.entries(L.persons)){
@@ -407,7 +410,13 @@ section('DIVIDING THE PICTURE DOES NOT LAY ANYBODY ON ANYBODY');
         clash = `y ${y}: ${row[i - 1].id} and ${row[i].id} are ` +
                 `${Math.round(row[i].x - row[i - 1].x)} apart`;
   }
-  eq('every row is still clear', clash, null);
+  eq(`${shape || 'mudzi'}: every row is still clear`, clash, null);
+
+  const x = id => Math.round(L.persons[id].x);
+  check(`${shape || 'mudzi'}: and neither family crosses the other`,
+        Math.max(...t.fathers.map(x)) < Math.min(...t.mothers.map(x)),
+        JSON.stringify({ fathersEnd: Math.max(...t.fathers.map(x)),
+                         mothersBegin: Math.min(...t.mothers.map(x)) }));
 }
 
 section('A TREE WITH NO SIDES TO IT IS STILL A TREE');
