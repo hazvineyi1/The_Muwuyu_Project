@@ -3793,6 +3793,28 @@ function startBuild(id){
 }
 function closeBuild(){ building = null; }
 
+/* THE SHAPE OF THE TREE.
+ *
+ * MUDZI is the default, and it is the change asked for: the house line —
+ * you, your father, his father — runs straight down one x and never bends.
+ * Everybody else hangs off it at their own generation. The complaint it
+ * answers was "not across the screen with no reasoning": in this shape there
+ * is always a reason, because a person is either ON the line or hanging off
+ * it at a named remove, and the line itself is the one thing that cannot
+ * move.
+ *
+ * MUTI is the packing this app had before — a tidy-tree that centres every
+ * household over its children and lets the line wander wherever the packing
+ * puts it. Kept, and reachable in one tap from the Muwuyu panel, because a
+ * shape is a matter of taste before it is a matter of correctness and nobody
+ * should have to live with mine. */
+let treeShape = '';
+const SHAPES = [
+  { v:'',     label:'Mudzi', note:'your line straight down the middle' },
+  { v:'muti', label:'Muti',  note:'packed to fit, as it was' }
+];
+function setShape(v){ treeShape = SHAPES.some(x => x.v === v) ? v : ''; }
+
 /* Which sex the house descends through — the one convention the picture is
    built on: which parents a household hangs from. One constant, so a people
    who reckon the house through women change it here and the whole tree
@@ -4152,6 +4174,104 @@ function computeLayout(){
     for (const kb of kids){ kb.parent = host; kb.viaChild = u.children.find(c => kb.members.includes(c)); host.kids.push(kb); }
   }
 
+  /* WHICH HOUSEHOLDS ARE ON THE LINE. Walking up from whoever the picture is
+     reckoned from, by the same .parent links the claim rule already built —
+     so the line the layout straightens is the line the layout already
+     believes in, and not a second opinion about descent.
+
+     It stops at a visiting house. A house standing in another's row because
+     it gave a child to it is beside the line, not on it, and straightening
+     through that link would drag somebody's in-laws into the middle of their
+     own descent. */
+  const onSpine = new Map();                    // household -> who on it is on the line
+  // How many generations hang below a household, counting the deepest branch.
+  const depthOf = b => {
+    let d = 0;
+    for (const k of b.kids) if (!k.visiting) d = Math.max(d, 1 + depthOf(k));
+    return d;
+  };
+  if (treeShape === ''){
+    let anchor = (meId && ofPerson[meId]) ? meId
+               : (state.rootId && ofPerson[state.rootId]) ? state.rootId : null;
+    if (!anchor){
+      /* NOBODY HAS SAID WHO THEY ARE YET, and no root is marked either — a
+         tree in its first hour. It still gets a shape: the head of the
+         longest descent anybody has traced, which is the line a family is
+         almost always filling in when they start. Falling back to no line at
+         all would mean the picture changed the moment somebody answered a
+         question about themselves, which is the wrong moment for the tree to
+         rearrange itself. */
+      let best = null, deepest = -1;
+      for (const b of blocks){
+        if (b.parent || b.socket || !b.members.length) continue;
+        const d = depthOf(b);
+        if (d > deepest){ deepest = d; best = b; }
+      }
+      if (best) anchor = best.members.find(m => (state.people[m] || {}).sex === HOUSE_THROUGH)
+                         || best.members[0];
+    }
+    let who = anchor, sb = anchor ? ofPerson[anchor] : null;
+    while (sb){
+      onSpine.set(sb, who);
+      if (sb.visiting || !sb.parent) break;
+      /* Up one: the father of the person on the line, or whoever of that
+         household bore them when the house descends the other way. It is
+         the PERSON that has to be tracked and not just the household —
+         a household is a husband and a wife standing side by side, and
+         straightening it by its middle leaves the line zig-zagging by half
+         a pod at every generation. */
+      const up = sb.parent, pu = parentUnionOf(who);
+      const inUp = pu ? pu.partners.filter(x => up.members.includes(x)) : [];
+      who = inUp.find(x => (state.people[x] || {}).sex === HOUSE_THROUGH)
+            || inUp[0] || up.members[0] || null;
+      sb = up;
+      if (!who) break;
+    }
+
+    /* AND ON DOWN. The line does not stop at whoever happens to be holding
+       the phone: their own house carries on through their heir, by the same
+       convention the claim rule uses. It matters most for a family who have
+       not yet said who they are — the line then runs from the root down, and
+       they get a shape before they have answered a single question. */
+    let db = anchor ? ofPerson[anchor] : null, dwho = anchor;
+    while (db){
+      const down = [];
+      for (const k of db.kids){
+        if (k.visiting) continue;
+        const via = k.members.find(m => {
+          const pu = parentUnionOf(m);
+          return pu && pu.partners.includes(dwho);
+        });
+        if (via) down.push({ block:k, via });
+      }
+      if (!down.length) break;
+      /* WHICH CHILD THE LINE FOLLOWS. A son first, because that is the
+         convention the rest of this layout is built on. Then the one with
+         the most generations under them — not the eldest — and that is a
+         deliberate second thought. The eldest son is the heir; but a line
+         drawn through an eldest son nobody has recorded a child for stops
+         after one step, while the four generations his younger brother
+         carries wander off to the side. The straight line is for reading,
+         and what a reader is looking for is the long descent. Seniority
+         decides it when the depth is equal, which is most of the time. */
+      const rank = d => [(state.people[d.via] || {}).sex === HOUSE_THROUGH ? 0 : 1,
+                         -depthOf(d.block), birthYear(d.via) ?? 9999];
+      down.sort((d1, d2) => {
+        const r1 = rank(d1), r2 = rank(d2);
+        return r1[0] - r2[0] || r1[1] - r2[1] || r1[2] - r2[2];
+      });
+      const next = down[0];
+      if (onSpine.has(next.block)) break;
+      onSpine.set(next.block, next.via);
+      db = next.block; dwho = next.via;
+    }
+  }
+  // Where a person stands inside their own household, measured from its middle.
+  const offsetIn = (b, id) => {
+    const i = b.members.indexOf(id);
+    return i < 0 ? 0 : -width(b)/2 + i * (POD_W + COUPLE_GAP) + POD_W/2;
+  };
+
   function place(b, left){
     /* A visiting house takes no room here. It is placed afterwards, in its
        own lane, wherever its child ended up standing — so reserving a slot
@@ -4168,11 +4288,40 @@ function computeLayout(){
       cursor += w + SIB_GAP;
       span += w + (i ? SIB_GAP : 0);
     });
+    const move = (n, d) => { n.x += d; n.kids.forEach(k => move(k, d)); };
+
+    /* THE STRAIGHTENING, and it is one idea: a household on the line stands
+       over the CHILD of it that is also on the line, not over the middle of
+       all its children. Do that at every step and the whole descent shares
+       one x, from the oldest elder anybody has traced down to the person
+       holding the phone.
+
+       Nothing is reordered and no gap is opened. Seniority is a fact about
+       the family and a straight line is a convenience for the reader; the
+       convenience does not get to rewrite the fact, and the row stays packed
+       exactly as tightly as it was. The only thing that moves is the
+       household above, sideways, onto its heir.
+
+       It is measured PERSON to PERSON. A household is a husband and a wife
+       standing side by side, so lining up their middles leaves the line
+       stepping half a pod sideways at every generation — which is precisely
+       the wandering this shape exists to stop. */
+    const mineOnLine = onSpine.get(b);
+    const heir = mineOnLine ? kids.find(k => onSpine.has(k)) : null;
+    if (heir){
+      b.x = heir.x + offsetIn(heir, onSpine.get(heir)) - offsetIn(b, mineOnLine);
+      /* Standing over the heir can push this household left of where the
+         family before it ends. Everything under it then moves along too, so
+         the line stays straight and only its position on the page changes. */
+      const over = left - (b.x - width(b)/2);
+      if (over > 0){ b.x += over; kids.forEach(k => move(k, over)); span += over; }
+      return Math.max(span, (b.x + width(b)/2) - left);
+    }
+
     b.x = (kids[0].x + kids[kids.length - 1].x) / 2;
     const mine = width(b);
     if (mine > span){
       const shift = (mine - span) / 2;
-      const move = (n, d) => { n.x += d; n.kids.forEach(k => move(k, d)); };
       kids.forEach(k => move(k, shift));
       b.x = left + mine/2;
       return mine;
@@ -8104,6 +8253,7 @@ function kinshipCoverage(budget){
    Three states, not two. "Auto" follows the device, which is what most people
    want and what the page did before this existed; the other two override it,
    for a bright room with a dark system setting or the reverse. */
+const SHAPE_KEY = 'muti-baobab-shape';
 const THEME_KEY = 'muti-baobab-theme';
 const PALETTE_KEY = 'muti-baobab-palette';
 
@@ -8158,6 +8308,7 @@ function applyLook(theme, palette){
    then another. */
 function loadTheme(){
   applyLook(readPref(THEME_KEY, THEMES), readPref(PALETTE_KEY, PALETTES));
+  setShape(readPref(SHAPE_KEY, SHAPES));
 }
 
 // Is the page dark right now? Decides which face of each swatch to show, so
@@ -8183,10 +8334,20 @@ function openLook(){
   const draw = () => {
     const theme = readPref(THEME_KEY, THEMES);
     const pal = readPref(PALETTE_KEY, PALETTES);
+    const shape = readPref(SHAPE_KEY, SHAPES);
     const dark = nowDark();
     el.innerHTML =
       `<p class="cap">How the tree looks</p>` +
-      `<p class="lbl">Light</p>` +
+      /* THE SHAPE FIRST, because it is the one that changes the picture
+         rather than the light on it. */
+      `<p class="lbl">Shape</p>` +
+      `<div class="seg" id="lookShape">` +
+        SHAPES.map(x => `<button type="button" data-shape="${x.v}" ` +
+          `aria-pressed="${x.v === shape}" title="${esc(x.note)}">${x.label}</button>`).join('') +
+      `</div>` +
+      `<p class="roothint">${esc((SHAPES.find(x => x.v === shape) || SHAPES[0]).note)}` +
+      `${shape === '' ? ' — the line runs through whoever is marked You.' : ''}</p>` +
+      `<p class="lbl" style="margin-top:14px;">Light</p>` +
       `<div class="seg" id="lookTheme">` +
         THEMES.map(t => `<button type="button" data-theme="${t.v}" ` +
           `aria-pressed="${t.v === theme}" title="${esc(t.note)}">${t.label}</button>`).join('') +
@@ -8207,6 +8368,14 @@ function openLook(){
       (BUILD ? `<p class="build">Build ${esc(BUILD)}</p>` : '');
     placeForm(el);
 
+    el.querySelectorAll('[data-shape]').forEach(b => b.onclick = () => {
+      writePref(SHAPE_KEY, b.dataset.shape);
+      setShape(b.dataset.shape);
+      draw();                       // the panel says which shape is on now
+      render(); fit();
+      const x = SHAPES.find(q => q.v === b.dataset.shape) || SHAPES[0];
+      say(`${x.label} — ${x.note}.`);
+    });
     el.querySelectorAll('[data-theme]').forEach(b => b.onclick = () => {
       writePref(THEME_KEY, b.dataset.theme);
       applyLook(b.dataset.theme, readPref(PALETTE_KEY, PALETTES));
