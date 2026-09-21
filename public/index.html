@@ -10161,6 +10161,47 @@ function openWays(anchorId){
   el.addEventListener('keydown', e => { if (e.key === 'Escape'){ e.preventDefault(); closeForm(); } });
 }
 
+/* ── WHAT THE APP WILL DO WITH THE NAME YOU TYPE ─────────────────────────
+ *
+ * "Have clearer instructions on how to enter, from their names."
+ *
+ * The field said "Name" and nothing else, so two things that matter were
+ * never said. A title is not a name — Sekuru, Mai, Baba are words for
+ * somebody, and nameTokens() sets them aside before two records are ever
+ * compared, so a man entered as "Sekuru Thomas" and the same man entered as
+ * "Thomas" are matched on Thomas either way. Nobody typing knew that. And a
+ * lone first name is the single commonest way one man ends up in a tree
+ * twice, because the second person to write him down has nothing to
+ * recognise him by.
+ *
+ * Not a page of rules nobody reads. The rule while the field is empty, and
+ * then, the moment it applies, what THIS name will be taken as. */
+function nameHelp(written){
+  const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
+  const raw = String(written || '').trim();
+  if (!raw){
+    return 'Write the name the family uses. One name is enough to start, ' +
+           'and a family name as well lets another relative recognise them.';
+  }
+  const bare = w => w.toLowerCase().replace(/[\u2018\u2019'.]/g, '');
+  const words = raw.split(/[\s-]+/).filter(Boolean);
+  const titles = words.filter(w => TITLES.has(bare(w)));
+  const kept = nameTokens(raw);
+  if (titles.length && kept.length){
+    return `${titles.join(' ')} is what you call them, not their name. It is ` +
+           `set aside, and they are recognised by ${kept.map(cap).join(' ')}.`;
+  }
+  if (titles.length){
+    return `${titles.join(' ')} is a word for somebody, not a name — and the ` +
+           `word for them is worked out from the tree. Their own name goes here.`;
+  }
+  if (kept.length === 1){
+    return 'A family name as well helps, so that a relative filling in the ' +
+           'same branch recognises them instead of writing them down again.';
+  }
+  return '';
+}
+
 /* ── grow form ──────────────────────────────────────────────────────── */
 const LABEL = { parent:'parent of', sibling:'sibling of', partner:'partner of', child:'child of' };
 let formInk = '';
@@ -10213,10 +10254,16 @@ function openForm(kind, anchorId, said){
       /* Named by the word, because the word is what was asked for. The line
          under it says where they will actually be written down, so nobody is
          ever surprised by what the app did with their answer. */
-      ? `<p class="cap">New <b>${esc(said.term)}</b><br>${esc(said.gloss || '')}</p>` +
-        `<p class="covnote">Recorded as ${esc(LABEL[kind])} <b>${esc(anchor.name)}</b>.</p>`
+      ? `<p class="cap">New <b>${esc(said.term)}</b><br>${esc(said.gloss || '')}</p>`
       : `<p class="cap">New <b>${LABEL[kind]}</b><br>${esc(anchor.name)}</p>`) +
-    `<input id="fName" class="fld" placeholder="Name" autocomplete="off">` +
+    /* WHERE THEY WILL HANG, said on every add and not only on the ones that
+       came in by a word. "They all need to be linked and branching from
+       somewhere" is the rule the form keeps — so the form says so, and
+       nobody is left wondering whether they have just made a loose name. */
+    `<p class="covnote">Recorded as ${esc(LABEL[kind])} <b>${esc(anchor.name)}</b>. ` +
+    `Every name in the tree branches from somebody.</p>` +
+    `<input id="fName" class="fld" placeholder="Their name" autocomplete="off">` +
+    `<p class="roothint" id="fNameWhy"></p>` +
     `<div class="seg" id="fSex">` +
       `<button type="button" data-sex="f" aria-pressed="${said.sex === 'f'}">She</button>` +
       `<button type="button" data-sex="m" aria-pressed="${said.sex === 'm'}">He</button>` +
@@ -10224,8 +10271,8 @@ function openForm(kind, anchorId, said){
     order + whose + withWho +
     `<input id="fTotem" class="fld" placeholder="Totem / mutupo (optional)" autocomplete="off">` +
     `<div class="row">` +
-      `<input id="fBorn" class="fld" placeholder="Born" autocomplete="off">` +
-      `<input id="fDied" class="fld" placeholder="Died" autocomplete="off">` +
+      `<input id="fBorn" class="fld" placeholder="Year born" autocomplete="off">` +
+      `<input id="fDied" class="fld" placeholder="Year died" autocomplete="off">` +
     `</div>` +
     `<div class="row"><button class="btn" id="fGo">Grow</button>` +
     `<button class="btn ghost" id="fNo">Cancel</button></div>`;
@@ -10277,8 +10324,18 @@ function openForm(kind, anchorId, said){
   // instead of each keeping their own copy of a grandfather.
   const box = document.createElement('div');
   box.className = 'dupes';
-  $('fName').insertAdjacentElement('afterend', box);
+  // Below the hint, not between it and the field it explains.
+  ($('fNameWhy') || $('fName')).insertAdjacentElement('afterend', box);
   const nameEl = $('fName');
+  const nameWhy = $('fNameWhy');
+  const tellName = () => {
+    if (!nameWhy || !nameWhy.isConnected) return;
+    const words = nameHelp(nameEl.value);
+    nameWhy.textContent = words;
+    nameWhy.hidden = !words;
+  };
+  nameEl.addEventListener('input', tellName);
+  tellName();
   const suggest = () => {
     // the form may have closed while this was waiting its turn
     if (!nameEl.isConnected) return;
