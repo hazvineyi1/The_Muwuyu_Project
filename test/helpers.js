@@ -138,7 +138,7 @@ function loadFrontend(){
       familyLines, foldableLines, foldedAway, forgetLines, isFolded, loadFolded, FAM_HUES, famPanel,
       whyHere(id){ computeLayout(); return whyHere(id); }, positionOf,
       whyOnCard(id){ computeLayout(); return whyOnCard(id); },
-      branchPath, BAR, yearOf,
+      branchPath, BAR, yearOf, hubRooms, hubMark, startAgain,
       // The grow form as it is built, so a suite can read what it offers.
       formHtml(kind, anchorId, said){ openForm(kind, anchorId, said); return formInk; },
       treeSvg(){ draw(); return treeSvg(); },

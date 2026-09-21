@@ -670,6 +670,34 @@ body.carrying .pod{transition:none;}
   border:1.5px solid hsl(var(--fam) var(--fam-s) var(--fam-l));}
 #form .fams .fam.shut b{color:var(--gold);}
 
+/* The rooms behind the one door. A name and a sentence each, because the
+   names alone — Roots, Mitupo, Kinship, Words — mean nothing to somebody who
+   has just been handed a link to their family's tree. */
+#form .rooms{display:flex; flex-direction:column; gap:5px; margin:2px 0 10px;}
+#form .room{
+  display:block; width:100%; text-align:left; cursor:pointer;
+  padding:9px 11px; border-radius:12px 4px 12px 4px;
+  background:var(--pod); border:1.5px solid var(--pod-edge);
+}
+#form .room:hover{border-color:var(--gold-soft); background:var(--pod-hi);}
+#form .room u{
+  display:block; text-decoration:none; font-family:'Karla',sans-serif;
+  font-size:13px; font-weight:700; color:var(--ink); line-height:1.35;
+}
+#form .room u i{
+  display:inline-flex; align-items:center; justify-content:center;
+  min-width:16px; height:16px; margin-left:7px; padding:0 4px;
+  border-radius:999px; background:var(--gold); color:var(--sky);
+  font-size:9.5px; font-weight:800; font-style:normal; vertical-align:1px;
+}
+#form .room u small{
+  display:block; font-weight:400; font-size:11px; color:var(--muted);
+  margin-top:3px; line-height:1.45;
+}
+/* Starting again is the last line of the last group, and it says so. */
+#form .room.danger u{color:var(--gold);}
+#form .room.danger{border-style:dashed;}
+
 /* an empty socket where somebody's parents will go */
 .pod.socket{
   background:transparent; border-style:dashed; border-color:var(--pod-edge);
@@ -1129,6 +1157,31 @@ body.carrying .pod{transition:none;}
   font-family:'Karla',sans-serif; font-size:12.5px; font-weight:600;
 }
 #bar button:hover{background:var(--pod-hi); color:var(--ink);}
+/* GROUPED, NOT PILED. Three clusters with a hairline between them: moving
+   around the picture, acting on it, and the doors. A row of equal buttons
+   says everything is equally important, which is the same as saying nothing
+   is. */
+#bar .grp{display:flex; align-items:center; gap:2px;}
+#bar .sep{
+  width:1px; align-self:stretch; margin:4px 6px;
+  background:var(--pod-edge); opacity:.7;
+}
+/* The one thing everybody does, so it is the one thing that looks like a
+   button rather than a word. */
+#bar button.key{
+  background:var(--pod-hi); color:var(--ink);
+  box-shadow:inset 0 0 0 1.5px var(--pod-edge);
+}
+#bar button.key:hover{box-shadow:inset 0 0 0 1.5px var(--gold-soft); color:var(--gold);}
+/* The mark on the door: how many things behind it are waiting. */
+#bar #hub{position:relative;}
+#bar #hub i{
+  display:inline-flex; align-items:center; justify-content:center;
+  min-width:16px; height:16px; margin-left:6px; padding:0 4px;
+  border-radius:999px; background:var(--gold); color:var(--sky);
+  font-size:9.5px; font-weight:800; font-style:normal; line-height:1;
+  vertical-align:1px;
+}
 /* The two zoom buttons. One character each, so they need a shape of their own
    or they read as punctuation between the words beside them. */
 #bar button.zoom{
@@ -1299,21 +1352,28 @@ body.carrying .pod{transition:none;}
   </span>
 </div>
 
+<!-- THE BAR, AND WHY IT IS SHORT.
+     It used to hold thirteen buttons in one flat row — Fit, two zooms, Find,
+     Undo, Clear, Muwuyu, Roots, Set aside, Other families, Mitupo, Kinship,
+     Words, a duplicate notice and the tally — with no grouping and no
+     hierarchy. Everything looked equally important, which meant nothing did,
+     and Clear (which empties the whole tree) sat with the same weight as Fit.
+     On a phone it was unusable.
+     What stays here is what a person does OFTEN and does to the PICTURE:
+     move around it, look somebody up, take back a mistake. Everything else
+     is a room you go to, and they are all named on one door. -->
 <div id="bar" hidden>
-  <button id="fit">Fit</button>
-  <button class="zoom" id="zout" title="Smaller" aria-label="Show more of the tree">&minus;</button>
-  <button class="zoom" id="zin" title="Bigger" aria-label="Show less of the tree, larger">+</button>
-  <button class="who" id="find" title="Find somebody by name, and join them on">Find</button>
+  <span class="grp" role="group" aria-label="Move around the tree">
+    <button id="fit">Fit</button>
+    <button class="zoom" id="zout" title="Smaller" aria-label="Show more of the tree">&minus;</button>
+    <button class="zoom" id="zin" title="Bigger" aria-label="Show less of the tree, larger">+</button>
+  </span>
+  <span class="sep" aria-hidden="true"></span>
+  <button class="who key" id="find" title="Find somebody by name, and join them on">Find</button>
   <button id="undo">Undo</button>
-  <button id="clear">Clear</button>
+  <span class="sep" aria-hidden="true"></span>
+  <button class="who" id="hub" aria-haspopup="dialog">This family<i id="hubMark" hidden></i></button>
   <button class="who" id="look" title="Light or dark, and which colours">Muwuyu</button>
-  <button class="who" id="roots">Roots</button>
-  <button class="who" id="aside" hidden></button>
-  <button class="who" id="families" hidden>Other families</button>
-  <button class="who" id="totems" hidden>Mitupo</button>
-  <button class="who" id="kin">Kinship</button>
-  <button class="who" id="words">Words</button>
-  <button class="dupes" id="dupes" hidden></button>
   <span class="tally"><b id="count">0</b> in the tree</span>
 </div>
 
@@ -2411,13 +2471,7 @@ function setDupes(pairs, from, tooBig){
 
 /* The only thing render() does about duplicates, and it does it from the
    cache: read a number, set a word. */
-function paintDupeChip(){
-  const chip = $('dupes');
-  if (!chip) return;
-  const n = dupes.likely.length;
-  chip.hidden = !n;
-  chip.textContent = n === 1 ? '1 possible duplicate' : `${n} possible duplicates`;
-}
+function paintDupeChip(){ paintHub(); }
 
 /* The server hands back the two people as records; the panel here wants ids.
 
@@ -10323,6 +10377,113 @@ function famPanel(){
     `</div>`;
 }
 
+/* ── ONE DOOR, WITH EVERY ROOM NAMED ON IT ───────────────────────────────
+ *
+ * "Redesign and build this using the best structure... intuitive, cohesive."
+ *
+ * There were thirteen buttons in the bar and no structure among them. The
+ * cost is not ugliness, it is that a flat list cannot say what anything is
+ * FOR: Roots, Mitupo, Kinship and Words are four words that mean nothing to
+ * somebody who has just been handed a link to their family's tree, and
+ * Clear — which empties the whole thing — sat between Undo and the colours.
+ *
+ * So there is one door, and behind it every room is named AND described in
+ * a sentence. Three groups, because there are only three kinds of thing
+ * here: reading this family, putting it right, and looking past it. The
+ * order is that order deliberately — the reading is what people come for,
+ * the corrections are what they need when something is wrong, and starting
+ * again is the last line of the last group where nobody hits it by accident.
+ *
+ * WHAT GOES IN THE BAR INSTEAD is what a person does often and does to the
+ * PICTURE. Everything in here is a room you go to and come back from. */
+function hubRooms(){
+  const aside = asidePeople().length;
+  const mine = noticesFor(meName()).length;
+  const dupeN = dupes.likely.length;
+  const totems = totemsHere().length;
+  return [
+    { group:'Reading this family', rooms:[
+      { id:'roots', name:'Roots', go:openRoots,
+        why:'How far back this family has been traced, and who is at the end of each line.' },
+      { id:'kin', name:'Kinship', go:openKinship,
+        why:'What any two people are to each other, in your family’s own words.' },
+      { id:'words', name:'Words', go:openWords,
+        why:'The words this family uses, including the ones it has taught the app.' },
+      totems ? { id:'totems', name:'Mitupo', go:openTotems,
+        why:`The ${totems === 1 ? 'house' : totems + ' houses'} this family carries, and what they mean.` } : null
+    ].filter(Boolean) },
+    { group:'Beyond this tree', rooms:[
+      (store === 'shared' && people().length >= 2)
+        ? { id:'families', name:'Other families', go:openFamilies,
+            why:'Families on this server whose tree may join yours.' } : null
+    ].filter(Boolean) },
+    /* LAST, AND LAST ON PURPOSE. Starting again empties the visible tree,
+       and it used to sit in the bar between Undo and the colours with the
+       same weight as Fit. It is the final line of the final group, below
+       everything a person actually came here to do. */
+    { group:'Putting it right', rooms:[
+      aside ? { id:'aside', name:`Set aside${aside ? ' · ' + aside : ''}`, go:openAside,
+        mark: mine ? mine : 0,
+        why: mine
+          ? `${mine} ${mine === 1 ? 'entry' : 'entries'} you recorded ${mine === 1 ? 'has' : 'have'} been taken out of the tree. Nothing is deleted.`
+          : `${aside} ${aside === 1 ? 'record is' : 'records are'} out of the tree. Nothing is deleted, and any of them can come back.` } : null,
+      dupeN ? { id:'dupes', name:`Possible duplicates · ${dupeN}`, go:openDuplicates,
+        mark: dupeN,
+        why:'Two records that may be the same person, for somebody who knows to say.' } : null,
+      { id:'clear', name:'Start again', go:startAgain, danger:true,
+        why:'Takes everyone out of the visible tree. Every record stays, and Set aside puts them back.' }
+    ].filter(Boolean) },
+  ].filter(g => g.rooms.length);
+}
+
+/* The mark on the door: how many things behind it are waiting to be looked
+   at. Never a number for its own sake — only entries of YOURS that somebody
+   took out, and pairs the app thinks may be one person. */
+function hubMark(){
+  return noticesFor(meName()).length + dupes.likely.length;
+}
+function paintHub(){
+  const mark = $('hubMark');
+  if (!mark) return;
+  const n = hubMark();
+  mark.hidden = !n;
+  // Emptied rather than left holding a nought, because a hidden element
+  // still has text and anything reading the bar aloud would read it.
+  mark.textContent = n ? (n > 9 ? '9+' : String(n)) : '';
+  const btn = $('hub');
+  if (btn) btn.title = n
+    ? `${n} ${n === 1 ? 'thing' : 'things'} waiting to be looked at`
+    : 'Roots, kinship, the words, and putting things right';
+}
+
+function openHub(){
+  closeForm();
+  pending = { kind:'dupes', anchorId: sel || state.rootId };
+  const el = document.createElement('div');
+  el.id = 'form';
+  document.body.appendChild(el);
+  const groups = hubRooms();
+  el.className = 'wide';
+  el.innerHTML =
+    `<p class="cap">This family</p>` +
+    groups.map(g =>
+      `<p class="lbl">${esc(g.group)}</p><div class="rooms">` +
+      g.rooms.map(r =>
+        `<button type="button" class="room${r.danger ? ' danger' : ''}" data-room="${r.id}">` +
+          `<u>${esc(r.name)}${r.mark ? `<i>${r.mark}</i>` : ''}` +
+          `<small>${esc(r.why)}</small></u></button>`).join('') +
+      `</div>`).join('') +
+    `<div class="row"><button class="btn ghost" id="hubNo">Close</button></div>`;
+  placeForm(el);
+  const all = groups.flatMap(g => g.rooms);
+  el.querySelectorAll('[data-room]').forEach(b => b.onclick = () => {
+    const r = all.find(x => x.id === b.dataset.room);
+    if (r) r.go();
+  });
+  $('hubNo').onclick = closeForm;
+  el.addEventListener('keydown', e => { if (e.key === 'Escape'){ e.preventDefault(); closeForm(); } });
+}
+
 function openLook(){
   closeForm();
   pending = { kind:'dupes', anchorId: sel || state.rootId };
@@ -10600,29 +10761,19 @@ async function claimViewer(id){
    nothing is set aside — an empty panel is not worth a permanent button — and
    calls out entries of YOURS that somebody took out, because that is the one
    thing here you should not have to go looking for. */
-function updateAside(){
-  const btn = $('aside');
-  if (!btn) return;
-  const all = asidePeople().length;
-  const mine = noticesFor(meName()).length;
-  btn.hidden = !all;
-  if (!all) return;
-  btn.classList.toggle('notice', mine > 0);
-  btn.innerHTML = mine
-    ? `<b>${mine}</b> of yours set aside`
-    : `Set aside <b>${all}</b>`;
-  btn.title = mine
-    ? `${mine} ${mine === 1 ? 'entry' : 'entries'} you recorded ${mine === 1 ? 'has' : 'have'} ` +
-      `been taken out of the tree. Tap to see why, and to put ${mine === 1 ? 'it' : 'them'} back.`
-    : `${all} ${all === 1 ? 'record is' : 'records are'} out of the tree. Nothing is deleted.`;
-}
+/* Both notices used to be their own buttons in the bar — one for records
+   taken out of the tree, one for possible duplicates — which is two more
+   things competing for attention with Fit and Find. They are the same kind
+   of thing: something behind the door is waiting to be looked at. So they
+   are one mark on the door, and the door says what they are. */
+function updateAside(){ paintHub(); }
 
 function updateWho(){
   updateAside();
   // Only worth offering once there is a tree to compare, and only when there
   // is a server holding other families to compare it with.
-  const fam = $('families');
-  if (fam) fam.hidden = store !== 'shared' || people().length < 2;
+  // Other families and Mitupo appear inside the door when there is something
+  // behind them, so there is nothing to show or hide out here any more.
   const mine = $('family');
   if (mine){
     mine.hidden = store !== 'shared';
@@ -10638,8 +10789,6 @@ function updateWho(){
   // there is nothing to sign out of.
   const out = $('signout');
   if (out) out.hidden = store !== 'shared';
-  const tot = $('totems');
-  if (tot) tot.hidden = !people().some(p => p.totem);
   const btn = $('who');
   if (!btn) return;
   const p = meId && state.people[meId];
@@ -11060,20 +11209,14 @@ $('signout').onclick = async () => {
   location.href = '/gate';
 };
 
-$('dupes').onclick = openDuplicates;
 $('find').onclick = openFind;
 $('look').onclick = openLook;
-$('kin').onclick = openKinship;
-$('words').onclick = openWords;
-$('roots').onclick = openRoots;
+$('hub').onclick = openHub;
 // A full reload rather than a re-fetch: the page has been sitting there
 // unable to save, so the tree it holds may be behind whatever else has
 // been recorded since. Starting clean is the honest recovery.
 $('stalledGo').onclick = () => location.reload();
-$('aside').onclick = openAside;
-$('families').onclick = openFamilies;
 $('family').onclick = openFamily;
-$('totems').onclick = openTotems;
 $('seedFamilyGo').onclick = openFamily;
 
 /* ZOOM YOU CAN DRIVE WITH A FINGER.
@@ -11092,7 +11235,7 @@ $('undo').onclick = () => {
   state = JSON.parse(history.pop());
   sel = null; closeForm(); render(); save();
 };
-$('clear').onclick = () => {
+function startAgain(){
   // This used to replace the whole tree with an empty one behind a single
   // browser confirm — on a tree many relatives are filling in together, one
   // mis-tap from erasing all of it. Under "nothing is ever deleted" it cannot
@@ -11113,7 +11256,7 @@ $('clear').onclick = () => {
   state.rootId = null;
   sel = null; closeForm(); render(); save();
   say(`${n} ${n === 1 ? 'person' : 'people'} set aside. Nothing was deleted.`);
-};
+}
 
 $('seedGo').onclick = plant;
 $('seedName').addEventListener('keydown', e => { if (e.key === 'Enter') plant(); });
