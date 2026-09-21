@@ -233,4 +233,202 @@ section('AN UNKNOWN REACH SHOWS EVERYBODY, rather than nobody');
      Object.keys(t.fe.layoutOf().persons).length, 12);
 }
 
+/* ── TWO HALVES ──────────────────────────────────────────────────────────
+ *
+ * "Those boxed in red are my grandfather's siblings on my father's side.
+ *  Then in the bigger box, they are my father's brother's wife's siblings.
+ *  They have moved all the way across and infringed on my mother's family."
+ *
+ * Two groups of his father's people, drawn past his mother's family to the
+ * far left edge, with hers stranded in the middle of them. Nothing was
+ * broken in the arithmetic: households were sorted by seniority alone, and
+ * seniority does not know whose people you are, so the oldest household in
+ * the tree takes the left edge whether it is your father's uncle or a woman
+ * who married into your father's brother's house.
+ *
+ * A family knows it has sides. Kwababa and kwaamai are not two words for the
+ * same place, and the vocabulary has been built on that division all along —
+ * Sekuru through your father is not Sekuru through your mother. The picture
+ * now makes the same division it does: father's people left of the line,
+ * mother's people right of it.
+ *
+ * The fixture is his tree, reduced to the two boxes and the family they
+ * crossed. The wife's people are the case that matters, because they are
+ * hers by blood and his side by marriage — they reach the line THROUGH his
+ * father's brother, and that is the only thing that puts them on the left. */
+function halves(){
+  const fe = loadFrontend();
+  const P = (n, s, t, b) => fe.addPerson(n, s, t, b, '');
+
+  // FATHER'S SIDE. His great-grandmother, his grandfather, and the
+  // grandfather's brother and sister — the smaller of the two red boxes.
+  const ggm    = P('Mbuya VaMangwenya', 'f', 'Mwendamberi', '1880');
+  const gf     = fe.grow('child', ggm, 'Chaitezvi Musoni', 'm', 'Mwendamberi', { born:'1900' });
+  const gBro   = fe.grow('child', ggm, 'Baya Musoni', 'm', 'Mwendamberi', { born:'1898' });
+  const gSis   = fe.grow('child', ggm, 'Tsowhe Musoni', 'f', 'Mwendamberi', { born:'1902' });
+  const dad    = fe.grow('child', gf, 'Sydney Musoni', 'm', 'Mwendamberi', { born:'1940' });
+  const dadBro = fe.grow('child', gf, 'Terence Musoni', 'm', 'Mwendamberi', { born:'1945' });
+
+  // The bigger box: his father's brother's WIFE, and her own family.
+  const wife   = fe.grow('partner', dadBro, 'Daisy Marumahoko', 'f', 'Soko', { born:'1948' });
+  const herMum = P('Georgina Vera', 'f', 'Soko', '1920');
+  fe.linkExisting('child', herMum, wife);
+  const hers = [];
+  for (const [n, y, s] of [['David Marumahoko', '1944', 'm'],
+                           ['Maryjane Chiweshe', '1946', 'f'],
+                           ['Phineas Marumahoko', '1950', 'm'],
+                           ['Doreen Marumahoko', '1952', 'f']])
+    hers.push(fe.grow('child', herMum, n, s, 'Soko', { born:y }));
+
+  // MOTHER'S SIDE — the family that was crossed.
+  const mum    = fe.grow('partner', dad, 'Evelyn Mandaba', 'f', 'Moyondizvo', { born:'1954' });
+  const mgf    = P('James Mandaba', 'm', 'Moyondizvo', '1925');
+  fe.linkExisting('child', mgf, mum);
+  const mBro   = fe.grow('child', mgf, 'Joseph Mandaba', 'm', 'Moyondizvo', { born:'1956' });
+  const mSis   = fe.grow('child', mgf, 'Minah Mandaba', 'f', 'Moyondizvo', { born:'1958' });
+
+  const me = fe.grow('child', dad, 'Hazvineyi Musoni', 'm', 'Mwendamberi', { born:'1979' });
+  fe.setMe(me);
+  fe.setShape('');
+  return { fe, me, ggm, gf, gBro, gSis, dad, dadBro, wife, herMum, hers,
+           mum, mgf, mBro, mSis,
+           /* the two groups as they stand OUTSIDE his own household: the
+              people who had crossed, and the people they crossed. */
+           fathers: [herMum, ...hers, gBro],
+           mothers: [mgf, mBro, mSis] };
+}
+
+section('THE FATHER’S PEOPLE ARE ON THE FATHER’S SIDE');
+{
+  const t = halves();
+  const x = id => Math.round(at(t.fe, id).x);
+  const trunk = x(t.me);
+  const bad = t.fathers.filter(id => x(id) >= trunk)
+                       .map(id => t.fe.getState().people[id].name);
+  eq('every one of them stands left of the line', bad, []);
+}
+
+section('and the mother’s people on the mother’s side');
+{
+  const t = halves();
+  const x = id => Math.round(at(t.fe, id).x);
+  const trunk = x(t.me);
+  const bad = t.mothers.filter(id => x(id) <= trunk)
+                       .map(id => t.fe.getState().people[id].name);
+  eq('none of them is on his father’s half of the picture', bad, []);
+}
+
+section('SO NOBODY CROSSES ANYBODY, which is the complaint itself');
+/* The bug was not that a family was on the wrong side of the middle — it was
+   that HIS MOTHER'S FAMILY WAS IN BETWEEN. Reading right to left from the
+   line you met the Mandabas, then his father's uncle, then the Marumahokos,
+   and every line on the screen had to cross the others to get there. This is
+   the property that says it cannot happen again: draw a line between the two
+   halves and neither family has a foot in the other. */
+{
+  const t = halves();
+  const x = id => Math.round(at(t.fe, id).x);
+  const rightmostFather = Math.max(...t.fathers.map(x));
+  const leftmostMother  = Math.min(...t.mothers.map(x));
+  check('his father’s people all end before his mother’s begin',
+        rightmostFather < leftmostMother,
+        JSON.stringify({ rightmostFather, leftmostMother }));
+}
+
+section('the wife’s people are his father’s side, because they arrive through him');
+/* The subtle half of it, and the half a simpler rule gets wrong. Daisy's
+   mother and her brothers and sisters are Soko, not Mwendamberi; no blood of
+   his runs through them. They are on his father's side for one reason: the
+   only way to walk from them to him is through his father's brother. A rule
+   reckoned on surname, or on blood, or on who is older, puts them anywhere
+   at all — and anywhere at all is where they were. */
+{
+  const t = halves();
+  const x = id => Math.round(at(t.fe, id).x);
+  check('her mother stands with the family she married into',
+        x(t.herMum) < x(t.me), JSON.stringify({ her:x(t.herMum), me:x(t.me) }));
+  check('and so do her brothers and sisters',
+        t.hers.every(id => x(id) < x(t.me)),
+        JSON.stringify(t.hers.map(x)));
+}
+
+section('SENIORITY STILL RUNS INSIDE EACH HALF');
+/* Sides outrank seniority in the sort, so this is the thing that had to be
+   checked after: dividing the picture must not scramble the order within a
+   row. The eldest is still on the left of his own people. */
+{
+  const t = halves();
+  const x = id => Math.round(at(t.fe, id).x);
+  const elders = [t.gBro, t.gf, t.gSis].map(x);   // 1898, 1900, 1902
+  check('his grandfather’s brother, then him, then his sister',
+        elders[0] < elders[1] && elders[1] < elders[2], JSON.stringify(elders));
+  const marumahoko = t.hers.map(x);               // 1944, 1946, 1950, 1952
+  check('and the wife’s family reads eldest to youngest too',
+        marumahoko.every((v, i) => i === 0 || marumahoko[i - 1] < v),
+        JSON.stringify(marumahoko));
+  const mandaba = [t.mum, t.mBro, t.mSis].map(x); // 1954, 1956, 1958
+  check('as does his mother’s', mandaba[0] < mandaba[1] && mandaba[1] < mandaba[2],
+        JSON.stringify(mandaba));
+}
+
+section('and a younger brother of the line is not a family that crossed');
+/* Tsowhe is his grandfather's YOUNGER sister, so she stands to the right of
+   the line — one place along a row, where birth order puts her. That is not
+   the fault this section is about, and a rule strict enough to drag her left
+   would be putting the younger before the elder to satisfy a picture. She is
+   still nowhere near his mother's family, which is the thing that matters. */
+{
+  const t = halves();
+  const x = id => Math.round(at(t.fe, id).x);
+  check('she sits just past her brother, in birth order',
+        x(t.gSis) > x(t.gf), JSON.stringify({ her:x(t.gSis), him:x(t.gf) }));
+  check('and nowhere near the mother’s family',
+        x(t.gSis) < x(t.mgf), JSON.stringify({ her:x(t.gSis), them:x(t.mgf) }));
+}
+
+section('DIVIDING THE PICTURE DOES NOT LAY ANYBODY ON ANYBODY');
+/* The sort moves whole households across the canvas, which is the move that
+   causes an overlap when the room is not accounted for. Checked on this
+   tree as well as the straight one, because this is the tree where the
+   households actually travel. */
+{
+  const t = halves();
+  const L = t.fe.layoutOf();
+  const rows = new Map();
+  for (const [id, q] of Object.entries(L.persons)){
+    const y = Math.round(q.y);
+    (rows.get(y) || rows.set(y, []).get(y)).push({ id, x:q.x });
+  }
+  let clash = null;
+  for (const [y, row] of rows){
+    row.sort((a, b) => a.x - b.x);
+    for (let i = 1; i < row.length; i++)
+      if (row[i].x - row[i - 1].x < 131.5)
+        clash = `y ${y}: ${row[i - 1].id} and ${row[i].id} are ` +
+                `${Math.round(row[i].x - row[i - 1].x)} apart`;
+  }
+  eq('every row is still clear', clash, null);
+}
+
+section('A TREE WITH NO SIDES TO IT IS STILL A TREE');
+/* Whoever is marked You may have no parents recorded, one parent, or not be
+   marked at all. There is then no father's half and no mother's half, and
+   the answer is the shape as it was — not an empty screen and not a throw. */
+{
+  const t = halves();
+  t.fe.setMe(t.ggm);          // the eldest in the tree: nobody above her
+  const alone = t.fe.layoutOf();
+  eq('nobody above you, everybody still drawn',
+     Object.keys(alone.persons).length, 17);
+
+  const fe = loadFrontend();
+  const only = fe.addPerson('Mai', 'f', 'Nzou', '1950', '');
+  const kid  = fe.grow('child', only, 'Her child', 'm', 'Nzou', { born:'1975' });
+  fe.setMe(kid);
+  fe.setShape('');
+  eq('one parent known, and the line runs through her',
+     Math.round(fe.layoutOf().persons[only].x),
+     Math.round(fe.layoutOf().persons[kid].x));
+}
+
 report();

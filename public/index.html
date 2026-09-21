@@ -4883,6 +4883,83 @@ function computeLayout(){
     const s = seniorSide(headOf(b1), headOf(b2));
     return SENIOR_LEFT ? s : -s;
   };
+  /* ── WHICH SIDE OF THE LINE A FAMILY STANDS ON ──────────────────────
+   *
+   * "Those boxed in red are my grandfather's siblings on my father's side.
+   *  In the bigger box, they are my father's brother's wife's siblings. They
+   *  have moved all the way across and infringed on my mother's family."
+   *
+   * Both groups belong to the father. Both were drawn at the far left, past
+   * the mother's people, because nothing in this layout had ever been told
+   * that a family HAS sides. Households were ordered by seniority, and
+   * seniority does not care whose people you are — so the oldest household
+   * in the tree goes to the left edge whether it is your father's uncle or
+   * your mother-in-law's grandmother, and everybody in between is crossed
+   * over to reach it.
+   *
+   * The spine gave the picture a middle. This gives it two halves:
+   * kwababa to the left of the line, kwaamai to the right, which is the
+   * division the words already make — Babamukuru and Sekuru are not on the
+   * same side of anybody.
+   *
+   * REACHED FROM EACH PARENT, NEVER THROUGH THE OTHER. Walking out from your
+   * father would otherwise cross his marriage to your mother and swallow her
+   * whole family as his side. Blocking the other parent — and you — at the
+   * door is the whole of the rule, and it is what makes a father's brother's
+   * WIFE'S people his side: they arrive through him, not through her. */
+  const sideOfPerson = new Map();
+  {
+    const anchor = (meId && ofPerson[meId]) ? meId
+                 : (state.rootId && ofPerson[state.rootId]) ? state.rootId : null;
+    const pu = anchor ? parentUnionOf(anchor) : null;
+    const dad = pu ? pu.partners.find(x => (state.people[x] || {}).sex === HOUSE_THROUGH) : null;
+    const mum = pu ? pu.partners.find(x => x !== dad) : null;
+    const reach = (from, blocked) => {
+      const seen = new Set();
+      if (!from || !state.people[from]) return seen;
+      const stack = [from];
+      while (stack.length){
+        const x = stack.pop();
+        if (seen.has(x) || blocked.has(x)) continue;
+        seen.add(x);
+        for (const u of unionsOf(x)){
+          for (const y of u.partners.concat(u.children)){
+            if (!seen.has(y) && !blocked.has(y) && present(y)) stack.push(y);
+          }
+        }
+        const up = parentUnionOf(x);
+        if (up) for (const y of up.partners){
+          if (!seen.has(y) && !blocked.has(y) && present(y)) stack.push(y);
+        }
+      }
+      return seen;
+    };
+    if (anchor && (dad || mum)){
+      const theirs = reach(dad, new Set([anchor, mum].filter(Boolean)));
+      const hers   = reach(mum, new Set([anchor, dad].filter(Boolean)));
+      for (const x of theirs) if (!hers.has(x)) sideOfPerson.set(x, -1);
+      for (const x of hers) if (!theirs.has(x)) sideOfPerson.set(x, 1);
+    }
+  }
+  /* A household takes the side its people are on, and stands in the middle
+     where they disagree or where nothing is known — which is where the line
+     itself and anybody joined to both halves belongs. */
+  const sideOf = b => {
+    let left = 0, right = 0;
+    for (const m of b.members){
+      const s = sideOfPerson.get(m);
+      if (s === -1) left++; else if (s === 1) right++;
+    }
+    if (left && !right) return -1;
+    if (right && !left) return 1;
+    return 0;
+  };
+  const sideCache = new Map();
+  const side = b => {
+    if (!sideCache.has(b)) sideCache.set(b, sideOf(b));
+    return sideCache.get(b);
+  };
+
   // Each group led by its most senior member; groups in that same order.
   const lead = new Map();
   for (const b of roots){
@@ -4890,6 +4967,15 @@ function computeLayout(){
     if (!lead.has(g) || seniorOf(b, lead.get(g)) < 0) lead.set(g, b);
   }
   roots.sort((b1, b2) => {
+    /* SIDE FIRST. It outranks seniority and it outranks keeping a connected
+       group together, and both of those are deliberate. A group that spans
+       the two halves is a group held together by ONE marriage — the father's
+       brother's wife — and the line to her people is shorter when they stand
+       beside the man they married into than when they are sorted to the far
+       edge by the age of their eldest. Splitting it is what stops the
+       crossing, not what causes it. */
+    const s1 = side(b1), s2 = side(b2);
+    if (s1 !== s2) return s1 - s2;
     const g1 = find(b1), g2 = find(b2);
     if (g1 !== g2) return seniorOf(lead.get(g1), lead.get(g2));
     return seniorOf(b1, b2);
