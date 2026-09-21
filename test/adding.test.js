@@ -72,7 +72,7 @@ section('THE PERSON IT HANGS OFF IS OFTEN NOT THE ONE YOU TAPPED');
 }
 
 section('THE WORD ANSWERS THE SENIORITY TOO');
-/* Babamukuru and Babamunini are the same man one way and not the other, and
+/* Babamukuru and Babamudiki are the same man one way and not the other, and
    the difference is which of them was born first. Picking the word has
    already said it. */
 {
@@ -80,7 +80,7 @@ section('THE WORD ANSWERS THE SENIORITY TOO');
   t.fe.grow('parent', t.me, 'Ben', 'm', 'Mwendamberi', { born:'1960' });
   const ways = t.fe.waysToAdd(t.me);
   eq('the older brother is older', ways.find(w => w.term === 'Babamukuru').preset.position, 'older');
-  eq('and the younger is younger', ways.find(w => w.term === 'Babamunini').preset.position, 'younger');
+  eq('and the younger is younger', ways.find(w => w.term === 'Babamudiki').preset.position, 'younger');
 }
 
 section('IT NEVER INVENTS THE PERSON IN BETWEEN');

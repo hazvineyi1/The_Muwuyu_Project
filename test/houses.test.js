@@ -135,12 +135,12 @@ section('A MARRIAGE JOINS THE HOUSES, NOT ONLY THE COUPLE');
   section('THE INDIVIDUAL WORDS STILL WIN — the house one only fills silence');
   /* This is the part that would break everything if it were wrong. The house
      rule is reached last, after blood and after marriage, so a father-in-law
-     is Tezvara and not a member of a house. A rule that shouted over the
+     is Vatezvara and not a member of a house. A rule that shouted over the
      precise words would be worse than no rule. */
   eq("his son's wife is Muroora", words(h.fe, h.mFather, h.nDau), ['Muroora']);
   eq("her father's word for him is Mukwasha", words(h.fe, h.nFather, h.mSon),
      ['Mukwasha']);
-  eq("and his for her father is Tezvara", words(h.fe, h.mSon, h.nFather), ['Tezvara']);
+  eq("and his for her father is Vatezvara", words(h.fe, h.mSon, h.nFather), ['Vatezvara']);
   eq("her brother is Tsano to him", words(h.fe, h.mSon, h.nBro), ['Tsano']);
 
   section('the house word carries a shape, so the family can replace it');

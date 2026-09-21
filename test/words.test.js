@@ -5,7 +5,7 @@
 // your cousins, and that only the crossed pair — your mother's brother and
 // your father's sister — stand apart. Every term on every card is derived
 // from it. But it said so one card at a time, which is the western way of
-// saying it: this person is your Babamukuru, that one your Babamunini.
+// saying it: this person is your Babamukuru, that one your Babamudiki.
 // Nobody reading one card at a time ever sees the shape of the thing.
 //
 // So the same engine is asked the other way round: not "what is this person

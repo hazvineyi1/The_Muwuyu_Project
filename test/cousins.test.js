@@ -134,7 +134,12 @@ section("and the younger ones, which are different words entirely");
   const me = fe.addPerson('Me', 'f', 'Nzou', '1980', '');
   fe.addUnion([dad, mum], [me]);
   const t = (a, b) => (fe.kinTerms(a, b).list[0] || {}).term;
-  eq("father's younger brother is Babamunini", t(me, dadYoungerBro), 'Babamunini');
+  /* ONE WORD, not two. The engine reached this same man by a second path —
+     a younger sister's husband, standing where a father stands — and called
+     him Babamudiki there while calling him Babamunini here. Both are Shona;
+     one family cannot use both for one man. The family's list says
+     Babamudiki. */
+  eq("father's younger brother is Babamudiki", t(me, dadYoungerBro), 'Babamudiki');
   eq("mother's younger sister is Amainini",    t(me, mumYoungerSis), 'Amainini');
 }
 
@@ -272,10 +277,16 @@ section('the words for people married in, or married to');
     check(label, w(a, b).includes(want),
           `wanted ${want}, got ${w(a, b).join(' + ') || 'nothing'}`);
 
-  has(man,   herDad, 'Tezvara', "a man's wife's father is Tezvara");
-  has(man,   herMum, 'Ambuya',  "and her mother is Ambuya");
-  has(woman, hisDad, 'Tezvara', "a woman's husband's father is Tezvara too");
-  has(woman, hisMum, 'Ambuya',  'and his mother is Ambuya');
+  /* THE FATHER IS ONE WORD BOTH WAYS and THE MOTHER IS NOT, which is the
+     whole of this section. A man's wife's mother is Ambuya; a woman's
+     husband's mother is Vamwene. The engine used to say Ambuya to both,
+     which handed half the family the other half's word. */
+  has(man,   herDad, 'Vatezvara', "a man's wife's father is Vatezvara");
+  has(man,   herMum, 'Ambuya',    "and her mother is Ambuya");
+  has(woman, hisDad, 'Vatezvara', "a woman's husband's father is Vatezvara too");
+  has(woman, hisMum, 'Vamwene',   'but his mother is Vamwene, which is hers to say');
+  check('and never Ambuya, which is the word a man uses',
+        !w(woman, hisMum).includes('Ambuya'), w(woman, hisMum).join(' + '));
 
   section("and it is the FATHER, not anybody standing in a father's place");
   // The one way a rule like this goes wrong is by being generous about what
@@ -284,7 +295,7 @@ section('the words for people married in, or married to');
   const herUncle = P("Her father's brother", 'm', 1928);
   const hgf = P('Her grandfather', 'm', 1900), hgm = P('Her grandmother', 'f', 1905);
   fe.addUnion([hgf, hgm], [herUncle, herDad]);
-  check('her Babamukuru is not his Tezvara', !w(man, herUncle).includes('Tezvara'),
+  check('her Babamukuru is not his Vatezvara', !w(man, herUncle).includes('Vatezvara'),
         w(man, herUncle).join(' + ') || 'described, not named');
 
   section("Muroora is one word for what English calls two relations");

@@ -2107,7 +2107,7 @@ function linkCandidates(kind, anchorId, limit){
    link. Two consequences drive everything below.
 
    PARALLEL relatives fold into the direct line. Your father's brothers are
-   fathers to you — Babamukuru if senior to him, Babamunini if junior — your
+   fathers to you — Babamukuru if senior to him, Babamudiki if junior — your
    mother's sisters are mothers, and the children of all of them are your
    brothers and sisters. There is no word for cousin because there is no such
    category.
@@ -2637,7 +2637,14 @@ function derive(who, tid, byBloodOnly){
                                shape: shapeOf('same-line-two-above', me.sex, them.sex),
                                plain:'somebody two generations above you on your own side' };
     if (genDiff === 1){
-      if (them.sex === 'm') return { term: senior ? 'Babamukuru' : 'Babamunini',
+      /* BABAMUDIKI, and only Babamudiki. This engine reached the same man by
+         two paths and gave him two different words: Babamunini here, where he
+         is your father's younger brother, and Babamudiki below, where he is
+         your younger sister's husband standing in a father's place. Both are
+         real Shona and that is not the point — one man, in one family, must
+         have one word, or the tree is teaching two. The family's own list
+         says Babamudiki. */
+      if (them.sex === 'm') return { term: senior ? 'Babamukuru' : 'Babamudiki',
                                      why:`${via} ${senior ? 'older' : 'younger'} brother`,
                                      shape: shapeOf(`parents-${senior ? 'older' : 'younger'}-brother`,
                                                     me.sex, 'm'),
@@ -2759,29 +2766,73 @@ function marriedIn(who, tid){
       if (them.sex === 'm') return { term:'Tsano', why:"your wife's brother" };
       if (them.sex === 'f') return { term:'Muramu', why:"your wife's sister" };
     }
+    /* THE WIVES OF YOUR HUSBAND'S BROTHERS, which the engine had no word for
+       at all and which is not a corner of this system — it is the daily one.
+       The women of a household are graded against each other exactly as the
+       brothers they married are: the wife of his older brother is Amaiguru,
+       the wife of his younger brother is Amainini. The same two words a woman
+       uses for her mother's older and younger sisters, because the standing
+       is the same standing.
+
+       The grading is not computed again here. Whether his brother is senior
+       is already the difference between Mukoma and Munin'ina, so the engine
+       asks itself that question and reads the answer off the word. One place
+       decides who is older, and everything that depends on it follows. */
+    if (spouse.sex === 'm' && them.sex === 'f'){
+      for (const h of partnersOf(tid)){
+        if (h === sp) continue;
+        const hus = state.people[h];
+        if (!hus || hus.sex !== 'm') continue;
+        const b = relationship(sp, h, true);
+        if (!b) continue;
+        if (b.term === 'Mukoma' || b.term === "Munin'ina"){
+          const older = b.term === 'Mukoma';
+          return {
+            term: older ? 'Amaiguru' : 'Amainini',
+            shape:`inlaw:married-to-my-husbands:${older ? 'older' : 'younger'}-brother:woman`,
+            plain:`your husband's ${older ? 'older' : 'younger'} brother's wife`,
+            why:`married to ${possess(h)}, your husband's ${older ? 'older' : 'younger'} ` +
+                `brother — she stands to you as ${older ? 'an older' : 'a younger'} ` +
+                `sister of your mother stands`
+          };
+        }
+      }
+    }
+
     // Tsano and Muramu are a husband's words for his wife's siblings. A wife's
-    // words for her husband's siblings are the question this app was told to
-    // ask rather than answer — so it describes, and offers to be told.
+    // words for her husband's SIBLINGS are still the question this app was
+    // told to ask rather than answer — so it describes, and offers to be told.
     const via = sibOfSpouse ? 'sibling' : (r.term || 'relative');
     const mine = spouse.sex === 'f' ? "your wife's"
                : spouse.sex === 'm' ? "your husband's" : "your spouse's";
 
-    /* THE PARENTS OF A HUSBAND OR WIFE. From the glossary the family sent,
-       which names both of them in one line each: "Tezvara: Father-in-law",
-       "Ambuya: Mother-in-law".
+    /* THE PARENTS OF A HUSBAND OR WIFE.
+
+       VATEZVARA for the father, either way round — "wife's father / husband's
+       father", as the family wrote it. It is Vatezvara and not Tezvara
+       because this app already said Vatezvara where two houses are joined,
+       and one word spelt two ways is the same fault as two words for one man.
+
+       THE MOTHER IS NOT ONE WORD, and this is the correction that matters.
+       It was Ambuya for everybody, which is right for a man speaking of his
+       wife's mother and wrong for a woman speaking of her husband's. Hers is
+       VAMWENE. The engine had the speaker's sex in its hand and was not
+       looking at it, so half the family were given the other half's word.
 
        Keyed on Baba and Amai EXACTLY, not on anything parent-shaped. Your
        wife's Babamukuru is her father's older brother — a different man, with
        a word of his own, and the one place a rule like this goes wrong is by
        being generous about what counts as a parent.
 
-       Ambuya is already the word for a grandmother and for a mother's
+       Ambuya is still also the word for a grandmother and for a mother's
        brother's wife. That is not a clash to be resolved: one word standing
        in several places is the ordinary shape of this system, and the engine
        is built to return a person's several words rather than pick. */
     const named =
-      (r.term === 'Baba' && them.sex === 'm') ? 'Tezvara' :
-      (r.term === 'Amai' && them.sex === 'f') ? 'Ambuya'  : null;
+      (r.term === 'Baba' && them.sex === 'm') ? 'Vatezvara' :
+      (r.term === 'Amai' && them.sex === 'f')
+        ? (spouse.sex === 'm' ? 'Vamwene' : 'Ambuya')
+        : null;
 
     return {
       term: named,
@@ -2793,7 +2844,7 @@ function marriedIn(who, tid){
              `${sibOfSpouse ? (them.sex === 'f' ? 'sister' : them.sex === 'm' ? 'brother' : 'sibling')
                             : (r.term || 'relative')}`,
       why: named
-        ? `${mine} ${named === 'Tezvara' ? 'father' : 'mother'}`
+        ? `${mine} ${named === 'Vatezvara' ? 'father' : 'mother'}`
         : `married into the family — ${spouse.name}'s ${r.term}`
     };
   }
@@ -3237,7 +3288,7 @@ function teknonym(id){
  * A western family tree draws one father. It has a box for him, a line from
  * him, and if you ask it who your father is it answers with one name. Shona
  * does not work that way and never has: your father's brothers are your
- * fathers too — Babamukuru if older than him, Babamunini if younger — your
+ * fathers too — Babamukuru if older than him, Babamudiki if younger — your
  * mother's sisters are your mothers, and the children of all of them are your
  * brothers and sisters, not your cousins. There is no word for cousin on that
  * side, because there is no such relation. The only ones held apart are the
@@ -3246,7 +3297,7 @@ function teknonym(id){
  *
  * The app has always KNOWN this — every term on every card is derived from
  * it. But it said it one card at a time, which is the western way of saying
- * it: this person is your Babamukuru, that person is your Babamunini. Nobody
+ * it: this person is your Babamukuru, that person is your Babamudiki. Nobody
  * reading one card at a time ever sees the shape. You see it the moment you
  * are told, in one line, that eleven people in this tree are your Mukoma and
  * four of them are your Baba, and that the app can point at every one.
@@ -7557,7 +7608,7 @@ function waysToAdd(anchorId){
   else add('Amai', 'your mother', 'up', anchorId, 'parent', { sex:'f' });
   add('Babamukuru', "your father's older brother", 'up', father, 'sibling',
       { sex:'m', position:'older' }, father ? null : 'your father');
-  add('Babamunini', "your father's younger brother", 'up', father, 'sibling',
+  add('Babamudiki', "your father's younger brother", 'up', father, 'sibling',
       { sex:'m', position:'younger' }, father ? null : 'your father');
   add('Tete', "your father's sister", 'up', father, 'sibling',
       { sex:'f' }, father ? null : 'your father');
