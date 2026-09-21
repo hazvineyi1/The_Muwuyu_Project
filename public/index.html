@@ -1437,7 +1437,13 @@ body.carrying .pod{transition:none;}
   <button id="undo">Undo</button>
   <span class="sep" aria-hidden="true"></span>
   <button class="who" id="hub" aria-haspopup="dialog">This family<i id="hubMark" hidden></i></button>
-  <button class="who" id="look" title="Light or dark, and which colours">Muwuyu</button>
+  <!-- IT USED TO SAY THE PALETTE'S NAME — "Muwuyu", "Miombo", "Indigo" —
+       which tells you what you are already wearing and nothing about what
+       the button does. The panel behind it is captioned "How the tree
+       looks"; the button now says the same thing in one word. The palette is
+       still named on the swatch inside, where it is a choice rather than a
+       label, and the project's own name is in the header. -->
+  <button class="who" id="look" title="The shape, how much of the tree, day or night, and the colours">Look</button>
   <span class="tally"><b id="count">0</b> in the tree</span>
 </div>
 
@@ -6375,6 +6381,7 @@ function draw(){
   ancestryCache.clear();          // the tree may have changed shape
   forgetHouses();
   forgetLines();                  // a new marriage can make a new family
+  forgetBudWords();               // and new words to offer beside somebody
   computeLayout();
 
   const svg = [];
@@ -6649,6 +6656,58 @@ function ordControls(id){
    spot on its preferred side that is on screen and lands on nobody — and then
    claims it, so the next bud has to find its own. That last part matters: two
    buds that pick the same spot look like one missing option. */
+/* THE TWO WORDS THE BUD SHOWS, and why they are the ones they are.
+ *
+ * Only words the four plain buds cannot already reach. Baba and Amai are
+ * Parent, Mukoma and Hanzvadzi are Sibling, Mukadzi is Partner, Mwanasikana
+ * is Child — offering those here would be the button advertising what the
+ * button beside it does. What is left is exactly what this panel is FOR:
+ * Tete, Sekuru, Babamukuru, Muroora, Muzukuru, the words a family reaches
+ * for that a diagram of four links has no room for.
+ *
+ * And only words that can actually be used on THIS person right now, because
+ * a button that says "Tete, Sekuru…" and then offers neither is worse than
+ * one that said nothing.
+ *
+ * CACHED, because placeBuds runs on every frame of a pan and waysToAdd walks
+ * twenty-four offers through canLink. The cache is cleared by draw(), which
+ * is what runs whenever the tree it is reckoned from has changed. */
+const PLAIN_BUDS = new Set(['Baba', 'Amai', 'Mukoma', "Munin'ina", 'Hanzvadzi',
+                            'Mukadzi', 'Murume', 'Mwanakomana', 'Mwanasikana']);
+let budWordsFor = { id:null, words:[] };
+function forgetBudWords(){ budWordsFor = { id:null, words:[] }; }
+function budWords(id){
+  if (budWordsFor.id === id) return budWordsFor.words;
+  let words = [];
+  try {
+    const open = waysToAdd(id).filter(w => w.ready && w.term && !PLAIN_BUDS.has(w.term));
+    /* ONE FROM EACH END, not the first two in the list. Taken in order it
+       offered "Babamukuru, Babamudiki" — a father's elder brother and his
+       younger one, two words a hair apart, which shows the range of what is
+       behind the button as badly as showing one word would. A word from
+       above and a word from below says: everybody, in your own terms. */
+    const seen = new Set();
+    /* AND NOT TWO WORDS A HAIR APART. Babamukuru and Babamudiki are a
+       father's elder brother and his younger one: both correct, and side by
+       side they show the range behind the button as badly as one word would.
+       A word is passed over while another with the same opening is already
+       up there — and taken anyway if it turns out to be all there is. */
+    const near = t => words.some(w => w.slice(0, 4).toLowerCase() === t.slice(0, 4).toLowerCase());
+    const take = (test) => {
+      for (const band of ['up', 'down', 'own'])
+        for (const w of open)
+          if (w.band === band && !seen.has(w.term) && test(w.term) && words.length < 2){
+            seen.add(w.term); words.push(w.term); return true;
+          }
+      return false;
+    };
+    take(() => true);
+    if (!take(t => !near(t))) take(() => true);
+  } catch (e) { words = []; }
+  budWordsFor = { id, words };
+  return words;
+}
+
 function placeBuds(){
   const layer = $('buds');
   if (!layer) return;
@@ -6733,12 +6792,33 @@ function placeBuds(){
   const sibFirst = leftBusy && !rightBusy ? [0, -40, 40, 180] : [180, -140, 140, 0];
   const parFirst = leftBusy && !rightBusy ? [180, -140, 140, 0] : [0, -40, 40, 180];
 
+  /* THE WORD FIRST. Parent, sibling, partner and child are positions in a
+     diagram; Tete and Sekuru are what the family actually says, and somebody
+     looking for a place to put their Tete should not have to work out that
+     she is a sibling of their father.
+   *
+   * "What does this mean? Some things are not very clear."
+   *
+   * It used to say "By what you call them" under a four-pointed star.
+   * Two faults in one
+   * small button. The four buds beside it are THINGS you can add — Child,
+   * Sibling, Partner, Parent — and this one was a description of a METHOD,
+   * which is a different kind of phrase doing a different job in the same
+   * row, so it read as decoration rather than as an offer. And a four-
+   * pointed sparkle in this decade means one thing to most people, which is
+   * a machine guessing at something; there is no guessing here at all.
+   *
+   * So it says the words. Not a description of them — the actual two the
+   * panel behind it will offer for this person, out of their own family:
+   * "Tete, Sekuru…". Nobody has to be told what that button is for. */
+  const words = budWords(id);
   const out = [
-    /* The word first. Parent, sibling, partner and child are positions in a
-       diagram; Tete and Sekuru are what the family actually says, and a
-       person looking for somewhere to put their Tete should not have to work
-       out that she is a sibling of their father. */
-    { kind:'ways', label:'By what you call them', icon:'✦',
+    { kind:'ways', icon:'\u201C',
+      label: words.length ? words.join(', ') + '\u2026' : 'The word you use',
+      title: words.length
+        ? `Add somebody by the word your family uses for them — ${words.join(', ')} and the rest. ` +
+          `The app works out where they go.`
+        : 'Add somebody by the word your family uses for them, rather than by where they sit.',
       at:place([-140, -180, -100, 140, 180]) },
     { kind:'child',   label:'Child',   icon:'↑', at:place([-90, -60, -120, -35, -145]) },
     { kind:'sibling', label:'Sibling', icon:'↔', at:place(sibFirst) },
@@ -6765,11 +6845,18 @@ function placeBuds(){
     return;
   }
   budSig = sig;
-  layer.innerHTML = out.map(o =>
+  budInk = out.map(o =>
     `<div class="bud" data-bud="${o.kind}" data-anchor="${id}" tabindex="0" role="button"` +
+    (o.title ? ` title="${esc(o.title)}" aria-label="${esc(o.title)}"` : '') +
     ` style="left:${o.at[0].toFixed(1)}px; top:${o.at[1].toFixed(1)}px">` +
-    `<i>${o.icon}</i>${o.label}</div>`).join('');
+    `<i>${o.icon}</i>${esc(o.label)}</div>`).join('');
+  layer.innerHTML = budInk;
 }
+
+/* The buds of the last draw, so a test can read the offers the page actually
+   made rather than the template that made them. */
+let budInk = '';
+function budsHtml(){ return budInk; }
 
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
 
@@ -10212,8 +10299,7 @@ function applyLook(theme, palette){
   if (palette) root.dataset.palette = palette; else delete root.dataset.palette;
   const btn = $('look');
   if (btn && btn.classList){
-    const p = PALETTES.find(x => x.v === palette) || PALETTES[0];
-    btn.textContent = p.label;
+    // The label stays put. What changes is only whether it looks chosen.
     btn.classList.toggle('set', !!(theme || palette));
   }
 }

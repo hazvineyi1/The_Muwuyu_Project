@@ -140,6 +140,8 @@ function loadFrontend(){
       whyOnCard(id){ computeLayout(); return whyOnCard(id); },
       branchPath, BAR, yearOf, hubRooms, hubMark, startAgain,
       saidWhat, newsLines, whenWords, newsCount, markSeen, loadSeen,
+      budWords, PLAIN_BUDS, waysToAdd,
+      budsHtml(id){ sel = id; computeLayout(); placeBuds(); return budsHtml(); },
       seenTo(n){ seenSeq = n; }, headTo(n){ headSeq = n; },
       sharedNow(){ store = 'shared'; },
       // The grow form as it is built, so a suite can read what it offers.
