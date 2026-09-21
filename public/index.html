@@ -670,6 +670,28 @@ body.carrying .pod{transition:none;}
   border:1.5px solid hsl(var(--fam) var(--fam-s) var(--fam-l));}
 #form .fams .fam.shut b{color:var(--gold);}
 
+/* WHAT THE OTHERS HAVE DONE. A list of acts, not of records: whose act it
+   was leads the line, because on a shared tree the first thing you want to
+   know is who has been working. The ones since you last looked carry a mark
+   down their edge; your own are set back, because you already know. */
+#form .news{display:flex; flex-direction:column; gap:1px; margin:2px 0 10px;}
+#form .news .ln{
+  padding:8px 11px; border-left:3px solid transparent;
+  background:var(--pod); border-radius:4px;
+}
+#form .news .ln:nth-child(odd){background:var(--pod-hi);}
+#form .news .ln.fresh{border-left-color:var(--gold);}
+#form .news .ln.mine u{color:var(--muted);}
+#form .news .ln.mine u b{color:var(--muted);}
+#form .news u{
+  display:block; text-decoration:none; font-family:'Karla',sans-serif;
+  font-size:12.5px; color:var(--ink); line-height:1.45;
+}
+#form .news u b{color:var(--gold); font-weight:700;}
+#form .news u i{font-style:normal; font-size:10.5px; color:var(--muted);}
+#form .news u small{display:block; font-size:10.5px; color:var(--muted); margin-top:2px;}
+#form .news .linkbtn{font-size:12.5px; font-weight:700;}
+
 /* The rooms behind the one door. A name and a sentence each, because the
    names alone — Roots, Mitupo, Kinship, Words — mean nothing to somebody who
    has just been handed a link to their family's tree. */
@@ -10161,6 +10183,7 @@ function loadTheme(){
   setShape(readPref(SHAPE_KEY, SHAPES));
   setReach(readPref(REACH_KEY, REACHES));
   loadFolded();
+  loadSeen();
 }
 
 // Is the page dark right now? Decides which face of each swatch to show, so
@@ -10377,6 +10400,130 @@ function famPanel(){
     `</div>`;
 }
 
+/* ── WHAT THE OTHERS HAVE DONE ───────────────────────────────────────────
+ *
+ * A tree that several relatives fill in across several countries, and the
+ * whole of the collaboration in it was a line that appeared for six seconds
+ * and went: "Tsitsi changed the tree — 11 changes brought in." If you were
+ * asleep, at work, or simply looking at something else, you never found out.
+ *
+ * Every one of those changes is already recorded, and has been since the
+ * first migration: who did it, what they did, which person it was about, and
+ * when. The server has served it all along. The product threw it away.
+ *
+ * So it is kept and read back, in the family's own terms rather than the
+ * model's: "Tsitsi added Baya Musoni", not "addPerson". Nothing here is new
+ * information — it is the information the app already had, shown to the
+ * people it belongs to.
+ *
+ * SINCE YOU LAST LOOKED is a fact about a device, not about a person, so it
+ * is kept where the zoom and the folds are kept and is never sent. Two
+ * relatives reading the same tree have seen different amounts of it, and both
+ * are right. */
+const SEEN_KEY = 'muti-baobab-seen';
+let seenSeq = 0;
+function loadSeen(){
+  let n = 0;
+  try { n = Number(localStorage.getItem(SEEN_KEY)); } catch (e) {}
+  /* Floored at nought, because a negative in there makes the count come out
+     HIGHER than the whole log — the app telling a family there is more to
+     read than has ever happened. Whatever is in a device's storage, the
+     answer has to be a number of changes that could exist. */
+  seenSeq = Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+function markSeen(n){
+  seenSeq = Math.max(seenSeq, Number(n) || 0);
+  try { localStorage.setItem(SEEN_KEY, String(seenSeq)); } catch (e) {}
+  paintHub();
+}
+/* How much has happened that this device has not been shown. Capped for the
+   look of it: past a point the number stops being information. */
+function newsCount(){
+  if (store !== 'shared') return 0;
+  // Never more than the log holds, whatever the two numbers are.
+  return Math.max(0, Math.min(headSeq, headSeq - seenSeq));
+}
+
+/* WHEN, in the words somebody would actually use. A timestamp is a fact
+   about a database; "yesterday evening" is a fact about a family. */
+function whenWords(at){
+  const t = new Date(at).getTime();
+  if (!t) return '';
+  const mins = Math.floor((Date.now() - t) / 60000);
+  if (mins < 2) return 'just now';
+  if (mins < 60) return `${mins} minutes ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return hrs === 1 ? 'an hour ago' : `${hrs} hours ago`;
+  const days = Math.floor(hrs / 24);
+  if (days === 1) return 'yesterday';
+  if (days < 7) return `${days} days ago`;
+  const d = new Date(t);
+  const MONTHS = ['January','February','March','April','May','June','July',
+                  'August','September','October','November','December'];
+  return `${d.getDate()} ${MONTHS[d.getMonth()]}` +
+         (d.getFullYear() === new Date().getFullYear() ? '' : ' ' + d.getFullYear());
+}
+
+/* WHAT WAS DONE, said the way the person who did it would say it.
+ *
+ * A name is looked up in the tree as it stands now, which is the honest
+ * thing: the line is about a person, and the person's name is whatever the
+ * family has since settled on. Where the record has gone — deleted, or on a
+ * part of the tree this session cannot see — the payload is asked, and
+ * failing that the line says so rather than inventing a name. */
+function saidWhat(c){
+  const nameOf = id => {
+    const p = id && state.people[id];
+    if (p && p.name) return p.name;
+    const said = (c.payload && (c.payload.name || c.payload.person)) || '';
+    return said || 'somebody no longer in the tree';
+  };
+  const who = nameOf(c.entity_id);
+  switch (c.op){
+    case 'addPerson':    return { verb:'added', what:who, of:c.entity_id };
+    case 'updatePerson': return { verb:'corrected', what:who, of:c.entity_id };
+    case 'deletePerson': return { verb:'deleted', what:who, of:null };
+    case 'setAside':     return { verb:'took out of the tree', what:who, of:c.entity_id };
+    case 'restore':      return { verb:'put back', what:who, of:c.entity_id };
+    case 'addUnion':     return { verb:'recorded', what:'a marriage', of:null };
+    case 'addPartner':   return { verb:'recorded', what:'a marriage', of:null };
+    case 'removePartner':return { verb:'undid', what:'a marriage', of:null };
+    case 'addChild':     return { verb:'joined', what:'a child to their parents', of:null };
+    case 'removeChild':  return { verb:'undid', what:'a child’s parents', of:null };
+    case 'reorderChildren': return { verb:'put in birth order', what:'a row of brothers and sisters', of:null };
+    case 'teachTerm':    return { verb:'taught the word', what:(c.payload && c.payload.term) || 'a word', of:null };
+    case 'affirmTerm':   return { verb:'agreed with the word', what:(c.payload && c.payload.term) || 'a word', of:null };
+    case 'forgetTerm':   return { verb:'took back the word', what:(c.payload && c.payload.term) || 'a word', of:null };
+    case 'setRoot':      return { verb:'marked the root of the line', what:who, of:c.entity_id };
+    case 'setVisibility':return { verb:'changed who can see', what:who, of:c.entity_id };
+    case 'decideLink':
+    case 'proposeLink':  return { verb:'joined this family to', what:'another tree', of:null };
+    case 'dismissDuplicate': return { verb:'said two records are', what:'different people', of:null };
+    default:             return { verb:'changed', what:who, of:c.entity_id };
+  }
+}
+
+/* One line per act, newest first, with a run by one person on one record
+   folded into a single line — a name typed, then a year, then a mutupo is
+   three changes and one thing that happened. */
+function newsLines(changes){
+  const out = [];
+  for (let i = changes.length - 1; i >= 0; i--){
+    const c = changes[i];
+    const said = saidWhat(c);
+    const last = out[out.length - 1];
+    if (last && last.by === (c.by || '') && last.verb === said.verb &&
+        last.what === said.what){
+      last.n++;
+      last.at = last.at;           // the newest time of the run is kept
+      continue;
+    }
+    out.push({ seq:c.seq, by:c.by || '', verb:said.verb, what:said.what,
+               of:said.of, at:c.at, n:1 });
+  }
+  return out;
+}
+
 /* ── ONE DOOR, WITH EVERY ROOM NAMED ON IT ───────────────────────────────
  *
  * "Redesign and build this using the best structure... intuitive, cohesive."
@@ -10403,6 +10550,13 @@ function hubRooms(){
   const totems = totemsHere().length;
   return [
     { group:'Reading this family', rooms:[
+      /* FIRST, because on a tree several relatives are filling in, the first
+         question anybody has on opening it is what has happened since they
+         were last here. */
+      (store === 'shared') ? { id:'news',
+        name:`What the others have done${newsCount() ? ' · ' + (newsCount() > 99 ? '99+' : newsCount()) : ''}`,
+        go:openNews, mark:newsCount(),
+        why:'Every change anybody has made, who made it, and when.' } : null,
       { id:'roots', name:'Roots', go:openRoots,
         why:'How far back this family has been traced, and who is at the end of each line.' },
       { id:'kin', name:'Kinship', go:openKinship,
@@ -10440,7 +10594,7 @@ function hubRooms(){
    at. Never a number for its own sake — only entries of YOURS that somebody
    took out, and pairs the app thinks may be one person. */
 function hubMark(){
-  return noticesFor(meName()).length + dupes.likely.length;
+  return noticesFor(meName()).length + dupes.likely.length + newsCount();
 }
 function paintHub(){
   const mark = $('hubMark');
@@ -10454,6 +10608,89 @@ function paintHub(){
   if (btn) btn.title = n
     ? `${n} ${n === 1 ? 'thing' : 'things'} waiting to be looked at`
     : 'Roots, kinship, the words, and putting things right';
+}
+
+/* THE ROOM ITSELF. Asks the server for the last stretch of the change log —
+   the tail rather than the whole of it, because a family three years in has
+   tens of thousands of lines and nobody is reading to the bottom. */
+const NEWS_BACK = 200;
+async function openNews(){
+  closeForm();
+  pending = { kind:'dupes', anchorId: sel || state.rootId };
+  const el = document.createElement('div');
+  el.id = 'form';
+  el.className = 'wide';
+  document.body.appendChild(el);
+
+  const paint = body => {
+    el.innerHTML =
+      `<p class="cap">What the others have done</p>` + body +
+      `<div class="row"><button class="btn" id="newsNo">Done</button></div>`;
+    placeForm(el);
+    el.querySelectorAll('[data-goto]').forEach(b => b.onclick = () => {
+      const id = b.dataset.goto;
+      if (!state.people[id]) return;
+      sel = id; closeForm(); render();
+      if (layout.persons[id]) focusOn(id, Math.max(pos.k, 0.78));
+      say(`${state.people[id].name} — ${positionOf(id)}.`);
+    });
+    if ($('newsNo')) $('newsNo').onclick = closeForm;
+  };
+
+  if (store !== 'shared'){
+    paint(`<p class="browse">This browser is keeping its own copy of the tree, ` +
+          `so there is nobody else making changes to it.</p>`);
+    return;
+  }
+  paint(`<p class="browse">Reading the record…</p>`);
+
+  let d = null;
+  try {
+    const since = Math.max(0, headSeq - NEWS_BACK);
+    const r = await fetch(`/api/tree/${treeId}/changes?since=${since}&limit=${NEWS_BACK}`,
+                          { headers:{ Accept:'application/json' } });
+    if (r.ok) d = await r.json();
+  } catch (e) {}
+  if (!d || !Array.isArray(d.changes)){
+    paint(`<p class="browse">The record could not be read just now. Nothing is ` +
+          `wrong with the tree — try again in a moment.</p>`);
+    return;
+  }
+
+  const lines = newsLines(d.changes);
+  const mine = meName();
+  const unseen = lines.filter(l => l.seq > seenSeq).length;
+  if (!lines.length){
+    paint(`<p class="browse">Nothing has been changed yet. Every name anybody ` +
+          `adds will be listed here, with who added it and when.</p>`);
+    markSeen(d.head || headSeq);
+    return;
+  }
+
+  paint(
+    `<p class="browse">` +
+      (unseen
+        ? `<b>${unseen} ${unseen === 1 ? 'change' : 'changes'}</b> since you last looked.`
+        : `Everything here you have already seen.`) +
+      ` Every edit anybody makes is kept, with who made it.</p>` +
+    `<div class="news">` +
+      lines.map(l => {
+        const fresh = l.seq > seenSeq;
+        const by = l.by || 'Somebody';
+        const times = l.n > 1 ? ` <i>·&nbsp;${l.n} in a row</i>` : '';
+        return `<div class="ln${fresh ? ' fresh' : ''}${l.by === mine ? ' mine' : ''}">` +
+          `<u><b>${esc(by)}</b> ${esc(l.verb)} ` +
+          (l.of && state.people[l.of]
+            ? `<button type="button" class="linkbtn" data-goto="${l.of}">${esc(l.what)}</button>`
+            : esc(l.what)) + times +
+          `<small>${esc(whenWords(l.at))}</small></u></div>`;
+      }).join('') +
+    `</div>` +
+    (d.head > d.seq
+      ? `<p class="roothint">Showing the most recent ${lines.length}. ` +
+        `Everything before them is still recorded.</p>` : ''));
+  markSeen(d.head || headSeq);
+  el.addEventListener('keydown', e => { if (e.key === 'Escape'){ e.preventDefault(); closeForm(); } });
 }
 
 function openHub(){
@@ -11790,7 +12027,18 @@ async function flush(){
     for (const [refName, realId] of Object.entries(out.refs || {})){
       remapId(refName.slice(1), realId);
     }
+    /* YOUR OWN WORK IS NOT NEWS TO YOU. Without this, planting a tree and
+       then opening the door is met with "seventeen changes since you last
+       looked" — every one of them your own, and the count that is supposed
+       to mean "somebody has been working" made worthless on the first day.
+     *
+     * Only when there was nothing waiting BEFORE the save, though. If
+       somebody else's work was already sitting unread, a save of ours must
+       not quietly mark it read on the way past: the whole value of the mark
+       is that it is never wrong in that direction. */
+    const wasCaughtUp = seenSeq >= headSeq;
     headSeq = Math.max(headSeq, Number(out.seq) || 0);
+    if (wasCaughtUp) markSeen(headSeq);
     synced = copyState();
     // Versions moved for everything we touched; the next read settles them.
     await refresh({ quiet:true });
@@ -11915,8 +12163,12 @@ function startPolling(){
                             { headers:{ Accept:'application/json' } });
       if (!r.ok) return;
       const d = await r.json();
-      if (!d.changes || !d.changes.length) return;
+      if (!d.changes || !d.changes.length){ paintHub(); return; }
       const others = d.changes.filter(c => (c.by || '') !== meName());
+      /* Whatever arrived is now behind the door, so the door says so. Our
+         own work is not news to us: seen up to here, and the mark counts
+         only what somebody else did. */
+      if (!others.length) markSeen(d.head || headSeq);
       await refresh({ quiet:true });
       if (others.length){
         const who = [...new Set(others.map(c => c.by).filter(Boolean))];
@@ -11933,11 +12185,20 @@ function startPolling(){
 function showFromOthers(who, n){
   const el = $('others');
   if (!el) return;
-  el.textContent = (who.length ? who.join(' and ') : 'Somebody else') +
-                   ` changed the tree — ${n} ${n === 1 ? 'change' : 'changes'} brought in.`;
+  /* IT STILL GOES, but it is no longer the only place the news lived. This
+     line used to be the whole of collaboration in the product: six seconds,
+     and if you were asleep or at work you never found out that eleven of
+     your relatives' names had arrived. Now it is a nudge towards a record
+     that keeps, and it says where that record is. */
+  el.innerHTML = esc(who.length ? who.join(' and ') : 'Somebody else') +
+    ` changed the tree — ${n} ${n === 1 ? 'change' : 'changes'} brought in. ` +
+    `<button type="button" class="linkbtn" id="othersGo">See what</button>`;
   el.hidden = false;
+  const go = $('othersGo');
+  if (go) go.onclick = () => { el.hidden = true; openNews(); };
+  paintHub();
   clearTimeout(showFromOthers.t);
-  showFromOthers.t = setTimeout(() => { el.hidden = true; }, 6000);
+  showFromOthers.t = setTimeout(() => { el.hidden = true; }, 9000);
 }
 
 function showClash(detail){

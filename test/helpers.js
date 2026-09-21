@@ -139,6 +139,9 @@ function loadFrontend(){
       whyHere(id){ computeLayout(); return whyHere(id); }, positionOf,
       whyOnCard(id){ computeLayout(); return whyOnCard(id); },
       branchPath, BAR, yearOf, hubRooms, hubMark, startAgain,
+      saidWhat, newsLines, whenWords, newsCount, markSeen, loadSeen,
+      seenTo(n){ seenSeq = n; }, headTo(n){ headSeq = n; },
+      sharedNow(){ store = 'shared'; },
       // The grow form as it is built, so a suite can read what it offers.
       formHtml(kind, anchorId, said){ openForm(kind, anchorId, said); return formInk; },
       treeSvg(){ draw(); return treeSvg(); },
