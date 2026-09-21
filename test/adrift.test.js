@@ -279,6 +279,28 @@ section('AND ONCE JOINED ON, THEY STOP BEING ADRIFT');
   eq('and no pod is marked', (html.match(/class="pod[^"]*adrift/g) || []).length, 0);
 }
 
+section('AND TAKING A LINK OUT SAYS WHAT IT LEFT LOOSE');
+/* The one kind of act that can set a name floating. Allowed, often right,
+   and never silent — the person who did it is the one who can put it back. */
+{
+  const t = split();
+  const before = t.fe.adrift().length;
+  eq('two are floating to begin with', before, 2);
+  // His father taken off his grandfather: the grandfather is now joined to
+  // nobody the tree can be walked to from where you stand.
+  t.fe.unlinkParents(t.thomas);
+  const said = t.fe.setLoose(before);
+  check('the one it left loose is counted',
+        /1 name is now joined to nothing/.test(said), said);
+  check('and the way back goes with it', /Undo puts it back/.test(said), said);
+}
+
+section('and says nothing when nothing came loose');
+{
+  const t = split();
+  eq('no clause at all', t.fe.setLoose(t.fe.adrift().length), '');
+}
+
 section('A TREE WITH ONE PERSON IN IT HAS NOBODY ADRIFT');
 {
   const fe = loadFrontend();

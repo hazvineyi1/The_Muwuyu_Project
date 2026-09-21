@@ -2672,6 +2672,23 @@ function adrift(){
  *
  * Only the best match, and only a good one: a list of maybes beside a name
  * is a second job rather than an answer. */
+/* WHAT AN ACT LEFT LOOSE.
+ *
+ * "They all need to be linked and branching from somewhere."
+ *
+ * Taking a link out is allowed and is often exactly right — the wrong man
+ * was recorded as somebody's father and that has to be undoable. But it is
+ * the one kind of act that can set a name, and everybody under it, floating,
+ * and the person who did it is the one who can still put it back. So it is
+ * said at the moment it happens rather than left to be noticed later on the
+ * bar. Called with the count from BEFORE the change. */
+function setLoose(before){
+  const made = adrift().length - before;
+  if (made <= 0) return '';
+  return ` ${made} ${made === 1 ? 'name is' : 'names are'} now joined to nothing — ` +
+         `the bar says who, and Undo puts it back.`;
+}
+
 function mayAlreadyBe(id){
   if (!present(id)) return null;
   const gens = generations();
@@ -9843,23 +9860,28 @@ function openCard(id){
     const drop = b.dataset.drop;
     const gone = (state.people[drop] || {}).name || '';
     const mine = drop === id;
+    const wereLoose = adrift().length;
     if (unlinkPartner(b.dataset.unmarry, drop)){
       closeForm(); render(); save();
-      say(mine
+      say((mine
         ? `That marriage has been taken out. ${p.name} is still in the tree.`
         : `${p.name} and ${gone} are no longer recorded as married. Both are ` +
-          `still in the tree, and the children of it stay with ${p.name}.`);
+          `still in the tree, and the children of it stay with ${p.name}.`)
+        + setLoose(wereLoose));
     } else { closeForm(); }
   });
   el.querySelectorAll('[data-parents]').forEach(b => b.onclick = () => {
     commit();
     const label = b.textContent.trim();
+    const wereLoose = adrift().length;
     if (setParentage(id, b.dataset.parents)){
       closeForm(); render(); save();
-      say(b.dataset.parents === 'none'
+      say((b.dataset.parents === 'none'
         ? `${p.name} is no longer recorded as anybody's child. They are still ` +
-          `in the tree, and Undo puts it back.`
-        : `${p.name} is now recorded as ${label.toLowerCase()}.`);
+          `in the tree.`
+        : `${p.name} is now recorded as ${label.toLowerCase()}.`)
+        + (setLoose(wereLoose) ||
+           (b.dataset.parents === 'none' ? ` Undo puts it back.` : '')));
     } else { closeForm(); }
   });
   if ($('cJoin')) $('cJoin').onclick = () => { commit(); openFind(id); };
@@ -9869,8 +9891,9 @@ function openCard(id){
     const name = p.name;
     /* The same one tap the ✕ does, and the same way back. It asked for the
        name to be typed until a family said plainly that it should not. */
+    const wereLoose = adrift().length;
     if (!deleteInOneTap(id)){ say('That could not be deleted.'); return; }
-    say(`${name} deleted — put them back from the bar.`);
+    say(`${name} deleted — put them back from the bar.` + setLoose(wereLoose));
   };
   $('cNo').onclick = closeForm;
   el.querySelectorAll('[data-vis]').forEach(b => b.onclick = () => {
