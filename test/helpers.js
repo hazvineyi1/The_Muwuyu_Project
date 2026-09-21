@@ -138,7 +138,9 @@ function loadFrontend(){
       familyLines, foldableLines, foldedAway, forgetLines, isFolded, loadFolded, FAM_HUES, famPanel,
       whyHere(id){ computeLayout(); return whyHere(id); }, positionOf,
       whyOnCard(id){ computeLayout(); return whyOnCard(id); },
-      branchPath, BAR,
+      branchPath, BAR, yearOf,
+      // The grow form as it is built, so a suite can read what it offers.
+      formHtml(kind, anchorId, said){ openForm(kind, anchorId, said); return formInk; },
       treeSvg(){ draw(); return treeSvg(); },
       // The standing notices on the bar, as the page assembles them.
       barNotices(){ const out = []; const el = { hidden:false,

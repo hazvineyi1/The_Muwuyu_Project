@@ -1621,8 +1621,30 @@ function grow(kind, anchorId, name, sex, totem, opts){
     // server's refusal.
     if (chosen && chosen.partners.includes(id)) chosen = null;
     const pu = chosen || parentUnionOf(anchorId) || addUnion([], [anchorId]);
+
+    /* WHERE IN THE ROW, and a birth year settles it.
+     *
+     * "It is confusing to add a name and it jumps to the far side of the
+     *  screen. I am adding my paternal grandfather's siblings and they are
+     *  placed far away from their parents and other siblings."
+     *
+     * This used to put a new brother or sister immediately beside the anchor
+     * — before them or after them, by a Before/After control whose After was
+     * pressed by default. So a family typing "Baya Musoni, born 1898" as a
+     * brother of Chaitezvi, born 1900, and never touching a control they had
+     * no reason to touch, told the app that the elder brother was the
+     * younger. The row is not decoration: Mukoma and Munin'ina are read off
+     * it, and everything below a person travels with their place in it. Baya
+     * was drawn past his brother's entire family, and the view followed him
+     * there, which is the jump.
+     *
+     * A year is a fact and a default is not, so the year wins and lands them
+     * among their brothers and sisters where that year belongs. The control
+     * decides only what the years cannot — which is why it now shows the
+     * year's answer as it is typed, rather than sitting on an answer of its
+     * own. See insertByAge for the case with no year at all. */
     const at = pu.children.indexOf(anchorId);
-    if (at < 0) pu.children.push(id);                    // a different marriage
+    if (at < 0 || birthYear(id) !== null) insertByAge(pu.children, id);
     else pu.children.splice(opts.position === 'older' ? at : at + 1, 0, id);
   }
   else if (kind === 'partner'){
@@ -2634,11 +2656,16 @@ const SIB = (mine, theirs, older) => {
   return older ? 'Mukoma' : "Munin'ina";
 };
 
-/* A birth year out of whatever was typed — "1968", "12 Mar 1968", "c.1930". */
+/* A birth year out of whatever was typed — "1968", "12 Mar 1968", "c.1930".
+   Split in two so a form can read a year out of a field somebody is still
+   typing into, before there is any record to read it off. */
+function yearOf(written){
+  const m = written && String(written).match(/\b(1[0-9]{3}|20[0-9]{2})\b/);
+  return m ? Number(m[1]) : null;
+}
 function birthYear(id){
   const p = state.people[id];
-  const m = p && p.born && String(p.born).match(/\b(1[0-9]{3}|20[0-9]{2})\b/);
-  return m ? Number(m[1]) : null;
+  return p ? yearOf(p.born) : null;
 }
 
 /* Is `a` older than `b`, or null when there is no way to tell?
@@ -5623,11 +5650,30 @@ function computeLayout(){
 
     const target = unionXIn(p, uid);
 
-    /* Furthest first, so the outermost can come in and the ones behind can
-       follow into the room it leaves. */
+    /* NEAREST THE PARENTS FIRST, and this was the other way round.
+     *
+     * "I am adding my paternal grandfather's siblings and they are placed
+     *  far away from their parents and other siblings."
+     *
+     * A brother coming in towards his parents is blocked by whichever
+     * brother stands between him and them — nobody overtakes a brother — so
+     * the outermost cannot move until the ones inside him have. Furthest
+     * first meant the outermost was measured against siblings still sitting
+     * where the packing left them, found no room, and was passed over; the
+     * ones behind then came in and left him stranded out there on his own.
+     * Four brothers and sisters added one at a time, and the fourth ended up
+     * a thousand pixels from the other three.
+     *
+     * Nearest first, and each one comes in to the room the one before it has
+     * just left. Twice over, because a move can open room for somebody
+     * already passed — and a third round has never changed anything, so it
+     * stops as soon as a round moves nobody. */
     const order = kids.slice().sort((a, c) =>
-      Math.abs(c.x - target) - Math.abs(a.x - target) || (a.id < c.id ? -1 : 1));
+      Math.abs(a.x - target) - Math.abs(c.x - target) || (a.id < c.id ? -1 : 1));
 
+    let moved = true;
+    for (let round = 0; round < 3 && moved; round++){
+    moved = false;
     for (const c of order){
       const at = kids.indexOf(c), prev = kids[at - 1], next = kids[at + 1];
       let want = target - c.x;
@@ -5648,8 +5694,10 @@ function computeLayout(){
         if (Math.abs(dx) < POD_W) break;
         if (!roomFor(nodes, dx)) continue;
         slide(nodes, dx);
+        moved = true;
         break;
       }
+    }
     }
   }
 
@@ -9558,6 +9606,7 @@ function openWays(anchorId){
 
 /* ── grow form ──────────────────────────────────────────────────────── */
 const LABEL = { parent:'parent of', sibling:'sibling of', partner:'partner of', child:'child of' };
+let formInk = '';
 
 function openForm(kind, anchorId, said){
   closeForm();
@@ -9571,7 +9620,8 @@ function openForm(kind, anchorId, said){
     `<p class="lbl">Born</p><div class="seg" id="fOrder">` +
     `<button type="button" data-pos="older" aria-pressed="${said.position === 'older'}">` +
       `Before ${esc(anchor.name.split(' ')[0])}</button>` +
-    `<button type="button" data-pos="younger" aria-pressed="${said.position !== 'older'}">After</button></div>`;
+    `<button type="button" data-pos="younger" aria-pressed="${said.position !== 'older'}">After</button></div>` +
+    `<p class="roothint" id="fOrderWhy"></p>`;
 
   /* WHOSE CHILD a new brother or sister is — asked, not assumed.
 
@@ -9599,7 +9649,9 @@ function openForm(kind, anchorId, said){
 
   const el = document.createElement('div');
   el.id = 'form';
-  el.innerHTML =
+  /* Kept so a test can read the form the page actually builds rather than a
+     second copy of the code that builds it. The page has no use for it. */
+  formInk =
     (said.term
       /* Named by the word, because the word is what was asked for. The line
          under it says where they will actually be written down, so nobody is
@@ -9621,11 +9673,40 @@ function openForm(kind, anchorId, said){
     `<div class="row"><button class="btn" id="fGo">Grow</button>` +
     `<button class="btn ghost" id="fNo">Cancel</button></div>`;
   document.body.appendChild(el);
+  el.innerHTML = formInk;
   placeForm(el);
 
   el.querySelectorAll('.seg').forEach(seg => seg.querySelectorAll('button').forEach(b =>
     b.onclick = () => seg.querySelectorAll('button')
       .forEach(o => o.setAttribute('aria-pressed', String(o === b)))));
+
+  /* THE BEFORE/AFTER CONTROL FOLLOWS THE YEAR, as the year is typed.
+   *
+   * Its After used to be pressed by default, so a year typed underneath it
+   * was silently contradicted by a button nobody had touched. Now a year
+   * answers the question and the control shows that answer and stands down;
+   * without one it is live again and is the only thing that can decide. */
+  if (kind === 'sibling' && $('fOrder')){
+    const seg = $('fOrder'), why = $('fOrderWhy');
+    const first = (anchor.name || '').split(' ')[0];
+    const tell = () => {
+      const yr = yearOf($('fBorn').value);
+      const theirs = birthYear(anchorId);
+      const decided = yr !== null && theirs !== null && yr !== theirs;
+      seg.querySelectorAll('button').forEach(b => {
+        b.disabled = yr !== null;
+        if (decided) b.setAttribute('aria-pressed',
+          String(b.dataset.pos === (yr < theirs ? 'older' : 'younger')));
+      });
+      why.innerHTML = decided
+        ? `Worked out from the year: ${esc(first)} was born ${theirs}.`
+        : yr !== null
+          ? `The year decides where they stand among their brothers and sisters.`
+          : `Only needed while there is no year — a year settles it on its own.`;
+    };
+    $('fBorn').addEventListener('input', tell);
+    tell();
+  }
   wireTotem('fTotem', kind === 'partner' ? anchorId : null);
   $('fGo').onclick = submitForm;
   $('fNo').onclick = closeForm;
@@ -11455,12 +11536,26 @@ function diffOps(was, now){
     for (const x of b.children){
       if (!u.children.includes(x)) childDrops.push({ op:'removeChild', unionId:uid, personId:x });
     }
-    // Same members, different order: birth order is real information, so it
-    // travels as its own op rather than as a remove-and-re-add that would
-    // lose the reason it changed.
-    const kept = u.children.filter(x => b.children.includes(x));
-    const before = b.children.filter(x => u.children.includes(x));
-    if (kept.length > 1 && kept.join() !== before.join()){
+    /* THE ROW'S ORDER, which is real information and travels as its own op
+       rather than as a remove-and-re-add that would lose the reason it
+       changed.
+     *
+     * COMPARED AGAINST WHAT THE SERVER WILL HAVE, not against what it has.
+     * This used to ask whether the children already recorded had changed
+     * places among themselves — and a new brother inserted into the middle
+     * of a row does not move any of them. So no reorder was sent, addChild
+     * appended him at the end, the next read brought that order back, and
+     * the elder brother the family had just entered turned into the
+     * youngest in front of them. Every seniority word in the app is read off
+     * this row.
+     *
+     * The server ends up with the children it already had, in their order,
+     * followed by the ones this batch adds in the order they are added —
+     * which is this union's own order, since that is what the loop above
+     * walks. Anything else is a reorder. */
+    const added = u.children.filter(x => !b.children.includes(x));
+    const willBe = b.children.filter(x => u.children.includes(x)).concat(added);
+    if (u.children.length > 1 && u.children.join() !== willBe.join()){
       reorders.push({ op:'reorderChildren', unionId:uid, orderedIds:u.children.map(ref) });
     }
   }
