@@ -859,6 +859,14 @@ body.carrying .pod{transition:none;}
   text-transform:uppercase; color:var(--muted);}
 .seg.col{flex-direction:column; gap:4px;}
 .seg.col button{flex:none; padding:8px 11px; text-align:left;}
+/* A second line inside one of those buttons: what the button does, said
+   small, under the name it does it to. Used where the name alone would
+   not say whether tapping it changes anything. */
+.seg.col button small{
+  display:block; margin-top:1px; font-size:10px; letter-spacing:.06em;
+  text-transform:uppercase; color:var(--muted); font-weight:600;
+}
+.seg.col button:hover small{color:var(--gold);}
 .row{display:flex; gap:7px;}
 .btn{
   flex:1; padding:9px 0; border-radius:9px; cursor:pointer;
@@ -1575,7 +1583,56 @@ function parentageOf(id){
    op and there should not be one — an empty marriage is harmless, and
    inventing a destructive tidy-up is exactly the trade this project does not
    make. */
+/* ── TAKING A LINK OUT ───────────────────────────────────────────────────
+ *
+ * "I want to be able to delete."
+ *
+ * Until now a link could only ever be replaced. Whose child could move
+ * somebody from one marriage to another, and a marriage entered by mistake
+ * could not be undone at all — so a family who had joined the wrong two
+ * people had one honest option left, which was to set one of them aside and
+ * lose everything else about them with it.
+ *
+ * WHAT IS DELETED IS THE LINK AND ONLY THE LINK. Nobody leaves the tree. Two
+ * people who were never married keep their names, their years, their totems,
+ * their own parents and every child of their own. The marriage stops being a
+ * claim this family is making, which is the whole of what was wrong with it.
+ *
+ * NO CONFIRMATION, AND THAT IS THE CONSIDERED ANSWER rather than the lazy
+ * one. This app's delete-a-person asks you to type the name, because that
+ * destroys a record and cannot be taken back. A link is not a record: the
+ * next tap of Undo puts it back, and joining the two again is four taps from
+ * anywhere in the tree. A modal guarding a reversible act teaches people to
+ * dismiss modals, which is what you want least on the one that isn't. */
+function unlinkParents(id){
+  const pu = parentUnionOf(id);
+  if (!pu || !pu.children.includes(id)) return false;
+  snapshot();
+  pu.children = pu.children.filter(x => x !== id);
+  /* The marriage stays even when it empties. There is no removeUnion op and
+     there should not be one — an empty marriage is harmless, and a
+     destructive tidy-up is the trade this project does not make. */
+  return true;
+}
+
+function unlinkPartner(unionId, id){
+  const u = state.unions[unionId];
+  if (!u || !u.partners.includes(id)) return false;
+  snapshot();
+  u.partners = u.partners.filter(x => x !== id);
+  /* THE CHILDREN OF IT STAY WHERE THEY ARE, hanging off whoever is left. A
+     mother and her children are not undone by her husband turning out to be
+     the wrong man; the children were never the thing in doubt. Where that
+     leaves the marriage with one partner, the model has always allowed it —
+     plenty of ancestors are recorded with one parent known. */
+  ancestryCache.clear();
+  return true;
+}
+
 function setParentage(id, share){
+  /* 'none' is not a marriage to move to — it is the answer "nobody yet",
+     which the panel could not give before. */
+  if (share === 'none') return unlinkParents(id);
   const to = unionForShare(id, share);
   if (!to) return false;
   const from = parentUnionOf(id);
@@ -5971,17 +6028,66 @@ function openDuplicates(){
    off. The marriage they came from stays where it is even if it empties. */
 function parentageBlock(id){
   const options = parentageOptions(id);
-  if (options.length < 2) return '';
+  /* IT SHOWS WITH ONE OPTION NOW, where it used to need two. The whole point
+     of the panel was to correct a wrong set of parents, and it appeared only
+     when there was somewhere else to move them to — so the commonest wrong
+     answer of all, a child hung on the only household there is, was the one
+     case it could not fix. "Nobody yet" is the answer it was missing. */
+  if (!options.length) return '';
   const now = parentageOf(id);
   return `<p class="lbl">Whose child</p><div class="seg col" id="cParents">` +
     options.map(o =>
       `<button type="button" data-parents="${esc(o.key)}" ` +
       `aria-pressed="${o.key === now}" title="${esc(o.why)}">${esc(o.label)}</button>`
-    ).join('') + `</div>` +
+    ).join('') +
+    (now ? `<button type="button" data-parents="none" aria-pressed="false" ` +
+           `title="Take this link out. Nobody is removed from the tree.">` +
+           `Nobody yet</button>` : '') +
+    `</div>` +
     `<p class="roothint">A brother or sister by a different mother or father is ` +
     `still your brother or sister — the tree says so either way. This is about ` +
     `whose child they are, which is a different question and one worth getting ` +
     `right.</p>`;
+}
+
+/* THE MARRIAGES THIS PERSON IS RECORDED IN, and the way out of one.
+ *
+ * Shown only when there is one, because a card that says "Marriages: none"
+ * on everybody under forty is a line of furniture. Each is named by the
+ * person on the other side of it, which is how a family says which marriage
+ * it means — and where nobody is on the other side yet, by what it is: a
+ * marriage recorded with one partner, which this model allows on purpose.
+ *
+ * The children are never mentioned here and never touched. Taking a husband
+ * out of a marriage does not unmake the children of it; they go on hanging
+ * from whoever is left, which is the same thing the tree already does for
+ * every ancestor recorded with one parent known. */
+function marriageBlock(id){
+  const us = unionsOf(id).filter(u => u.partners.includes(id));
+  if (!us.length) return '';
+  const first = x => (state.people[x] || {}).name || 'somebody';
+  return `<p class="lbl">Married</p><div class="seg col" id="cMarriages">` +
+    us.map(u => {
+      const other = u.partners.filter(x => x !== id && state.people[x]);
+      const who = other.length ? other.map(first).join(' and ')
+                               : 'nobody recorded yet';
+      const n = u.children.filter(present).length;
+      /* WHICH OF THE TWO STEPS OUT, and it is the one named on the button —
+         not the person whose card this is. You are standing on Sydney's card
+         saying the marriage to Evelyn is wrong, so Evelyn is what goes.
+         Taking Sydney out of his own marriage instead would leave the
+         children of it hanging off Evelyn alone, and he would lose his own
+         son by correcting a claim about his wife. Where nobody is recorded on
+         the other side there is only one person in it to take out. */
+      return `<button type="button" data-unmarry="${esc(u.id)}" ` +
+        `data-drop="${esc(other[0] || id)}" ` +
+        `title="Take this marriage out. Nobody leaves the tree` +
+        `${n ? `, and the ${n} ${n === 1 ? 'child' : 'children'} of it stay ` +
+               `with ${esc(first(id))}` : ''}.">` +
+        `${esc(who)}<small>not married after all</small></button>`;
+    }).join('') + `</div>` +
+    `<p class="roothint">Only the marriage goes. Everybody keeps their name, ` +
+    `their years and their own children — and Undo puts it back.</p>`;
 }
 
 /* Whether this person is in the public record.
@@ -7789,6 +7895,7 @@ function openCard(id){
         `house, and these are the children of this one.</p>` : '';
     })() +
     parentageBlock(id) +
+    marriageBlock(id) +
     visibilityBlock(p) +
     `<button class="btn ghost wide${meId === id ? ' on' : ''}" id="cMe">` +
       `${meId === id ? '● This is you' : 'This is me'}</button>` +
@@ -7836,12 +7943,28 @@ function openCard(id){
       if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); e.stopPropagation(); go(); }
     });
   });
+  el.querySelectorAll('[data-unmarry]').forEach(b => b.onclick = () => {
+    commit();
+    const drop = b.dataset.drop;
+    const gone = (state.people[drop] || {}).name || '';
+    const mine = drop === id;
+    if (unlinkPartner(b.dataset.unmarry, drop)){
+      closeForm(); render(); save();
+      say(mine
+        ? `That marriage has been taken out. ${p.name} is still in the tree.`
+        : `${p.name} and ${gone} are no longer recorded as married. Both are ` +
+          `still in the tree, and the children of it stay with ${p.name}.`);
+    } else { closeForm(); }
+  });
   el.querySelectorAll('[data-parents]').forEach(b => b.onclick = () => {
     commit();
     const label = b.textContent.trim();
     if (setParentage(id, b.dataset.parents)){
       closeForm(); render(); save();
-      say(`${p.name} is now recorded as ${label.toLowerCase()}.`);
+      say(b.dataset.parents === 'none'
+        ? `${p.name} is no longer recorded as anybody's child. They are still ` +
+          `in the tree, and Undo puts it back.`
+        : `${p.name} is now recorded as ${label.toLowerCase()}.`);
     } else { closeForm(); }
   });
   $('cNo').onclick = closeForm;

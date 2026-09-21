@@ -17,6 +17,141 @@ const { applyOps } = require('../db/ops');
 
 (async () => {
 
+// ── deleting a LINK, which is not the same act at all ──────────────────────
+//
+// "I want to be able to delete."
+//
+// A link could only ever be replaced until now. Whose child could move
+// somebody from one marriage to another, and a marriage entered in error
+// could not be undone at all — so a family who had joined the wrong two
+// people had one honest option left, which was to set one of them aside and
+// lose everything else about them with it.
+//
+// Deleting a link is the opposite of deleting a person, and the tests below
+// are mostly about that difference: nobody leaves the tree, nothing about
+// them is lost, and the next tap of Undo puts it back.
+
+section('A MARRIAGE ENTERED BY MISTAKE CAN BE TAKEN OUT');
+{
+  const fe = loadFrontend();
+  const him = fe.addPerson('Sydney Musoni', 'm', 'Mwendamberi', '1940', '');
+  const her = fe.grow('partner', him, 'Evelyn Mandaba', 'f', 'Moyondizvo', { born:'1944' });
+  const kid = fe.grow('child', him, 'Hazvineyi Musoni', 'm', 'Mwendamberi', { born:'1979' });
+  const u = fe.unionsOf(him).find(x => x.partners.includes(her));
+
+  eq('they are recorded as married', fe.kinTerms(him, her).list[0].term, 'Mukadzi');
+  check('and it comes out', fe.unlinkPartner(u.id, her));
+  check('she is no longer his wife',
+        !(fe.kinTerms(him, her).list || []).some(t => t.term === 'Mukadzi'),
+        JSON.stringify((fe.kinTerms(him, her).list || []).map(t => t.term)));
+
+  section('but nobody has left the tree, which is the whole difference');
+  const st = fe.getState();
+  check('she is still a person', !!st.people[her]);
+  eq('with her name',  st.people[her].name, 'Evelyn Mandaba');
+  eq('her years',      st.people[her].born, '1944');
+  eq('and her mutupo', st.people[her].totem, 'Moyondizvo');
+
+  section('and the children of it stay with whoever is left');
+  /* A mother and her children are not undone by her husband turning out to be
+     the wrong man. The children were never the thing in doubt. */
+  eq('his child is still his', fe.kinTerms(him, kid).list[0].term, 'Mwanakomana');
+  eq('and still in the picture', !!fe.layoutOf().persons[kid], true);
+}
+
+section('AND IT IS THE PARTNER NAMED WHO STEPS OUT, not the card you are on');
+/* The one that cost a rewrite. Standing on Sydney's card and saying the
+   marriage to Evelyn is wrong has to take EVELYN out. Taking Sydney out of
+   his own marriage instead leaves the children of it hanging off Evelyn
+   alone, so a man correcting a claim about his wife loses his own son. */
+{
+  const fe = loadFrontend();
+  const him = fe.addPerson('Sydney', 'm', 'Mwendamberi', '1940', '');
+  const her = fe.grow('partner', him, 'Evelyn', 'f', 'Moyondizvo', { born:'1944' });
+  const kid = fe.grow('child', him, 'Hazvineyi', 'm', 'Mwendamberi', { born:'1979' });
+  const u = fe.unionsOf(him).find(x => x.partners.includes(her));
+
+  fe.unlinkPartner(u.id, her);
+  eq('the son is still his father\u2019s son',
+     (fe.kinTerms(him, kid).list[0] || {}).term, 'Mwanakomana');
+  check('and the marriage now holds the one partner it should',
+        JSON.stringify(fe.getState().unions[u.id].partners) === JSON.stringify([him]),
+        JSON.stringify(fe.getState().unions[u.id]));
+
+  section('and the other way round is the fault, kept here so it cannot come back');
+  const fe2 = loadFrontend();
+  const h2 = fe2.addPerson('Sydney', 'm', 'Mwendamberi', '1940', '');
+  const e2 = fe2.grow('partner', h2, 'Evelyn', 'f', 'Moyondizvo', { born:'1944' });
+  const k2 = fe2.grow('child', h2, 'Hazvineyi', 'm', 'Mwendamberi', { born:'1979' });
+  const u2 = fe2.unionsOf(h2).find(x => x.partners.includes(e2));
+  fe2.unlinkPartner(u2.id, h2);
+  eq('taking the wrong one out costs him the child',
+     ((fe2.kinTerms(h2, k2) || {}).list || []).length, 0);
+}
+
+section('AND NOBODY DISAPPEARS FROM THE PICTURE BY BEING UNMARRIED');
+/* The promise the whole feature rests on. Somebody left with no marriage and
+   no parents recorded is a person on their own, and a person on their own is
+   still drawn — otherwise "nobody leaves the tree" is only true of the data
+   and false of the thing the family is looking at. */
+{
+  const fe = loadFrontend();
+  const him = fe.addPerson('Sydney', 'm', 'Mwendamberi', '1940', '');
+  const her = fe.grow('partner', him, 'Evelyn', 'f', 'Moyondizvo', { born:'1944' });
+  fe.grow('child', him, 'Hazvineyi', 'm', 'Mwendamberi', { born:'1979' });
+  const u = fe.unionsOf(him).find(x => x.partners.includes(her));
+  fe.unlinkPartner(u.id, her);
+  check('she is still drawn, standing on her own', !!fe.layoutOf().persons[her],
+        Object.keys(fe.layoutOf().persons).length + ' drawn');
+}
+
+section('A CHILD HUNG ON THE WRONG PARENTS CAN BE TAKEN OFF THEM');
+/* The case the Whose child panel could not reach: it only appeared when there
+   was somewhere ELSE to move the child to, so a child hung on the only
+   household in the tree — the commonest wrong answer there is — had no
+   correction at all. */
+{
+  const fe = loadFrontend();
+  const dad = fe.addPerson('Farai Musoni', 'm', 'Mwendamberi', '1930', '');
+  const kid = fe.grow('child', dad, 'Not his', 'm', 'Shumba', { born:'1960' });
+
+  eq('the tree says he is the father', fe.kinTerms(kid, dad).list[0].term, 'Baba');
+  check('and that can be taken out', fe.unlinkParents(kid));
+  check('he is nobody\u2019s child now',
+        !(fe.kinTerms(kid, dad).list || []).some(t => t.term === 'Baba'),
+        JSON.stringify((fe.kinTerms(kid, dad).list || []).map(t => t.term)));
+  check('but he is still in the tree', !!fe.getState().people[kid]);
+  check('and so is the man who is not his father', !!fe.getState().people[dad]);
+}
+
+section('TAKING A LINK OUT IS UNDOABLE, which is why it asks nothing first');
+/* The delete-a-person below makes you type the name, because it destroys a
+   record and cannot be taken back. A link is not a record. Guarding a
+   reversible act with a modal teaches people to dismiss modals, which is what
+   you want least on the one that isn't. */
+{
+  const fe = loadFrontend();
+  const him = fe.addPerson('Sydney', 'm', 'Mwendamberi', '1940', '');
+  const her = fe.grow('partner', him, 'Evelyn', 'f', 'Moyondizvo', { born:'1944' });
+  const u = fe.unionsOf(him).find(x => x.partners.includes(her));
+  const before = JSON.stringify(fe.getState().unions[u.id].partners);
+  fe.unlinkPartner(u.id, her);
+  check('the link is gone', !fe.getState().unions[u.id].partners.includes(her));
+  fe.undo();
+  eq('and one step back puts it exactly as it was',
+     JSON.stringify(fe.getState().unions[u.id].partners), before);
+}
+
+section('AND IT REFUSES WHAT IS NOT THERE, rather than pretending');
+{
+  const fe = loadFrontend();
+  const a = fe.addPerson('Alone', 'm', 'Mwendamberi', '1940', '');
+  eq('somebody with no parents recorded cannot be taken off them',
+     fe.unlinkParents(a), false);
+  eq('and a marriage nobody is in is not a marriage to leave',
+     fe.unlinkPartner('u-that-does-not-exist', a), false);
+}
+
 // ── in the page ────────────────────────────────────────────────────────────
 section('SET ASIDE FIRST, ALWAYS');
 {
