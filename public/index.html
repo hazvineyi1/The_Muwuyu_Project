@@ -646,6 +646,10 @@ body.carrying .pod{transition:none;}
   box-shadow:var(--lift); animation:bud .2s ease-out backwards;
   max-height:calc(100vh - 110px); overflow-y:auto;   /* short screens still reach Grow */
 }
+/* A list of people with two things you can do to each needs more than the
+   252px a question about one person needs. Still narrow enough to sit beside
+   the tree rather than over it. */
+#form.wide{width:min(92vw, 372px);}
 #form .cap{
   font-size:10.5px; letter-spacing:.12em; text-transform:uppercase;
   color:var(--muted); margin:0 0 10px; line-height:1.5;
@@ -699,6 +703,34 @@ body.carrying .pod{transition:none;}
    until it is reached for. */
 #form .btn.ghost.danger{border-color:var(--pod-edge); color:var(--muted);}
 #form .btn.ghost.danger:hover{border-color:#a4432c; color:#a4432c;}
+/* A found person. Not a .dupe — a dupe is a thing to choose between, and
+   this is a person with two things you might do to them, so the name and the
+   actions stand apart rather than the whole row being one button. */
+#form .found{
+  display:flex; align-items:center; gap:10px;
+  padding:7px 9px; border:1px solid var(--pod-edge); border-radius:10px;
+  background:var(--pod-hi); margin-bottom:5px;
+}
+#form .found u{
+  flex:1; text-decoration:none; display:block; min-width:0;
+  font-family:'Fraunces',Georgia,serif; font-size:14px; font-weight:500;
+  color:var(--ink);
+}
+#form .found u small{
+  display:block; font-family:'Karla',sans-serif; font-size:10.5px;
+  color:var(--muted); font-weight:400; margin-top:1px;
+}
+#form .found .acts{display:flex; gap:5px; flex:0 0 auto;}
+#form .found .mini{
+  padding:5px 10px; border-radius:99px; cursor:pointer;
+  background:var(--pod); border:1.5px solid var(--pod-edge); color:var(--ink);
+  font-family:'Karla',sans-serif; font-size:11px; font-weight:700;
+  white-space:nowrap;
+}
+#form .found .mini:hover{border-color:var(--gold); color:var(--gold);}
+#form .found .mini.join{border-color:var(--gold-soft); color:var(--gold);}
+#form .found .mini.join:hover{background:var(--gold); color:var(--pod); border-color:var(--gold);}
+#form .found u small.leaves{color:var(--muted); font-style:italic;}
 #form .dupe.move{border-style:solid; border-color:var(--gold-soft);}
 #form .dupe.move u small.leaves{color:var(--gold); font-weight:600;}
 #form .kinpair{display:flex; gap:10px; margin-bottom:4px;}
@@ -1172,6 +1204,7 @@ body.carrying .pod{transition:none;}
   <button id="fit">Fit</button>
   <button class="zoom" id="zout" title="Smaller" aria-label="Show more of the tree">&minus;</button>
   <button class="zoom" id="zin" title="Bigger" aria-label="Show less of the tree, larger">+</button>
+  <button class="who" id="find" title="Find somebody by name, and join them on">Find</button>
   <button id="undo">Undo</button>
   <button id="clear">Clear</button>
   <button class="who" id="look" title="Light or dark, and which colours">Muwuyu</button>
@@ -2162,6 +2195,54 @@ function matchesForName(name, excludeId){
     .filter(x => x.m)
     .sort((x, y) => y.m.score - x.m.score)
     .slice(0, 3);
+}
+
+/* FINDING SOMEBODY BY NAME, anywhere in the tree.
+ *
+ * "I need to be able to search for a name."
+ *
+ * Searching existed in two places and neither of them was a search. The
+ * server has had prefix-and-fuzzy matching since the beginning, used for
+ * spotting duplicates; and the add form matches what you type against three
+ * candidates, to stop you entering a grandmother twice. Neither answers
+ * "where is Tapiwa" on a tree of four hundred people, which is the question
+ * a family actually asks, and the answer to which used to be to drag the
+ * canvas about until they appeared.
+ *
+ * TWO CHARACTERS, not three. The add form waits for three because it is
+ * guessing whether you are about to duplicate somebody and a wrong guess
+ * there is noise. Here you have asked, so the floor is as low as it can be
+ * without matching the whole family.
+ *
+ * SET-ASIDE PEOPLE ARE FOUND TOO, and marked. They are the ones somebody is
+ * most likely to be hunting for — "where did Aunt Rosa go" — and a search
+ * that cannot find what was hidden is a search that answers the easy half of
+ * the question. */
+function searchPeople(q, limit){
+  const text = String(q || '').trim();
+  if (text.length < 2) return [];
+  const low = text.toLowerCase();
+  return Object.values(state.people)
+    .map(p => {
+      const name = (p.name || '') + (p.also ? ' ' + p.also : '');
+      const l = name.toLowerCase();
+      /* Ranked by how the match reads to a person: the name that starts with
+         what you typed first, then a word inside it starting that way, then
+         anywhere at all, and only then the fuzzy score — which is there for
+         a misspelling and should never outrank a name you typed correctly. */
+      let rank = null;
+      if (l.startsWith(low)) rank = 0;
+      else if (l.split(/\s+/).some(w => w.startsWith(low))) rank = 1;
+      else if (l.includes(low)) rank = 2;
+      else {
+        const m = nameSimilarity(text, p.name);
+        if (m) rank = 3;
+      }
+      return rank === null ? null : { id:p.id, rank, name:p.name || '' };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name))
+    .slice(0, limit || 12);
 }
 
 /* WHO IS ALREADY HERE AND COULD BE JOINED ON, before a single letter is typed.
@@ -8751,6 +8832,144 @@ function nowDark(){
    five palettes and three light settings is thirteen taps to get back to
    where you started, and you cannot see what you are choosing until you have
    chosen it. */
+/* FIND, and the second half of the same question: "and also establish
+ * relationship/link".
+ *
+ * Joining two people has always been possible and has always needed you to
+ * be standing on one of them first: pick a person, tap a bud, choose from
+ * the list. That works when you can see them both. On a tree of four hundred
+ * it is two hunts across a canvas before the join can even be attempted, and
+ * a family who knows perfectly well that Rosa is Tapiwa's sister has to find
+ * Rosa on the screen before they are allowed to say so.
+ *
+ * So the panel does both. Type a name; every match is shown with where they
+ * stand and what they are to you. Each one can be gone to — and, when
+ * somebody is already picked, joined to them right here, by choosing which
+ * relation it is. Nothing new is decided about linking: it is the same
+ * canLink and the same linkExisting the add form uses, including the offer
+ * to MOVE somebody who is already recorded under another household. */
+let findText = '';
+
+function openFind(){
+  closeForm();
+  // placeForm reads this to decide where the panel sits; every panel sets it.
+  pending = { kind:'dupes', anchorId: sel || state.rootId };
+  const el = document.createElement('div');
+  el.id = 'form';
+  el.className = 'wide';
+  document.body.appendChild(el);
+
+  /* Whoever is picked is who a link would be made TO. It is read once, on
+     opening, so that it cannot change under the panel while it is being
+     read — and is named in every offer rather than assumed. */
+  const to = (sel && present(sel)) ? sel : null;
+  const toName = to ? (state.people[to].name || '').split(' ')[0] : '';
+
+  const draw = () => {
+    const hits = searchPeople(findText, 12);
+    el.innerHTML =
+      `<p class="cap">Find somebody</p>` +
+      `<input id="findQ" class="fld" value="${esc(findText)}" autocomplete="off"` +
+      ` placeholder="Name, or part of one" aria-label="Search for a name">` +
+      (to ? `<p class="browse">Anybody found can be joined to <b>${esc(toName)}</b>, ` +
+            `who is picked on the tree.</p>`
+          : `<p class="browse">Pick somebody on the tree first and you can join ` +
+            `what you find to them from here.</p>`) +
+      `<div class="dupes" id="findList">` +
+        (findText.trim().length < 2
+          ? `<p class="browse">Two letters is enough.</p>`
+          : !hits.length
+            ? `<p class="browse">Nobody by that name. Names entered with a ` +
+              `different spelling still turn up — try a shorter piece of it.</p>`
+            : hits.map(h => {
+                const q = state.people[h.id];
+                const life = q.born ? `b. ${esc(q.born)} · ` : '';
+                const rel = (meId && meId !== h.id) ? (relationship(meId, h.id) || {}) : {};
+                const tag = rel.term ? ` · your ${esc(rel.term)}` : '';
+                const gone = q.aside ? `<small class="leaves">set aside — ${esc(q.aside.why || '')}</small>` : '';
+                return `<div class="found">` +
+                  `<u>${esc(q.name)}<small>${life}${esc(positionOf(h.id))}${tag}</small>${gone}</u>` +
+                  `<span class="acts">` +
+                    (q.aside ? '' : `<button type="button" class="mini" data-goto="${h.id}">Show</button>`) +
+                    (to && to !== h.id && !q.aside
+                      ? `<button type="button" class="mini join" data-join="${h.id}">Join…</button>` : '') +
+                  `</span></div>`;
+              }).join('')) +
+      `</div>` +
+      `<div class="row"><button class="btn ghost" id="findNo">Close</button></div>`;
+    placeForm(el);
+
+    const q = $('findQ');
+    q.oninput = () => { findText = q.value; draw(); $('findQ').focus(); };
+    q.focus();
+    try { q.setSelectionRange(q.value.length, q.value.length); } catch (e) {}
+
+    el.querySelectorAll('[data-goto]').forEach(b => b.onclick = () => {
+      const id = b.dataset.goto;
+      sel = id; closeForm(); render();
+      if (layout.persons[id]) focusOn(id, Math.max(pos.k, 0.78));
+      revealBuds();
+      say(`${state.people[id].name} — ${positionOf(id)}.`);
+    });
+    el.querySelectorAll('[data-join]').forEach(b => b.onclick = () => openJoin(to, b.dataset.join));
+    $('findNo').onclick = closeForm;
+  };
+
+  draw();
+  el.addEventListener('keydown', e => { if (e.key === 'Escape'){ e.preventDefault(); closeForm(); } });
+}
+
+/* WHICH RELATION IT IS — asked once, plainly, with the ones that cannot be
+   said greyed out and the reason on them. The four are the same four the
+   buds offer, because they are the four links this model has. */
+function openJoin(anchorId, otherId){
+  closeForm();
+  const a = state.people[anchorId], b = state.people[otherId];
+  if (!a || !b) return;
+  pending = { kind:'dupes', anchorId: anchorId || sel || state.rootId };
+  const el = document.createElement('div');
+  el.id = 'form';
+  document.body.appendChild(el);
+  const first = x => (x.name || '').split(' ')[0];
+
+  el.innerHTML =
+    `<p class="cap">${esc(b.name)}</p>` +
+    `<p class="browse">is <b>${esc(first(a))}</b>'s…</p>` +
+    `<div class="seg col" id="joinKind">` +
+      ['child', 'parent', 'sibling', 'partner'].map(k => {
+        const why = canLink(k, anchorId, otherId);
+        const move = why === MOVE;
+        const blocked = move ? null : why;
+        const label = { child:'child', parent:'mother or father',
+                        sibling:'brother or sister', partner:'husband or wife' }[k];
+        return `<button type="button" data-kind="${k}"${blocked ? ' disabled' : ''}` +
+          `${move ? ' data-move="1"' : ''} title="${esc(blocked || '')}">` +
+          `${label}${move ? `<small>moves them out of the household they are ` +
+                            `recorded under now</small>` : ''}` +
+          `${blocked ? `<small>${esc(blocked)}</small>` : ''}</button>`;
+      }).join('') +
+    `</div>` +
+    `<div class="row"><button class="btn ghost" id="joinNo">Back</button></div>`;
+  placeForm(el);
+
+  el.querySelectorAll('[data-kind]:not([disabled])').forEach(btn => btn.onclick = () => {
+    const kind = btn.dataset.kind, moved = btn.dataset.move === '1';
+    linkExisting(kind, anchorId, otherId);
+    closeForm(); sel = otherId; render(); save();
+    if (layout.persons[otherId]) focusOn(otherId, Math.max(pos.k, 0.7));
+    /* The word is read off the tree once the link is in it, never off the
+       button that was pressed — see the add form, which learned this the
+       same way. */
+    const k = kinTerms(anchorId, otherId);
+    const said = k && k.list.length ? k.list.map(t => t.term).join(' · ') : '';
+    say(`${b.name} ${moved ? 'has been moved' : 'is joined'} on` +
+        `${said ? ` — ${said} to ${first(a)}` : ` to ${first(a)}`}.` +
+        (moved ? ' Undo puts it back.' : ''));
+  });
+  $('joinNo').onclick = () => openFind();
+  el.addEventListener('keydown', e => { if (e.key === 'Escape'){ e.preventDefault(); closeForm(); } });
+}
+
 function openLook(){
   closeForm();
   pending = { kind:'dupes', anchorId: sel || state.rootId };
@@ -9439,6 +9658,7 @@ $('signout').onclick = async () => {
 };
 
 $('dupes').onclick = openDuplicates;
+$('find').onclick = openFind;
 $('look').onclick = openLook;
 $('kin').onclick = openKinship;
 $('words').onclick = openWords;
