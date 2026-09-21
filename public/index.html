@@ -377,6 +377,11 @@ body.carrying .pod{transition:none;}
    only worth anything if you can still see where they stand among everybody
    else. */
 .pod.dim{opacity:.22; filter:saturate(.25); box-shadow:none;}
+/* Set back, not hidden. Light enough that every name is still legible and
+   every position still readable — the point is which people are theirs, and
+   that is only worth knowing against everybody else. */
+.pod.aside{opacity:.42; filter:saturate(.6);}
+#gtree.settled .branch, #gtree.settled .bond{opacity:.5;}
 /* The wood goes back with them. Leaving the branches at full strength while
    the pods faded left the tree looking like a tree with the people taken out
    of it, which is the opposite of what is being shown. */
@@ -690,6 +695,16 @@ body.carrying .pod{transition:none;}
   background:var(--fam); color:var(--pod);
 }
 .pod .fold + .fold{ right:14px; }
+/* A SECTOR CONTROL SITS ON THE OTHER CORNER from a family door, so a person
+   who is both a door and the head of a branch has two marks that cannot be
+   mistaken for each other. It borrows the accent rather than a family tint,
+   because it is about the picture rather than about whose people they are. */
+.pod .fold.sector{
+  right:auto; left:-10px; top:auto; bottom:-10px;
+  border-color:var(--gold-soft); color:var(--gold);
+}
+.pod .fold.sector:hover,
+.pod .fold.sector:focus-visible{ background:var(--gold); color:var(--pod); }
 
 /* the families listed in the Muwuyu panel */
 #form .fams{display:flex; flex-direction:column; gap:6px; margin:2px 0 8px;}
@@ -4838,6 +4853,32 @@ function foldedAway(){
     if (l.id === L.homeId || !folded.has(l.id)) continue;
     for (const id of l.members) blocked.add(id);
   }
+  /* ── AND ANY OTHER SECTOR SOMEBODY HAS SHUT ──────────────────────────
+   *
+   * "I want to be able to close and open different tree sectors."
+   *
+   * The fold began as a thing you could do to a family that married in,
+   * because that was the complaint at the time. It is the same act
+   * everywhere: a household with people below it is a sector of the tree,
+   * and closing it should be one tap wherever it is — your father's
+   * brother's whole line, a great-uncle's descendants, a branch you are not
+   * working on today.
+   *
+   * WHAT IS SHUT IS WHAT HANGS BELOW, never the person themselves. Folding
+   * somebody away entirely would take a name off the screen with nothing
+   * left to open it again, and the way back has to stay where the way in
+   * was. So the person stands, and their descendants go behind them. */
+  for (const id of folded){
+    if (L.byId.has(id) || !present(id)) continue;      // a family, handled above
+    /* THEIR MARRIAGE STANDS, because a household with one partner missing is
+       a picture of something that did not happen. AND SO DO THEIR PARENTS:
+       branchFrom carries them, since a branch has to know what it hangs
+       from — but folding a man's descendants must not take his father with
+       them. The first cut did exactly that, and shut the elder the whole
+       tree descends from. */
+    const stays = new Set([id, ...partnersOf(id), ...parentsOf(id)]);
+    for (const x of branchFrom(id)) if (!stays.has(x)) blocked.add(x);
+  }
   if (!blocked.size) return null;
 
   /* WHAT IS STILL STANDING, with the folded families out of the way. This is
@@ -6468,6 +6509,7 @@ function draw(){
   treeInk = svg.concat(hits, bondHits).join('');
   gtree.innerHTML = treeInk;
   gtree.classList.toggle('hushed', !!lit);
+  gtree.classList.toggle('settled', !lit && !!focusIds());
 
   /* WHOSE WORDS THESE ARE. Whoever is picked; you, when nobody is. Picking
      somebody is how you ask "what does this family look like from where THEY
@@ -6492,6 +6534,8 @@ function draw(){
   }
 
   const html = [];
+  // Whose part of the tree is lifted, worked out once for the whole draw.
+  const focused = focusIds();
   /* WHICH FAMILY EACH POD BELONGS TO, worked out once for the whole draw.
      Your own line takes no tint at all — it is not a family that married in,
      it is the tree — so the canvas carries as many colours as there are
@@ -6540,6 +6584,33 @@ function draw(){
     const capt = (hue !== undefined && theirs && theirs.root === p.id &&
                   theirs.name && !isFolded(myLine))
       ? `<span class="famname">${esc(theirs.name)}</span>` : '';
+    /* AND A SECTOR CONTROL ON ANYBODY WITH PEOPLE BELOW THEM. The family
+       doors above are a special case of this; this is the general one. Only
+       drawn on the person who is picked, because a control on every pod in
+       the tree is the tree taken over by its own furniture. */
+    /* WHAT WOULD ACTUALLY GO, which is not the same as the branch. branchFrom
+       carries the person, the people they married and the parents they hang
+       from, and a fold keeps all three — so counting the branch promised to
+       close one more person than it closes. */
+    const staying = new Set([p.id, ...partnersOf(p.id), ...parentsOf(p.id)]);
+    const belowMe = (sel === p.id && !foldAt.has(p.id))
+      ? [...branchFrom(p.id)].filter(x => !staying.has(x))
+      : [];
+    const shutSector = isFolded(p.id);
+    const sector = (belowMe.length || shutSector)
+      ? (() => {
+          const gone = shutSector
+            ? [...branchFrom(p.id)].filter(x => !staying.has(x) && !layout.persons[x]).length
+            : belowMe.length;
+          const n = gone || belowMe.length;
+          return `<button type="button" class="fold sector" data-shut="${p.id}"` +
+            ` title="${shutSector ? 'Open' : 'Close'} everything below ` +
+            `${esc((p.name || '').split(' ')[0])} — ${n} ${n === 1 ? 'person' : 'people'}"` +
+            ` aria-label="${shutSector ? 'Open' : 'Close'} the branch below ` +
+            `${esc((p.name || '').split(' ')[0])}, ${n} ${n === 1 ? 'person' : 'people'}"` +
+            ` aria-expanded="${shutSector ? 'false' : 'true'}">${shutSector ? '+' + n : '\u2212'}</button>`;
+        })()
+      : '';
     const folds = (foldAt.get(p.id) || []).map(l => {
       const shut = isFolded(l.id);
       const gone = l.members.filter(x => !layout.persons[x]).length;
@@ -6556,13 +6627,14 @@ function draw(){
     html.push(
       `<div class="pod${sel === p.id ? ' sel' : ''}${fresh.has(p.id) ? ' sprout' : ''}` +
       `${p.root ? ' taproot' : ''}${meId === p.id ? ' you' : ''}` +
-      `${lit ? (lit.ids.has(p.id) || p.id === lit.from ? ' lit' : ' dim') : ''}"` +
+      `${lit ? (lit.ids.has(p.id) || p.id === lit.from ? ' lit' : ' dim') : ''}` +
+      `${!lit && focused ? (focused.has(p.id) ? '' : ' aside') : ''}"` +
       ` data-id="${p.id}" tabindex="0" role="button"` +
       (hue !== undefined ? ` data-fam="${esc(myLine)}"` : '') +
       ` aria-label="${esc(p.name)} — show where the tree can grow from here"` +
       ` style="left:${at.x}px; top:${at.y}px` +
       (hue !== undefined ? `; --fam:${hue}` : '') + `">` +
-      capt + folds +
+      capt + folds + sector +
       (titled.has(p.id) ? titleFor(anchor, p.id) : '') +
       (mark ? `<span class="mk">${mark}</span>` : '') +
       (p.shown === false ? `<span class="shut" title="Not in the public record">·</span>` : '') +
@@ -8863,6 +8935,52 @@ function shapeLabel(shape){
    rather than of pairs. */
 let lit = null;                 // { term, ids:Set, from }
 
+/* ── FOCUS: THE PART OF THE TREE YOU ARE LOOKING AT ──────────────────────
+ *
+ * "When I click on a name, that family tree part should come into focus."
+ *
+ * Tapping somebody has always shown where the tree can grow from them. What
+ * it never did was answer the question the tap is actually asking, which on
+ * a tree of two hundred people is "which of these are THEIRS". So their part
+ * — them, everyone below them, the people they married, and the parents they
+ * hang from — stays at full strength and the rest of the tree is set back.
+ *
+ * SET BACK, NOT HIDDEN, and the difference is the whole design. Knowing
+ * which people are somebody's is only worth anything if you can still see
+ * where they stand among everybody else; hiding the rest answers the
+ * question by deleting it. Folding is the other thing, it is deliberate, and
+ * it is one tap away on the same pod.
+ *
+ * GENTLER THAN A LIT WORD. A word lit from the kinship panel is an answer to
+ * a question somebody asked, and it can afford to push the rest of the tree
+ * right back. This happens on every tap, so it is the lightest touch that
+ * still separates the two. */
+const FOCUS_KEY = 'muti-baobab-focus';
+let focusLifts = true;   // (focusOn() is the camera; this is the lift)
+function loadFocus(){
+  let v = null;
+  try { v = localStorage.getItem(FOCUS_KEY); } catch (e) {}
+  focusLifts = v !== 'off';
+}
+function setFocusLifts(on){
+  focusLifts = !!on;
+  try {
+    if (focusLifts) localStorage.removeItem(FOCUS_KEY);
+    else localStorage.setItem(FOCUS_KEY, 'off');
+  } catch (e) {}
+}
+/* Whose part of the tree is lifted right now: whoever is picked, and only
+   while nothing louder is being shown. */
+function focusIds(){
+  if (!focusLifts || lit || building || !sel || !present(sel)) return null;
+  const ids = branchFrom(sel);
+  // A branch that is most of the tree is not a focus, it is the tree — and
+  // setting four people back to lift a hundred and ninety-six says nothing.
+  const all = people().length;
+  if (!all || ids.size >= all - 1) return null;
+  return ids;
+}
+
 /* THE ONE THING THE PICTURE IS DOING THAT NOTHING ELSE SAYS OUT LOUD: that
  * a branch is being built, and the rest of the family is therefore not on the
  * screen. That has to be said, plainly, for as long as it is true.
@@ -8928,16 +9046,25 @@ function showLit(){
      question. One line however many are folded: a pill per family would be
      the bar taken over by a setting. */
   {
+    const L = familyLines();
     const shut = foldableLines().filter(l => isFolded(l.id));
+    /* AND THE SECTORS, which are the same act on a different thing. A branch
+       closed from somebody's own pod used to leave nothing on the bar at all
+       — so the one line saying what had happened, and the one way to undo
+       all of it at once, were missing for exactly the fold that is easiest
+       to make by accident. */
+    const sectors = [...folded].filter(id => !L.byId.has(id) && present(id));
     const on = layout && layout.persons ? Object.keys(layout.persons).length : 0;
     const all = people().length;
-    if (shut.length && all > on){
-      const names = shut.map(l => l.name).filter(Boolean);
+    if ((shut.length || sectors.length) && all > on){
+      const names = shut.map(l => l.name).filter(Boolean)
+        .concat(sectors.map(id => (state.people[id].name || '').split(' ')[0] + '\u2019s branch'));
+      const n = names.length;
       rows.push(
-        `<div class="pill"><b>${names.length ? esc(names.join(', ')) : 'Folded'}</b>` +
-        `<span>${on} of ${all} — ${names.length === 1 ? 'that family is' : 'those families are'} ` +
-        `folded away, not removed.</span>` +
-        `<button type="button" id="foldOff">Open them</button></div>`);
+        `<div class="pill"><b>${n ? esc(names.join(', ')) : 'Folded'}</b>` +
+        `<span>${on} of ${all} — ${n === 1 ? 'that one is' : 'those are'} ` +
+        `closed, not removed.</span>` +
+        `<button type="button" id="foldOff">Open ${n === 1 ? 'it' : 'them'}</button></div>`);
     }
   }
 
@@ -8967,9 +9094,9 @@ function showLit(){
   if ($('litOff')) $('litOff').onclick = () => { lit = null; render(); };
   if ($('undelete')) $('undelete').onclick = putThemBack;
   if ($('foldOff')) $('foldOff').onclick = () => {
-    for (const l of foldableLines()) setLineFolded(l.id, false);
+    for (const id of [...folded]) setLineFolded(id, false);
     render(); fit();
-    say('Every family is back on the tree.');
+    say('Everything is back on the tree.');
   };
   if ($('reachOff')) $('reachOff').onclick = () => {
     writePref(REACH_KEY, ''); setReach(''); render(); fit();
@@ -9423,11 +9550,14 @@ function openCard(id){
     `<button class="btn ghost wide${meId === id ? ' on' : ''}" id="cMe">` +
       `${meId === id ? '● This is you' : 'This is me'}</button>` +
     `<button class="btn ghost wide${building && building.from === id ? ' on' : ''}" id="cBuild">` +
-      `${building && building.from === id ? '● Close build' : 'Start build from here'}</button>` +
+      `${building && building.from === id
+        ? '\u25CF Showing only this branch'
+        : 'Show only this branch'}</button>` +
     `<p class="roothint">${building && building.from === id
-      ? 'The rest of the family is standing aside while you work. Nothing has been changed or removed.'
-      : 'Shows only this person and everyone below them, so a branch can be ' +
-        'grown without the whole family in the way. It changes no records.'}</p>` +
+      ? 'Everybody else is off the screen while you work. Nothing has been changed or removed, ' +
+        'and the whole family comes back when you close it.'
+      : 'Takes everybody else off the screen, so this branch can be grown without ' +
+        'the rest of the family in the way. It changes no records.'}</p>` +
     /* TAKING THEM OUT, on the card, where somebody looking at a wrong entry
        already is. It was only ever in the Set aside panel, which you cannot
        reach until you have already set somebody aside from the tree — so
@@ -10312,6 +10442,7 @@ function loadTheme(){
   setReach(readPref(REACH_KEY, REACHES));
   loadFolded();
   loadSeen();
+  loadFocus();
 }
 
 // Is the page dark right now? Decides which face of each swatch to show, so
@@ -10880,6 +11011,18 @@ function openLook(){
       `</div>` +
       `<p class="roothint">${esc((REACHES.find(x => x.v === reach) || REACHES[0]).note)}` +
       `${reach ? ' — everybody else is still in the tree, just not on the screen.' : ''}</p>` +
+      `<p class="lbl" style="margin-top:14px;">When you tap somebody</p>` +
+      `<div class="seg" id="lookFocus">` +
+        `<button type="button" data-focus="on" aria-pressed="${focusLifts}">` +
+          `Lift their part</button>` +
+        `<button type="button" data-focus="off" aria-pressed="${!focusLifts}">` +
+          `Leave the tree as it is</button>` +
+      `</div>` +
+      `<p class="roothint">${focusLifts
+        ? 'Their branch stays as it is and the rest of the tree is set back, so ' +
+          'you can see which of these people are theirs. Nothing is hidden, and ' +
+          'nothing is changed.'
+        : 'Every pod stays at full strength however far the tree reaches.'}</p>` +
       famPanel() +
       `<p class="lbl" style="margin-top:14px;">Light</p>` +
       `<div class="seg" id="lookTheme">` +
@@ -10902,6 +11045,15 @@ function openLook(){
       (BUILD ? `<p class="build">Build ${esc(BUILD)}</p>` : '');
     placeForm(el);
 
+    el.querySelectorAll('[data-focus]').forEach(b => b.onclick = () => {
+      setFocusLifts(b.dataset.focus === 'on');
+      draw();                       // the panel says which is on now
+      render();
+      say(focusLifts
+        ? 'Tapping somebody now lifts their part of the tree.'
+        : 'Tapping somebody leaves the rest of the tree as it is.');
+    });
+
     el.querySelectorAll('[data-famfold]').forEach(b => b.onclick = () => {
       const id = b.dataset.famfold;
       setLineFolded(id, !isFolded(id));
@@ -10913,7 +11065,8 @@ function openLook(){
     });
     el.querySelectorAll('[data-famall]').forEach(b => b.onclick = () => {
       const shut = b.dataset.famall === 'shut';
-      for (const l of foldableLines()) setLineFolded(l.id, shut);
+      if (shut) for (const l of foldableLines()) setLineFolded(l.id, true);
+      else for (const id of [...folded]) setLineFolded(id, false);
       draw();
       render(); fit();
       say(shut ? 'Only your own line is showing.'
@@ -11276,7 +11429,7 @@ podsEl.addEventListener('pointerdown', e => {
   e.stopPropagation();
   const pod = e.target.closest('.pod');
   // The small controls on a card are their own targets, not handles.
-  if (!pod || e.target.closest('.rm,.ord,.fold,[data-card],[data-vantage]')) return;
+  if (!pod || e.target.closest('.rm,.ord,.fold,[data-shut],[data-card],[data-vantage]')) return;
   const pressed = pod.dataset.id;
   if (!pressed || !state.people[pressed]) return;
   // The household is what is being reached for; the person who carries it may
@@ -11373,6 +11526,23 @@ podsEl.addEventListener('click', e => {
      person's screen, like the zoom and the reach, and it is kept where those
      are kept. Two relatives reading the same tree on the same afternoon can
      have different halves of it folded and both be right. */
+  /* CLOSING A SECTOR, from the person it hangs off. Same act as folding a
+     family, same promise: nothing is recorded, nothing is sent, and the way
+     back is where the way in was. */
+  const shut = e.target.closest('[data-shut]');
+  if (shut){
+    const id = shut.dataset.shut;
+    const was = screenOf(id);
+    const on = !isFolded(id);
+    setLineFolded(id, on);
+    render();
+    keepSteady(id, was);
+    const name = ((state.people[id] || {}).name || '').split(' ')[0];
+    say(on ? `Everything below ${name} is closed — open it again from the same pod.`
+           : `${name}\u2019s branch is back.`);
+    return;
+  }
+
   const fold = e.target.closest('[data-fold]');
   if (fold){
     const id = fold.dataset.fold;

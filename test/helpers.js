@@ -141,6 +141,8 @@ function loadFrontend(){
       branchPath, BAR, yearOf, hubRooms, hubMark, startAgain,
       saidWhat, newsLines, whenWords, newsCount, markSeen, loadSeen,
       budWords, PLAIN_BUDS, waysToAdd,
+      focusIds, setFocusLifts, loadFocus,
+      pick(id){ sel = id; },
       budsHtml(id){ sel = id; computeLayout(); placeBuds(); return budsHtml(); },
       seenTo(n){ seenSeq = n; }, headTo(n){ headSeq = n; },
       sharedNow(){ store = 'shared'; },

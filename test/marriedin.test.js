@@ -376,7 +376,7 @@ section('AND THE BAR SAYS SO FOR AS LONG AS ANYBODY IS FOLDED AWAY');
   check('the family is named', /<b>Mandaba<\/b>/.test(one), one);
   check('with how many of them are on the screen', /13 of 18/.test(one), one);
   check('and the word that matters — not removed',
-        /folded away, not removed/.test(one), one);
+        /not removed/.test(one), one);
   check('and a way out of it', /id="foldOff"/.test(one), one);
 
   fold(t, 'Marumahoko');
@@ -384,7 +384,7 @@ section('AND THE BAR SAYS SO FOR AS LONG AS ANYBODY IS FOLDED AWAY');
   check('two folded families are still one line, not two pills',
         (two.match(/class="pill"/g) || []).length === 1, two);
   check('both named on it', /Marumahoko/.test(two) && /Mandaba/.test(two), two);
-  check('and it reads as a plural', /those families are/.test(two), two);
+  check('and it reads as a plural', /those are/.test(two) && /Open them/.test(two), two);
 
   fold(t, 'Mandaba', false);
   fold(t, 'Marumahoko', false);
