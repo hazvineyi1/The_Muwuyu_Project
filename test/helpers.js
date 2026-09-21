@@ -138,6 +138,8 @@ function loadFrontend(){
       familyLines, foldableLines, foldedAway, forgetLines, isFolded, loadFolded, FAM_HUES, famPanel,
       whyHere(id){ computeLayout(); return whyHere(id); }, positionOf,
       whyOnCard(id){ computeLayout(); return whyOnCard(id); },
+      branchPath, BAR,
+      treeSvg(){ draw(); return treeSvg(); },
       // The standing notices on the bar, as the page assembles them.
       barNotices(){ const out = []; const el = { hidden:false,
         set innerHTML(v){ out.push(v); }, get innerHTML(){ return out[0] || ''; } };

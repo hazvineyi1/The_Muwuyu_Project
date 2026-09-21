@@ -342,10 +342,14 @@ body.carrying .pod{transition:none;}
 .layer{position:absolute; left:0; top:0; transform-origin:0 0; will-change:transform;}
 
 /* ── branches ───────────────────────────────────────────────────────── */
-.branch{fill:none; stroke-linecap:round; stroke:var(--bark);}
+/* Square corners, and mitred rather than rounded, because the whole point of
+   a right angle here is that the eye can see where the line turns. */
+.branch{fill:none; stroke-linecap:butt; stroke-linejoin:miter; stroke-miterlimit:4;
+        stroke:var(--bark);}
 .branch.root{stroke:var(--root);}
 .branch.unknown{stroke:var(--muted); stroke-width:2; stroke-dasharray:4 6; opacity:.6;}
-.bond{stroke:var(--bark-thin); stroke-width:3; stroke-linecap:round; fill:none;}
+.bond{stroke:var(--bark-thin); stroke-width:3; stroke-linecap:butt;
+      stroke-linejoin:miter; fill:none;}
 .bond.reach{stroke-dasharray:none; opacity:.7;}   /* a partner further along the row */
 /* The tap target over a line. Invisible, and the only thing in the tree layer
    that takes a pointer at all — everything else there is drawing. */
@@ -5908,7 +5912,7 @@ function computeLayout(){
       ? state.unions[b.viaUnion].partners.filter(present)
       : [];
     links.push({
-      kind:'branch', x1:from.x, y1:from.y, x2:to.x, y2:to.y,
+      kind:'branch', x1:from.x, y1:from.y, x2:to.x, y2:to.y, union:b.viaUnion,
       weight:countBelow(b), root:(from.y + to.y)/2 > 0,
       unknown:!!b.parent.socket, id:b.viaChild,
       child:b.viaChild, parents
@@ -5927,12 +5931,60 @@ function computeLayout(){
       const to = persons[c];
       if (!to) continue;
       links.push({
-        kind:'branch', reaches:true,
+        kind:'branch', reaches:true, union:u.id,
         x1:from.x, y1:from.y, x2:to.x, y2:to.y,
         weight: ofPerson[c] ? countBelow(ofPerson[c]) : 1,
         root:(from.y + to.y)/2 > 0, unknown:false,
         id:c, child:c, parents:u.partners.filter(present)
       });
+    }
+  }
+
+  /* ── ONE FAMILY, ONE CROSSBAR ───────────────────────────────────────────
+   *
+   * Every child of a marriage turns at the same height, which is what makes
+   * their verticals read as one family hanging off one bar. The cost is that
+   * two DIFFERENT families in the same gap between rows turn at that same
+   * height as well — and where one family's children have been split apart
+   * by a marriage, its bar runs the width of the canvas straight through the
+   * other's. Measured on an ordinary tree: two bars overlapping for two
+   * hundred pixels, drawn as one line, joining four people who are nothing
+   * to each other.
+   *
+   * So the bars are laid in lanes. A family takes the height nearest its
+   * children that nothing else is already using, and only steps back towards
+   * the parents when it has to. Families that do not overlap — which is
+   * almost all of them — all keep the first lane and the picture is
+   * unchanged. */
+  const LANE = 20, LANES = 4;
+  {
+    const fams = new Map();
+    for (const l of links){
+      if (l.kind !== 'branch' || Math.abs(l.x2 - l.x1) < 0.5) continue;
+      const key = Math.round(l.y1) + '|' + (l.union || l.child);
+      const f = fams.get(key) ||
+        fams.set(key, { row:l.y1, y1:l.y1, y2:l.y2, lo:Infinity, hi:-Infinity, of:[] }).get(key);
+      f.lo = Math.min(f.lo, l.x1, l.x2);
+      f.hi = Math.max(f.hi, l.x1, l.x2);
+      f.of.push(l);
+    }
+    const byRow = new Map();
+    for (const f of fams.values())
+      (byRow.get(f.row) || byRow.set(f.row, []).get(f.row)).push(f);
+    for (const row of byRow.values()){
+      // Widest first: the bar most likely to be crossed gets the lane
+      // nearest its children, and the short ones step back around it.
+      row.sort((a, b) => (b.hi - b.lo) - (a.hi - a.lo) || a.lo - b.lo);
+      const taken = [];                       // lane -> spans already on it
+      for (const f of row){
+        let lane = 0;
+        while (lane < LANES - 1 &&
+               (taken[lane] || []).some(t => f.hi + SIB_GAP > t.lo && t.hi + SIB_GAP > f.lo))
+          lane++;
+        (taken[lane] = taken[lane] || []).push(f);
+        const dy = f.y2 - f.y1;
+        for (const l of f.of) l.bar = l.y2 - dy * BAR - Math.sign(dy) * lane * LANE;
+      }
     }
   }
 
@@ -5978,12 +6030,39 @@ function computeLayout(){
 
 /* ── drawing ────────────────────────────────────────────────────────── */
 
+/* ── STRAIGHT LINES ──────────────────────────────────────────────────────
+ *
+ * "Change the layout completely to straight lines."
+ *
+ * The branches were curves: a cubic leaving the marriage going straight up
+ * and arriving at the child going straight up, so that a fork had the spring
+ * of a real branch rather than the look of a wire. It is a prettier line and
+ * it is a worse one to read, for one reason — a curve has no direction you
+ * can follow with your eye. Two of them crossing look like one line bending,
+ * and on a tree where a household's parents stand a long way off, following
+ * a curve across half a canvas of other curves is guesswork.
+ *
+ * THREE SEGMENTS, ALL SQUARE. Up out of the marriage, across at one height,
+ * up into the child. The crossbar is the useful part: every child of one
+ * marriage leaves from the same point and turns at the same height, so their
+ * verticals hang off ONE horizontal bar and a family reads as a family
+ * rather than as a handful of separate lines that happen to converge. It is
+ * how a family tree has been drawn on paper for as long as there have been
+ * family trees, and the reason is the same now as it was then.
+ *
+ * NEARER THE CHILDREN THAN THE PARENTS, so the bar sits with the row it
+ * gathers. And where a child stands directly over the marriage — which on
+ * this shape is the whole line of descent, every generation of it — the
+ * three segments collapse to one unbroken vertical, with no corner in it at
+ * all. That is the case worth getting right: the mudzi is now literally a
+ * straight line from the oldest elder to whoever is marked You. */
+const BAR = 0.35;                   // how far back from the children it turns
 function branchPath(l){
-  const dy = l.y2 - l.y1, dx = l.x2 - l.x1;
-  const c = Math.abs(dy) * 0.45, s = Math.sign(dy) || 1;
-  // leaves the parent going straight and arrives at the child going straight,
-  // which gives a fork the spring of a real branch instead of a wire.
-  return `M${l.x1} ${l.y1} C ${l.x1 + dx*0.05} ${l.y1 + s*c}, ${l.x2 - dx*0.05} ${l.y2 - s*c}, ${l.x2} ${l.y2}`;
+  const dy = l.y2 - l.y1;
+  // Straight down the middle: no corner, no crossbar, nothing to follow.
+  if (Math.abs(l.x2 - l.x1) < 0.5) return `M${l.x1} ${l.y1}L${l.x1} ${l.y2}`;
+  const bar = typeof l.bar === 'number' ? l.bar : l.y2 - dy * BAR;
+  return `M${l.x1} ${l.y1}L${l.x1} ${bar}L${l.x2} ${bar}L${l.x2} ${l.y2}`;
 }
 
 /* An invisible stroke over a drawn line, wide enough to be tapped.
@@ -6119,6 +6198,13 @@ function render(){
   }
 }
 
+/* The ink of the last draw, kept so a test can read the lines the page
+   actually put on the screen rather than a second copy of the code that
+   makes them. The page has no use for it — it has already been written into
+   the svg. */
+let treeInk = '';
+function treeSvg(){ return treeInk; }
+
 function draw(){
   ancestryCache.clear();          // the tree may have changed shape
   forgetHouses();
@@ -6152,8 +6238,12 @@ function draw(){
       // Two partners standing next to each other get a short straight tie.
       // A second or third marriage reaches past whoever stands between them,
       // so that tie dips below the row instead of cutting through a pod.
+      /* A tie that has to reach past whoever stands between the two of them
+         steps below the row and back, squarely, rather than bowing under it
+         — the same three segments as a branch, for the same reason. */
+      const drop = l.y + POD_H / 2 + 26;
       const d = l.reach
-        ? `M${l.x1} ${l.y}q${(l.x2 - l.x1)/2} ${POD_H/2 + 26} ${l.x2 - l.x1} 0`
+        ? `M${l.x1} ${l.y}L${l.x1} ${drop}L${l.x2} ${drop}L${l.x2} ${l.y}`
         : `M${l.x1} ${l.y}L${l.x2} ${l.y}`;
       svg.push(`<path class="bond${l.reach ? ' reach' : ''}" d="${d}"></path>`);
       if (l.pair) bondHits.push(hitPath(d, 3, l.pair[0], [l.pair[1]]));
@@ -6202,7 +6292,8 @@ function draw(){
       hits.push(hitPath(branchPath(l), w, l.child, l.parents));
     }
   }
-  gtree.innerHTML = svg.concat(hits, bondHits).join('');
+  treeInk = svg.concat(hits, bondHits).join('');
+  gtree.innerHTML = treeInk;
   gtree.classList.toggle('hushed', !!lit);
 
   /* WHOSE WORDS THESE ARE. Whoever is picked; you, when nobody is. Picking
