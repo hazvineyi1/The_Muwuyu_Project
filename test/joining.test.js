@@ -129,20 +129,43 @@ section('A LOOP IS REFUSED');
         !!h.fe.canLink('parent', h.gran, h.son), h.fe.canLink('parent', h.gran, h.son));
 }
 
-section('a second set of parents is refused, not quietly swapped');
+section('a second set of parents is OFFERED as a move, never taken quietly');
 /* One person, one set of parents — a PRIMARY KEY in the database and the
-   invariant the whole child model rests on. Moving somebody between two sets
-   is a real thing a family needs, and it is setParentage, where it is a
-   deliberate act with its own question. It must not happen as a side effect
-   of drawing a line. */
+   invariant the whole child model rests on.
+ *
+ * This used to be a flat refusal that advised merging the two records, and
+ * "why can I not link?" is what came back. Merging is right for one person
+ * entered twice and catastrophic for two different people the list happened
+ * to offer together; and re-parenting is not an exotic case, it is the
+ * commonest correction there is. The app knew the answer and would not say
+ * it.
+ *
+ * So the answer is MOVE — which is not a link being made quietly, it is a
+ * question being asked out loud. The invariant is what makes it a move
+ * rather than an addition: taking the offer leaves exactly one set of
+ * parents, because the old one is let go of in the same breath. */
 {
   const h = house();
   const other = h.fe.addPerson('Farai Moyo', 'm', 'Shava', '1945', '');
-  const why = h.fe.canLink('child', other, h.son);
-  check('refused', !!why, why);
-  check('and says where to do it properly', /already has parents/.test(why || ''), why);
-  eq('his parents are untouched',
+  eq('it is not a refusal', h.fe.canLink('child', other, h.son), 'move');
+  eq('and nothing has moved by being asked',
      h.fe.parentUnionOf(h.son).partners, [h.gran]);
+
+  h.fe.linkExisting('child', other, h.son);
+  eq('taking the offer moves him', h.fe.parentUnionOf(h.son).partners, [other]);
+  const old = Object.values(h.fe.getState().unions)
+                .filter(u => u.children.includes(h.son));
+  eq('and he is a child of ONE household, not two', old.length, 1);
+  check('his old father is still in the tree', !!h.fe.getState().people[h.gran]);
+}
+
+section('but a loop is still a flat no, because a loop is impossible');
+/* The distinction the whole change rests on: one of these is a question and
+   the other is not. */
+{
+  const h = house();
+  const why = h.fe.canLink('child', h.son, h.gran);
+  check('a father cannot be made his son\u2019s child', !!why && why !== 'move', why);
 }
 
 section('the same marriage cannot be made twice');

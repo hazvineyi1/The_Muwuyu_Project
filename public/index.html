@@ -689,6 +689,18 @@ body.carrying .pod{transition:none;}
   text-transform:uppercase; color:var(--gold); white-space:nowrap;
 }
 #form .dupe[disabled]{opacity:.6; cursor:default; border-style:dashed;}
+/* An offer to MOVE somebody, which is not the same as an offer to join them
+   on and must not look like one. Solid edge, because it is live; and the
+   line naming the household they would leave is the one thing that has to be
+   read before it is tapped. */
+/* The one button on a card that cannot be taken back. Not red-on-red — a
+   warning colour on a quiet card shouts over everything around it, and
+   this sits beside Set aside, which is the one most people want. Outlined
+   until it is reached for. */
+#form .btn.ghost.danger{border-color:var(--pod-edge); color:var(--muted);}
+#form .btn.ghost.danger:hover{border-color:#a4432c; color:#a4432c;}
+#form .dupe.move{border-style:solid; border-color:var(--gold-soft);}
+#form .dupe.move u small.leaves{color:var(--gold); font-weight:600;}
 #form .kinpair{display:flex; gap:10px; margin-bottom:4px;}
 #form .kinpair > div{flex:1; min-width:0;}
 #form .kinlist{margin:-4px 0 8px;}
@@ -2181,15 +2193,25 @@ function linkCandidates(kind, anchorId, limit){
   const house = (anchor.name || '').split(' ').slice(1).join(' ').toLowerCase();
   const near = layout.persons[anchorId];
 
+  /* SOMEBODY WHO WOULD HAVE TO BE MOVED IS STILL A CANDIDATE — that is the
+     whole of "why can I not link?". They were filtered out of this list
+     entirely, so the answer to a family's commonest correction was an
+     absence. They are offered last, after everyone who can simply be joined
+     on, because moving somebody is the bigger act of the two. */
   return people()
-    .filter(p => p.id !== anchorId && !canLink(kind, anchorId, p.id))
+    .filter(p => {
+      if (p.id === anchorId) return false;
+      const why = canLink(kind, anchorId, p.id);
+      return !why || why === MOVE;
+    })
     .map(p => {
       const surname = (p.name || '').split(' ').slice(1).join(' ').toLowerCase();
       const at = layout.persons[p.id];
       const d = (near && at) ? Math.hypot(at.x - near.x, at.y - near.y) : 1e9;
-      return { id:p.id, kin:(house && surname === house) ? 0 : 1, d };
+      const move = canLink(kind, anchorId, p.id) === MOVE ? 1 : 0;
+      return { id:p.id, move, kin:(house && surname === house) ? 0 : 1, d };
     })
-    .sort((x, y) => x.kin - y.kin || x.d - y.d)
+    .sort((x, y) => x.move - y.move || x.kin - y.kin || x.d - y.d)
     .slice(0, limit || 8)
     .map(x => ({ id:x.id, m:null }));
 }
@@ -3623,6 +3645,9 @@ function bandLabel(at){
 /* Attach somebody already in the tree instead of typing them again. This is
    what actually stops duplicates: the moment two branches meet, one of them
    points at the person the other already entered. */
+/* Not a refusal — a question. See canLink. */
+const MOVE = 'move';
+
 function canLink(kind, anchorId, otherId){
   if (anchorId === otherId) return 'that is the same person';
   const up = ancestry(anchorId).up, down = ancestry(otherId).up;
@@ -3632,16 +3657,33 @@ function canLink(kind, anchorId, otherId){
     if (pu && pu.partners.includes(otherId)) return 'already recorded as a parent here';
     if (pu && pu.partners.length >= 2) return 'both parents are already named';
   }
+  /* ALREADY HAVING PARENTS IS NOT THE SAME KIND OF NO.
+   *
+   * "Why can I not link?" — because this app answered two very different
+   * questions with the same greyed-out word. One person cannot be their own
+   * grandfather: that is impossible, and no is the whole answer. A child
+   * already recorded under another household is not impossible at all; it is
+   * the commonest correction there is, and the app knew the answer and
+   * refused to say it. Worse, it advised merging the two records — which is
+   * right for one person entered twice and catastrophic for two different
+   * people who happen to be offered together.
+   *
+   * A person carries ONE set of parents in this model, on purpose: it is
+   * what stops a tree quietly recording two mothers for one child. So moving
+   * them is not adding a second link, it is exchanging the one they have —
+   * and that is a sentence the family can be shown and asked about, rather
+   * than a door with no handle. Returning the reason MOVE says so; the list
+   * turns it into an offer and names the household they would leave. */
   if (kind === 'child'){
     if (up.has(otherId)) return 'that would make them their own descendant';
     const pu = parentUnionOf(otherId);
-    if (pu) return `${state.people[otherId].name} already has parents recorded — merge the two records instead`;
+    if (pu) return MOVE;
   }
   if (kind === 'sibling'){
     const pu = parentUnionOf(otherId);
     const mine = parentUnionOf(anchorId);
-    if (pu && mine && pu.id !== mine.id) return `${state.people[otherId].name} already has different parents recorded`;
     if (up.has(otherId) || down.has(anchorId)) return 'they are already an ancestor or descendant here';
+    if (pu && mine && pu.id !== mine.id) return MOVE;
   }
   if (kind === 'partner'){
     if (partnersOf(anchorId).includes(otherId)) return 'already married to each other';
@@ -3657,6 +3699,10 @@ function linkExisting(kind, anchorId, otherId){
     if (pu) pu.partners.push(otherId); else addUnion([otherId], [anchorId]);
   } else if (kind === 'sibling'){
     const pu = parentUnionOf(anchorId) || addUnion([], [anchorId]);
+    /* Somebody already recorded under another household is MOVED, not copied
+       into a second one. One person, one set of parents — see canLink. */
+    const had = parentUnionOf(otherId);
+    if (had && had.id !== pu.id) had.children = had.children.filter(x => x !== otherId);
     if (!pu.children.includes(otherId)){
       const at = pu.children.indexOf(anchorId);
       pu.children.splice(at + 1, 0, otherId);
@@ -3666,6 +3712,8 @@ function linkExisting(kind, anchorId, otherId){
     if (solo) solo.partners.push(otherId); else addUnion([anchorId, otherId], []);
   } else if (kind === 'child'){
     const u = unionsOf(anchorId)[0] || addUnion([anchorId], []);
+    const had = parentUnionOf(otherId);
+    if (had && had.id !== u.id) had.children = had.children.filter(x => x !== otherId);
     if (!u.children.includes(otherId)) u.children.push(otherId);
   }
 }
@@ -7905,6 +7953,25 @@ function openCard(id){
       ? 'The rest of the family is standing aside while you work. Nothing has been changed or removed.'
       : 'Shows only this person and everyone below them, so a branch can be ' +
         'grown without the whole family in the way. It changes no records.'}</p>` +
+    /* TAKING THEM OUT, on the card, where somebody looking at a wrong entry
+       already is. It was only ever in the Set aside panel, which you cannot
+       reach until you have already set somebody aside from the tree — so
+       "delete" was two panels and a guess away from the thing being deleted,
+       and the answer to "why can I not delete an entry" was that you can,
+       somewhere else.
+
+       BOTH DOORS, because they are different acts. Set aside is reversible
+       and is what nearly every doubt deserves. Delete for good is not, and
+       still makes you type the name — that has not been softened, only
+       moved to where it is needed. */
+    `<p class="lbl">Take them out</p>` +
+    `<div class="row">` +
+      `<button class="btn ghost" id="cAside">Set aside</button>` +
+      `<button class="btn ghost danger" id="cGone">Delete for good</button>` +
+    `</div>` +
+    `<p class="roothint">Set aside takes them out of the picture and keeps ` +
+    `every record — Set aside in the toolbar puts them back. Delete for good ` +
+    `cannot be undone once the page saves.</p>` +
     `<div class="row"><button class="btn" id="cSave">Save</button>` +
     `<button class="btn ghost" id="cNo">Close</button></div>`;
   document.body.appendChild(el);
@@ -7967,6 +8034,34 @@ function openCard(id){
         : `${p.name} is now recorded as ${label.toLowerCase()}.`);
     } else { closeForm(); }
   });
+  $('cAside').onclick = () => { commit(); closeForm(); openSetAside(id); };
+  $('cGone').onclick = () => {
+    const below = descendantsOf(id);
+    const typed = prompt(
+      `Delete ${p.name} for good?\n\n` +
+      `This cannot be undone once the page saves. Their place in every ` +
+      `marriage goes with them` +
+      (below.count ? `, and ${below.count} ${below.count === 1 ? 'person' : 'people'} ` +
+                     `recorded below them lose their link to this part of the tree`
+                   : '') + `.\n\n` +
+      `Set aside is there if you only want them out of the picture.\n\n` +
+      `Type their name to confirm: ${p.name}`);
+    if (typed === null) return;
+    if (typed.trim().toLowerCase() !== (p.name || '').trim().toLowerCase()){
+      say('That is not the name. Nothing has been deleted.');
+      return;
+    }
+    const name = p.name;
+    /* Set aside first, always — the rule the record model is built on, and
+       the server refuses the delete without it. Doing both here does not
+       weaken it: typing the name IS the deliberate second half, and making
+       somebody perform the first half in another panel only ever taught
+       them that deleting is hard to find, never that it is serious. */
+    if (!state.people[id].aside) setAside(id, 'deleted from their card');
+    if (!deleteForever(id)){ say('That could not be deleted.'); return; }
+    closeForm(); sel = null; render(); save();
+    say(`${name} has been deleted.`);
+  };
   $('cNo').onclick = closeForm;
   el.querySelectorAll('[data-vis]').forEach(b => b.onclick = () => {
     commit();
@@ -8272,20 +8367,39 @@ function openForm(kind, anchorId, said){
         No second record, no duplicate.</p>`;
     box.innerHTML = heading + matches.map(({ id, m }) => {
       const q = state.people[id];
-      const blocked = canLink(kind, anchorId, id);
+      const why = canLink(kind, anchorId, id);
+      const move = why === MOVE;
+      const blocked = move ? null : why;
       const life = q.born ? `b. ${esc(q.born)} · ` : '';
       const rel = meId ? (relationship(meId, id) || {}) : {};
       const tag = rel.term ? ` · your ${esc(rel.term)}` : '';
       // One house, where a marriage is what is being made. See wireTotem.
       const house = kind === 'partner' ? sameHouse(anchorId, id) : null;
-      return `<button type="button" class="dupe" data-link="${id}"${blocked ? ' disabled' : ''}` +
-        ` title="${esc(blocked || 'Link this person in rather than adding a second record')}">` +
+      /* Where they would be leaving from, named. "Move them here" is only an
+         honest offer if the family can see what it costs before they tap it,
+         and what it costs is the household this person is recorded under
+         now — which is usually the thing that needs correcting and
+         occasionally the thing that was right all along. */
+      const from = move ? (() => {
+        const pu = parentUnionOf(id);
+        const named = pu ? pu.partners.filter(x => state.people[x])
+                             .map(x => (state.people[x].name || '').split(' ')[0]) : [];
+        return named.length ? named.join(' and ') : 'the household they are in';
+      })() : '';
+      return `<button type="button" class="dupe${move ? ' move' : ''}" data-link="${id}"` +
+        `${blocked ? ' disabled' : ''}${move ? ' data-move="1"' : ''}` +
+        ` title="${esc(blocked || (move
+            ? `Takes them out of ${from}'s household and records them here instead. ` +
+              `Nobody is removed from the tree, and Undo puts it back.`
+            : 'Link this person in rather than adding a second record'))}">` +
         `<u>${esc(q.name)}<small>${life}${esc(positionOf(id))}${tag}</small>` +
         (house ? `<small class="onehouse">both ${esc(house.name)} — one house</small>` : '') +
-        `</u><em>${blocked ? 'can’t link' : 'use this one'}</em></button>`;
+        (move ? `<small class="leaves">now recorded under ${esc(from)}</small>` : '') +
+        `</u><em>${blocked ? 'can’t link' : move ? 'move them here' : 'use this one'}</em></button>`;
     }).join('');
     box.querySelectorAll('.dupe:not([disabled])').forEach(btn => btn.onclick = () => {
       const otherId = btn.dataset.link;
+      const moved = btn.dataset.move === '1';
       const before = screenOf(anchorId);
       linkExisting(kind, anchorId, otherId);
       closeForm();
@@ -8300,9 +8414,13 @@ function openForm(kind, anchorId, said){
          if the two were already related another way it says both. */
       const k = kinTerms(anchorId, otherId);
       const said = k && k.list.length ? k.list.map(t => t.term).join(' · ') : '';
-      say(said
-        ? `${state.people[otherId].name} joined on — ${said} to ${state.people[anchorId].name.split(' ')[0]}.`
-        : `${state.people[otherId].name} joined on — one record, not two.`);
+      const them = state.people[otherId].name;
+      const to = state.people[anchorId].name.split(' ')[0];
+      say(moved
+        ? `${them} has been moved here${said ? ` — ${said} to ${to}` : ''}. ` +
+          `They are recorded under one household, not two, and Undo puts it back.`
+        : said ? `${them} joined on — ${said} to ${to}.`
+               : `${them} joined on — one record, not two.`);
     });
   };
   nameEl.addEventListener('input', () => {
