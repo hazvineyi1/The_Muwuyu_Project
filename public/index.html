@@ -8163,7 +8163,27 @@ function openCard(id){
   el.innerHTML =
     `<p class="cap">${esc(p.name)}` +
       `${p.also ? ` <i class="alsocap">${esc(p.also)}</i>` : ''}</p>` +
-    (rel ? `<p class="lbl">To you</p>` + kinOnCard(id) : '') +
+    (rel ? `<p class="lbl">To you</p>` + kinOnCard(id) +
+      /* WHEN THE WORD IS WRONG BECAUSE THE LINK IS WRONG.
+       *
+       * "Allow for editing to link or correct relationship and description."
+       *
+       * The card could already be told a different WORD — that box has been
+       * under this line for weeks. What it could not be told is that the
+       * word is right and the tree is wrong: that this is not your Ambuya
+       * at all, because somebody in between is joined to the wrong person or
+       * to nobody. Teaching a word there would file a correction under a
+       * shape that should never have been reached, and make the mistake
+       * harder to find afterwards rather than easier.
+       *
+       * So the line says which of the two it is, and both doors are here:
+       * the word, in the box above; the links, below. */
+      `<p class="roothint">That word is worked out from how this tree is ` +
+      `joined up. If it is wrong, one of the joins is wrong — the word is ` +
+      `only ever the answer to them.</p>` +
+      `<div class="row"><button class="btn ghost wide" id="cJoin">` +
+      `Join ${esc((p.name || '').split(' ')[0])} to somebody</button></div>`
+      : '') +
     `<input id="cName" class="fld" value="${esc(p.name)}" placeholder="Name" autocomplete="off">` +
     /* THE OTHER NAME. One field, not a maiden/married pair — that pair decides
        which of the two is the real one, and different families answer that
@@ -8301,6 +8321,7 @@ function openCard(id){
         : `${p.name} is now recorded as ${label.toLowerCase()}.`);
     } else { closeForm(); }
   });
+  if ($('cJoin')) $('cJoin').onclick = () => { commit(); openFind(id); };
   $('cAside').onclick = () => { commit(); closeForm(); openSetAside(id); };
   $('cGone').onclick = () => {
     commit();
@@ -9017,10 +9038,10 @@ function nowDark(){
  * to MOVE somebody who is already recorded under another household. */
 let findText = '';
 
-function openFind(){
+function openFind(anchorId){
   closeForm();
   // placeForm reads this to decide where the panel sits; every panel sets it.
-  pending = { kind:'dupes', anchorId: sel || state.rootId };
+  pending = { kind:'dupes', anchorId: anchorId || sel || state.rootId };
   const el = document.createElement('div');
   el.id = 'form';
   el.className = 'wide';
@@ -9029,7 +9050,10 @@ function openFind(){
   /* Whoever is picked is who a link would be made TO. It is read once, on
      opening, so that it cannot change under the panel while it is being
      read — and is named in every offer rather than assumed. */
-  const to = (sel && present(sel)) ? sel : null;
+  /* WHO A JOIN WOULD BE MADE TO. Whoever was asked for, when the panel was
+     opened from somebody's card; otherwise whoever is picked on the tree. */
+  const to = (anchorId && present(anchorId)) ? anchorId
+           : (sel && present(sel)) ? sel : null;
   const toName = to ? (state.people[to].name || '').split(' ')[0] : '';
 
   const draw = () => {
@@ -9038,8 +9062,8 @@ function openFind(){
       `<p class="cap">Find somebody</p>` +
       `<input id="findQ" class="fld" value="${esc(findText)}" autocomplete="off"` +
       ` placeholder="Name, or part of one" aria-label="Search for a name">` +
-      (to ? `<p class="browse">Anybody found can be joined to <b>${esc(toName)}</b>, ` +
-            `who is picked on the tree.</p>`
+      (to ? `<p class="browse">Anybody found can be joined to <b>${esc(toName)}</b>` +
+            `${anchorId ? '' : ', who is picked on the tree'}.</p>`
           : `<p class="browse">Pick somebody on the tree first and you can join ` +
             `what you find to them from here.</p>`) +
       `<div class="dupes" id="findList">` +
@@ -9133,7 +9157,7 @@ function openJoin(anchorId, otherId){
         `${said ? ` — ${said} to ${first(a)}` : ` to ${first(a)}`}.` +
         (moved ? ' Undo puts it back.' : ''));
   });
-  $('joinNo').onclick = () => openFind();
+  $('joinNo').onclick = () => openFind(anchorId);
   el.addEventListener('keydown', e => { if (e.key === 'Escape'){ e.preventDefault(); closeForm(); } });
 }
 

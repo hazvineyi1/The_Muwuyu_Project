@@ -106,4 +106,44 @@ section('including the offer to MOVE, which the same rule already knows about');
   check('his old father is still in the tree', !!t.fe.getState().people[t.taqiyy]);
 }
 
+section('AND THE CARD IS A WAY IN TO IT, because that is where a wrong word is seen');
+/* "Allow for editing to link or correct relationship and description."
+ *
+ * The card could already be told a different WORD — that box has been under
+ * the To you line for weeks. What it could not be told is that the word is
+ * right and the TREE is wrong: that this is not your Ambuya at all, because
+ * somebody in between is joined to the wrong person or to nobody. Teaching a
+ * word there files a correction under a shape that should never have been
+ * reached, which makes the mistake harder to find afterwards rather than
+ * easier.
+ *
+ * So Find can be anchored on the person whose card you are reading, rather
+ * than on whoever happens to be picked on the tree. */
+{
+  const t = tree();
+  // Rosa is in the tree and joined to nobody, so nothing about her is right yet.
+  eq('she is nobody to anybody', (t.fe.kinTerms(t.me, t.rosa).list || []).length, 0);
+
+  /* What the card's button does: the same canLink and linkExisting, anchored
+     on the person being read about. */
+  eq('and she can be joined to somebody from there',
+     t.fe.canLink('parent', t.thomas, t.rosa), null);
+  t.fe.linkExisting('parent', t.thomas, t.rosa);
+
+  eq('after which the word is worked out, not typed in',
+     (t.fe.kinTerms(t.me, t.rosa).list[0] || {}).term, 'Ambuya');
+  /* AND THE SENTENCE UNDER IT FOLLOWS THE LINKS TOO. The description is
+     never stored — correcting the join corrects what is said about it, which
+     is the whole reason it is worth correcting the join. */
+  eq('and so is the sentence under it',
+     (t.fe.kinTerms(t.me, t.rosa).list[0] || {}).why, 'your grandparent');
+  /* It was "no traced link yet" a moment ago. Correcting the join corrected
+     what is said about it, which is the whole reason the join is the thing
+     worth correcting. */
+  const before = tree();
+  check('where it had been the app saying it could not tell',
+        /no traced link/.test((before.fe.relationship(before.me, before.rosa) || {}).why || ''),
+        JSON.stringify(before.fe.relationship(before.me, before.rosa)));
+}
+
 report();
