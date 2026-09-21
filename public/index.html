@@ -1218,7 +1218,43 @@ const POD_W = 132, POD_H = 48;
 const TOPBAR = 58;
 const COUPLE_GAP = 30;     // between two partners
 const SIB_GAP = 46;        // between sibling families
-const LEVEL = 172;         // between generations
+const LEVEL = 200;         // between generations, at the ground
+
+/* AND IT GETS TALLER AS IT RISES. A muwuyu is not a ladder with its rungs
+   evenly spaced: the wood below is close and heavy, and the crown opens out.
+   Each generation above the ground stands a little further from the one under
+   it than that one did — which is also the room the branches need to splay
+   into. Below the ground, where a family has traced elders nobody had
+   recorded, the steps stay plain: roots do not open out, they reach down.
+
+   HOW MUCH taller was not a matter of taste. A tree packed as wide as this
+   one and as flat as it was left the top third of the screen empty and
+   still had to be zoomed out to fit sideways — so height was free until the
+   drawing was about as tall as it is wide, and that is where these two
+   numbers put it. Past that point height starts costing what width costs,
+   and every pod gets smaller again. */
+const RISE = 0.15;
+
+/* AND WIDER AS IT RISES. The layout packs every row to the least width that
+   fits, which draws a family as a slab. Scaling each row outward from the
+   trunk — more the higher it stands — makes the branches diverge the way
+   branches do, and gives the drawing the silhouette of the thing it is named
+   after: narrow at the ground, spreading above.
+
+   It can only ever widen. Every person in a row is scaled about the same
+   point by the same factor, so nothing in it can cross anything else, and
+   the space between two people only grows.
+
+   TWO MECHANISMS, and the division between them is the point. The scale is
+   kept GENTLE and capped, because it multiplies distance: a cousin already
+   two thousand pixels out gets thrown twice as far by a splay that looks
+   modest in the middle of the picture, and the branch out to them was
+   already the longest thing on the canvas. The widening that does the real
+   work is additive — the gap BETWEEN branches grows with height, so a row
+   opens out by the same amount whether you stand near the trunk or far from
+   it, and nothing is catapulted. */
+const SPLAY = 0.09, SPLAY_MAX = 1.4;
+const SPREAD = 0.3;        // how much further apart branches stand, per level up
 
 let state = { people:{}, unions:{}, rootId:null, seq:1 };
 let history = [];
@@ -4350,11 +4386,15 @@ function computeLayout(){
        across the canvas to say so. */
     const kids = b.kids.filter(k => !k.visiting);
     if (!kids.length){ b.x = left + width(b)/2; return width(b); }
+    /* Branches stand further apart the higher they are. See SPREAD: this is
+       the half of the widening that opens a row out without moving anybody
+       further from the trunk than the row before them already put them. */
+    const gap = SIB_GAP * (1 + SPREAD * Math.max(0, b.gen + 1));
     let cursor = left, span = 0;
     kids.forEach((k, i) => {
       const w = place(k, cursor);
-      cursor += w + SIB_GAP;
-      span += w + (i ? SIB_GAP : 0);
+      cursor += w + gap;
+      span += w + (i ? gap : 0);
     });
     const move = (n, d) => { n.x += d; n.kids.forEach(k => move(k, d)); };
 
@@ -4468,8 +4508,21 @@ function computeLayout(){
 
   /* WHERE EVERYBODY ENDS UP STANDING, before anything is moved on purpose. */
   const IN_LAW_LANE = 0.5;
+  /* The rows, measured by adding up the steps rather than multiplying one
+     out — because the steps are no longer all the same. See RISE. */
+  const rowAt = new Map();
+  const rowY = gen => {
+    if (rowAt.has(gen)) return rowAt.get(gen);
+    let y = 0;
+    if (gen > 0) for (let k = 0; k < gen; k++) y -= LEVEL * (1 + RISE * k);
+    else for (let k = gen; k < 0; k++) y += LEVEL;
+    rowAt.set(gen, y);
+    return y;
+  };
+  // Households first, so a visiting house has a row to be measured against.
+  for (const b of blocks) if (!b.visiting) b.y = rowY(b.gen);
   for (const b of blocks){
-    b.y = b.visiting && b.parent ? b.parent.y + LEVEL * IN_LAW_LANE : -b.gen * LEVEL;
+    if (b.visiting) b.y = (b.parent ? b.parent.y : rowY(b.gen)) + LEVEL * IN_LAW_LANE;
   }
 
   const personXIn = (b, id) => {
@@ -4661,6 +4714,50 @@ function computeLayout(){
     }
     b.x = best;
     lanes.get(b.y).push([b.x - w/2, b.x + w/2]);
+  }
+
+  /* THE SPLAY, applied last of all the sideways decisions and to the block
+     positions rather than to the drawing, so that everything downstream —
+     the pods, the wood, the sockets, the lanes — is worked out from where
+     people actually stand.
+
+     MEASURED FROM THE HEIGHT, not from the generation number, because a
+     visiting house stands half a level up and has to widen with the lane it
+     is in rather than with a row it is not on. */
+  {
+    /* THE TRUNK the rows open out from: where the line stands, when there is
+       a line. With no line to hold it, the middle of the ground row — a fan
+       has to open from somewhere, and the oldest row is where the wood is. */
+    let trunkX = null;
+    if (onSpine.size){
+      let low = null;
+      for (const b of onSpine.keys()) if (!low || b.gen < low.gen) low = b;
+      if (low) trunkX = personXIn(low, onSpine.get(low));
+    }
+    if (trunkX === null){
+      const ground = blocks.filter(b => !b.visiting && !b.socket);
+      if (ground.length){
+        const lowest = Math.min(...ground.map(b => b.gen));
+        const row = ground.filter(b => b.gen === lowest);
+        trunkX = row.reduce((t, b) => t + b.x, 0) / row.length;
+      }
+    }
+    if (trunkX !== null){
+      for (const b of blocks){
+        const up = Math.max(0, -b.y / LEVEL);
+        const k = Math.min(SPLAY_MAX, 1 + SPLAY * up);
+        /* SCALED BY THE PERSON ON THE LINE, not by the middle of the
+           household they stand in. A household is a husband and a wife side
+           by side; opening the rows out from its middle drags the man on the
+           line half a pod sideways at every step and un-straightens the very
+           thing the shape exists to keep straight. Measured this way the
+           trunk does not move at all — it is what everything else opens
+           out from. */
+        const who = onSpine.get(b);
+        const off = who ? personXIn(b, who) - b.x : 0;
+        b.x = trunkX + (b.x + off - trunkX) * k - off;
+      }
+    }
   }
 
   const persons = {}, sockets = [], links = [], unionAt = {};
