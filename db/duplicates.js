@@ -123,13 +123,17 @@ function computeNameSimilarity(nameA, nameB){
   if (!ta.length || !tb.length) return null;
   const shared = ta.filter(x => tb.some(y => closeEnough(x, y)));
   if (!shared.length) return null;
+  /* The evidence line is read by whoever has to decide, so the name in it is
+     spelled like a name. nameTokens lowercases to compare; nothing downstream
+     reads this string except the eye. */
+  const said = shared.map(t => t.charAt(0).toUpperCase() + t.slice(1)).join(' ');
   if (ta.join(' ') === tb.join(' ')){
     return { score: WEIGHTS.NAME_SAME, why: 'same name once the title is set aside' };
   }
   if (shared.length >= Math.min(ta.length, tb.length)){
-    return { score: WEIGHTS.NAME_ALL_SHARED, why: `both called ${shared.join(' ')}` };
+    return { score: WEIGHTS.NAME_ALL_SHARED, why: `both called ${said}` };
   }
-  return { score: WEIGHTS.NAME_SOME_SHARED, why: `share the name ${shared.join(' ')}` };
+  return { score: WEIGHTS.NAME_SOME_SHARED, why: `share the name ${said}` };
 }
 
 const birthYear = born => {
@@ -236,7 +240,37 @@ function generations(g){
       (g.unionChildren.get(u) || []).forEach(c => step(c, n + 1));
     }
   }
-  for (const p of g.people) if (gen[p.id] === undefined) gen[p.id] = 0;
+  /* WHOEVER THE WALK NEVER REACHED gets a number so nothing downstream has
+     to guard against a hole — but the number is a GUESS, and both it and the
+     PART of the tree each person is in are recorded so that everything which
+     compares two people by their position can ask whether their positions
+     can be compared at all. See sameness() below, and the frontend's
+     generations(), which does this step for step. */
+  const guessed = new Set();
+  for (const p of g.people) if (gen[p.id] === undefined){ gen[p.id] = 0; guessed.add(p.id); }
+
+  const part = new Map();
+  for (const id of Object.keys(gen)) if (!guessed.has(id)) part.set(id, 0);
+  let n = 0;
+  for (const p of g.people){
+    if (part.has(p.id)) continue;
+    n++;
+    const q = [p.id];
+    part.set(p.id, n);
+    while (q.length){
+      const id = q.shift();
+      const near = [...(g.unionsOf.get(id) || [])];
+      const pu = g.parentUnion.get(id);
+      if (pu !== undefined) near.push(pu);
+      for (const u of near)
+        for (const y of (g.unionPartners.get(u) || []).concat(g.unionChildren.get(u) || [])){
+          if (part.has(y)) continue;
+          part.set(y, n); q.push(y);
+        }
+    }
+  }
+  Object.defineProperty(gen, 'guessed', { value: guessed, enumerable: false });
+  Object.defineProperty(gen, 'part', { value: part, enumerable: false });
   return gen;
 }
 
@@ -260,8 +294,20 @@ function sameness(g, gen, aId, bId){
   const against = [];
   let score = nm.score;
 
+  /* WHETHER THEIR POSITIONS CAN BE COMPARED AT ALL. Everything below that
+     reads the tree's SHAPE is only evidence when both records are in the
+     same part of it — two records of one man, one joined in and one floating
+     on its own, have no shared origin to count generations from, and his
+     children being split between the two is the signature of the split
+     rather than evidence against it. The frontend holds the same line, and
+     test/parity.test.js keeps the two in step. */
+  const part = gen.part;
+  const guessed = gen.guessed;
+  const together = !part || part.get(aId) === part.get(bId);
+  const placed = id => gen[id] !== undefined && !(guessed && guessed.has(id));
+
   // ── generation ────────────────────────────────────────────────────────
-  if (gen[aId] !== undefined && gen[bId] !== undefined){
+  if (together && placed(aId) && placed(bId)){
     const d = Math.abs(gen[aId] - gen[bId]);
     if (d === 0) score += WEIGHTS.SAME_GENERATION;
     else {
@@ -278,7 +324,7 @@ function sameness(g, gen, aId, bId){
   if (sharedMate.length){
     score += WEIGHTS.SHARED_SPOUSE;
     why.push(`both married to ${g.byId.get(sharedMate[0]).name}`);
-  } else if (mates.length && theirs.size){
+  } else if (together && mates.length && theirs.size){
     score += WEIGHTS.DIFFERENT_SPOUSE;
     against.push('married to different people');
   }
@@ -290,7 +336,7 @@ function sameness(g, gen, aId, bId){
   if (sharedKid.length){
     score += WEIGHTS.SHARED_CHILD;
     why.push(`both parents of ${g.byId.get(sharedKid[0]).name}`);
-  } else if (kidsA.length && kidsB.size){
+  } else if (together && kidsA.length && kidsB.size){
     score += WEIGHTS.DIFFERENT_CHILDREN;
     against.push('different children recorded');
   }
@@ -306,7 +352,7 @@ function sameness(g, gen, aId, bId){
     } else if (setA && setA === setB){
       score += WEIGHTS.SAME_PARENT_UNION;
       why.push('the same parents');
-    } else {
+    } else if (together){
       score += WEIGHTS.DIFFERENT_PARENTS;
       against.push('different parents recorded — if those two are also one person, merge them first');
     }

@@ -141,7 +141,7 @@ function loadFrontend(){
       branchPath, BAR, yearOf, hubRooms, hubMark, startAgain,
       saidWhat, newsLines, whenWords, newsCount, markSeen, loadSeen,
       budWords, PLAIN_BUDS, waysToAdd,
-      focusIds, setFocusLifts, loadFocus,
+      focusIds, setFocusLifts, loadFocus, adrift, mayAlreadyBe, adriftRoom,
       pick(id){ sel = id; },
       budsHtml(id){ sel = id; computeLayout(); placeBuds(); return budsHtml(); },
       seenTo(n){ seenSeq = n; }, headTo(n){ headSeq = n; },

@@ -777,6 +777,25 @@ body.carrying .pod{transition:none;}
 #form .room.danger u{color:var(--gold);}
 #form .room.danger{border-style:dashed;}
 
+/* A NAME JOINED TO NOTHING. Dashed, because a dashed edge already means
+   "not settled" everywhere else in this app — the socket where parents will
+   go, the line to a household nobody has named. It is not an error and must
+   not look like one: no red, no warning, just a record waiting for somebody
+   to say where it belongs. */
+.pod.adrift{
+  border-style:dashed; border-color:var(--gold-soft);
+  box-shadow:0 0 0 4px color-mix(in srgb, var(--gold-soft) 14%, transparent), var(--shadow);
+}
+.pod .loose{
+  position:absolute; bottom:-9px; left:50%; transform:translateX(-50%);
+  padding:2px 8px; border-radius:999px; white-space:nowrap;
+  background:var(--pod); border:1.5px dashed var(--gold-soft); color:var(--gold);
+  font-size:8px; font-weight:700; letter-spacing:.14em; text-transform:uppercase;
+}
+/* One mark at a time at the foot of a pod: a family name wins, because a
+   person in a named family is by definition joined to something. */
+.pod .famname + .loose{ display:none; }
+
 /* an empty socket where somebody's parents will go */
 .pod.socket{
   background:transparent; border-style:dashed; border-color:var(--pod-edge);
@@ -1074,6 +1093,32 @@ body.carrying .pod{transition:none;}
 #form .pair .keepnote span{
   display:block; color:var(--muted); font-weight:600; margin-top:3px;
 }
+/* ── A NAME JOINED TO NOTHING, IN THE ROOM THAT PUTS IT RIGHT ─────────────
+   Built from .pair's vocabulary on purpose: this is the same kind of thing
+   — a guess with its evidence and the ways to act on it — and looking like
+   a different kind of thing would say it was one. Dashed, because none of
+   it is an error; gold, because it is waiting on somebody. */
+#form .lost{
+  padding:11px; margin-bottom:9px; border-radius:14px 4px 14px 4px;
+  background:var(--pod-hi); border:1.5px dashed var(--pod-edge);
+}
+#form .lost u{display:block; text-decoration:none; font-size:15px; line-height:1.25;}
+#form .lost u small{
+  display:block; margin-top:3px;
+  font-family:'Karla',sans-serif; font-size:10px; font-weight:600;
+  letter-spacing:.04em; color:var(--muted);
+}
+#form .lost .maybe{margin:8px 0 9px; font-size:12px; line-height:1.5; color:var(--ink);}
+#form .lost .maybe b{color:var(--gold);}
+#form .lost .maybe i{display:block; margin-top:3px; font-size:11px; color:var(--muted);}
+#form .lost .acts{display:flex; flex-wrap:wrap; gap:6px;}
+#form .lost .mini{
+  padding:5px 10px; border-radius:99px; cursor:pointer;
+  background:var(--pod); border:1.5px solid var(--pod-edge); color:var(--ink);
+  font-family:'Karla',sans-serif; font-size:11px; font-weight:700;
+}
+#form .lost .mini:hover{border-color:var(--gold); color:var(--gold);}
+#form .lost .mini.join{border-color:var(--gold); color:var(--gold);}
 #form .pair.weak{border-style:dashed;}
 #form .pair.weak .keepnote{color:var(--muted);}
 #form .pair .against{color:var(--muted); font-style:italic;}
@@ -2289,9 +2334,13 @@ function nameSimilarity(nameA, nameB){
   if (!ta.length || !tb.length) return null;
   const shared = ta.filter(x => tb.some(y => closeEnough(x, y)));
   if (!shared.length) return null;
+  /* The evidence line is read by whoever has to decide, so the name in it is
+     spelled like a name. nameTokens lowercases to compare; nothing downstream
+     reads this string except the eye. */
+  const said = shared.map(t => t.charAt(0).toUpperCase() + t.slice(1)).join(' ');
   if (ta.join(' ') === tb.join(' ')) return { score:0.34, why:'same name once the title is set aside' };
-  if (shared.length >= Math.min(ta.length, tb.length)) return { score:0.28, why:`both called ${shared.join(' ')}` };
-  return { score:0.18, why:`share the name ${shared.join(' ')}` };
+  if (shared.length >= Math.min(ta.length, tb.length)) return { score:0.28, why:`both called ${said}` };
+  return { score:0.18, why:`share the name ${said}` };
 }
 
 /* Where somebody sits, in a phrase — enough to tell one Tendai from another. */
@@ -2422,8 +2471,43 @@ function sameness(aId, bId, gens){
   let score = nm.score;
 
   // ── generation ────────────────────────────────────────────────────────
+  //
+  // Only where both numbers came from the same walk. See generations(): a
+  // person the walk never reached is given a row to stand on rather than a
+  // generation that means anything, and comparing that against a real one
+  // was reading two records of the same man as a man and his grandson.
   const g = gens || generations();
-  if (g[aId] !== undefined && g[bId] !== undefined){
+  const guessed = g.guessed;
+  const known = id => g[id] !== undefined && !(guessed && guessed.has(id));
+
+  /* ── WHETHER THEIR POSITIONS CAN BE COMPARED AT ALL ────────────────────
+   *
+   * "Thomas Musoni, born in 1971 and his children should auto reconcile."
+   *
+   * Everything below that reads the tree's SHAPE — generations apart, married
+   * to different people, different children, different parents — is only
+   * evidence when both records are in the same tree. Two records of one man,
+   * one joined in and one floating on its own, are in different parts of it,
+   * and every one of those signals then fires against them:
+   *
+   *   one generation apart      -0.45   (his part had no origin to count from)
+   *   different children        -0.12   (the children are split between the two)
+   *
+   * Which is backwards. When two people enter the same man separately, HIS
+   * CHILDREN BEING SPLIT BETWEEN THE TWO RECORDS IS THE SIGNATURE OF THE
+   * SPLIT, not evidence against it. Measured on the case that was sent:
+   * same name, same birth year, same mutupo, and the app scored it 0.15 —
+   * below even the threshold for "possible", so it appeared nowhere at all.
+   * With the shape signals held back where they cannot mean anything, the
+   * same pair scores 0.60.
+   *
+   * THE POSITIVE ONES STILL COUNT. A shared child or a shared marriage is a
+   * shared child or a shared marriage wherever it is found — and finding one
+   * across two parts is the strongest possible sign that the parts are one. */
+  const part = g.part;
+  const together = !part || part.get(aId) === part.get(bId);
+
+  if (together && known(aId) && known(bId)){
     const d = Math.abs(g[aId] - g[bId]);
     if (d === 0) score += 0.08;
     else {
@@ -2438,7 +2522,7 @@ function sameness(aId, bId, gens){
   const sharedMate = mates.filter(x => theirs.includes(x));
   if (sharedMate.length){
     score += 0.5; why.push(`both married to ${state.people[sharedMate[0]].name}`);
-  } else if (mates.length && theirs.length){
+  } else if (together && mates.length && theirs.length){
     score -= 0.18; against.push('married to different people');
   }
 
@@ -2448,7 +2532,7 @@ function sameness(aId, bId, gens){
   const sharedKid = kidsA.filter(k => kidsB.includes(k));
   if (sharedKid.length){
     score += 0.5; why.push(`both parents of ${state.people[sharedKid[0]].name}`);
-  } else if (kidsA.length && kidsB.length){
+  } else if (together && kidsA.length && kidsB.length){
     score -= 0.12; against.push('different children recorded');
   }
 
@@ -2458,7 +2542,7 @@ function sameness(aId, bId, gens){
     const setA = pa.partners.slice().sort().join(), setB = pb.partners.slice().sort().join();
     if (pa.id === pb.id){ score += 0.4; why.push('listed twice among the same children'); }
     else if (setA && setA === setB){ score += 0.4; why.push('the same parents'); }
-    else {
+    else if (together){
       score -= 0.4;
       against.push('different parents recorded — if those two are also one person, merge them first');
     }
@@ -2525,6 +2609,80 @@ const likelyDuplicates = () => duplicatePairs().filter(isLikelyPair);
    is what the parity suite exists to keep true — and the exhaustive scan above
    is untouched, so it goes on being the reference that proves the server's
    blocking misses nothing. */
+
+/* ── NAMES THAT ARE JOINED TO NOTHING ────────────────────────────────────
+ *
+ * "Don't let names float, they all need to be linked and branching from
+ *  somewhere."
+ *
+ * Sent with a photograph of two pods sitting on the ground with no wood
+ * running to them at all. The app had no idea. Nothing counted them, nothing
+ * marked them, nothing said what to do about them — the tally said "11 in
+ * the tree" and eleven is what it drew, so by every measure the app took, it
+ * was fine.
+ *
+ * It happens honestly. Somebody is entered while a relative reads a name off
+ * a funeral programme, and the link is going to be added in a minute. Then
+ * the minute passes. Or two people enter the same man, one of them joins
+ * their copy in and the other does not, and the second copy sits there being
+ * a name nobody can reach.
+ *
+ * ADRIFT IS RECKONED FROM YOU, not from the biggest lump. A tree with two
+ * halves and no marriage between them has one of them adrift, and which one
+ * is the question the app cannot answer and must not guess at: the half YOU
+ * are standing in is the tree, and the other half is what needs joining on.
+ *
+ * AND IT IS NEVER AN ERROR. Nobody is warned, nothing is refused, and
+ * nothing is removed. A name with no link is a name somebody took the
+ * trouble to write down, and it belongs in the tree the moment anybody can
+ * say where. All this does is stop it being invisible. */
+function adrift(){
+  const here = people().map(p => p.id);
+  const from = (meId && present(meId)) ? meId
+             : (state.rootId && present(state.rootId)) ? state.rootId
+             : (here.length ? here[0] : null);
+  if (!from) return [];
+  const seen = new Set([from]);
+  const stack = [from];
+  while (stack.length){
+    const x = stack.pop();
+    const near = unionsOf(x);
+    const up = parentUnionOf(x);
+    if (up) near.push(up);
+    for (const u of near)
+      for (const y of u.partners.concat(u.children)){
+        if (seen.has(y) || !present(y)) continue;
+        seen.add(y); stack.push(y);
+      }
+  }
+  return here.filter(id => !seen.has(id));
+}
+
+/* WHO THIS ADRIFT NAME MIGHT ALREADY BE.
+ *
+ * "When people are adding and they duplicate, reconcile duplicated entries…
+ *  auto reconcile."
+ *
+ * The reconciling is offered, never done. Three living Garikais in one
+ * family is ordinary — children are named after their grandfathers — and an
+ * app that quietly merged two of them would be destroying a record on a
+ * guess, which is the one thing this project does not do. What it can do is
+ * put the guess in front of the person who knows, with the evidence, one tap
+ * from being acted on.
+ *
+ * Only the best match, and only a good one: a list of maybes beside a name
+ * is a second job rather than an answer. */
+function mayAlreadyBe(id){
+  if (!present(id)) return null;
+  const gens = generations();
+  let best = null;
+  for (const q of people()){
+    if (q.id === id || isDismissed(id, q.id)) continue;
+    const m = sameness(id, q.id, gens);
+    if (m && (!best || m.score > best.score)) best = { id:q.id, ...m };
+  }
+  return best && best.score >= 0.6 ? best : null;
+}
 
 const DUPES_THRESHOLD = 0.5;
 
@@ -4435,7 +4593,50 @@ function generations(){
       u.children.forEach(c => step(c, n + 1));
     }
   }
-  people().forEach(p => { if (g[p.id] === undefined) g[p.id] = 0; });
+  /* WHOEVER THE WALK NEVER REACHED gets a number so the layout has a row to
+     put them on — but the number is a GUESS, and it is recorded as one.
+   *
+   * It used to be handed out silently, and that quietly broke the duplicate
+   * scan. Two records of one man, one joined into the tree and one floating
+   * on its own, are in different components: the floating one was given
+   * generation 0, the real one was at 1, and sameness read that as "one
+   * generation apart — more likely named after them" and took nearly half a
+   * point off. Same name, same birth year, same mutupo, and the app said
+   * they were probably a man and his grandson. A generation number is only
+   * meaningful against another number from the same walk; across two
+   * components there is no shared origin and the comparison is noise. */
+  const guessed = new Set();
+  people().forEach(p => {
+    if (g[p.id] === undefined){ g[p.id] = 0; guessed.add(p.id); }
+  });
+
+  /* AND WHICH PART OF THE TREE EACH PERSON IS IN, walked the same way and in
+     the same pass, because everything that compares two people by their
+     POSITION needs to know whether their positions can be compared at all.
+     Part 0 is the one reckoned from the root; everybody the first walk never
+     reached is in a part of their own. */
+  const part = new Map();
+  for (const id of Object.keys(g)) if (!guessed.has(id)) part.set(id, 0);
+  let n = 0;
+  for (const p of people()){
+    if (part.has(p.id)) continue;
+    n++;
+    const q2 = [p.id];
+    part.set(p.id, n);
+    while (q2.length){
+      const x = q2.shift();
+      const near = unionsOf(x);
+      const up = parentUnionOf(x);
+      if (up) near.push(up);
+      for (const u of near)
+        for (const y of u.partners.concat(u.children)){
+          if (part.has(y) || !present(y)) continue;
+          part.set(y, n); q2.push(y);
+        }
+    }
+  }
+  Object.defineProperty(g, 'guessed', { value: guessed, enumerable: false });
+  Object.defineProperty(g, 'part', { value: part, enumerable: false });
   return g;
 }
 
@@ -6536,6 +6737,10 @@ function draw(){
   const html = [];
   // Whose part of the tree is lifted, worked out once for the whole draw.
   const focused = focusIds();
+  /* AND WHO IS JOINED TO NOTHING. A name with no wood running to it looked
+     exactly like a name with wood running to it off the side of the screen,
+     so nobody could tell the difference and nothing said there was one. */
+  const lost = new Set(adrift());
   /* WHICH FAMILY EACH POD BELONGS TO, worked out once for the whole draw.
      Your own line takes no tint at all — it is not a family that married in,
      it is the tree — so the canvas carries as many colours as there are
@@ -6627,6 +6832,7 @@ function draw(){
     html.push(
       `<div class="pod${sel === p.id ? ' sel' : ''}${fresh.has(p.id) ? ' sprout' : ''}` +
       `${p.root ? ' taproot' : ''}${meId === p.id ? ' you' : ''}` +
+      `${lost.has(p.id) ? ' adrift' : ''}` +
       `${lit ? (lit.ids.has(p.id) || p.id === lit.from ? ' lit' : ' dim') : ''}` +
       `${!lit && focused ? (focused.has(p.id) ? '' : ' aside') : ''}"` +
       ` data-id="${p.id}" tabindex="0" role="button"` +
@@ -6635,6 +6841,10 @@ function draw(){
       ` style="left:${at.x}px; top:${at.y}px` +
       (hue !== undefined ? `; --fam:${hue}` : '') + `">` +
       capt + folds + sector +
+      (lost.has(p.id)
+        ? `<span class="loose" title="Not joined to anybody yet. Tap to say ` +
+          `where they belong — nothing is wrong with the record.">not joined</span>`
+        : '') +
       (titled.has(p.id) ? titleFor(anchor, p.id) : '') +
       (mark ? `<span class="mk">${mark}</span>` : '') +
       (p.shown === false ? `<span class="shut" title="Not in the public record">·</span>` : '') +
@@ -9068,6 +9278,17 @@ function showLit(){
     }
   }
 
+  /* NAMES JOINED TO NOTHING. Not urgent and never an error, but it must not
+     be possible to have five of them and never know. */
+  {
+    const lost = adrift().length;
+    if (lost) rows.push(
+      `<div class="pill"><b>${lost} not joined</b>` +
+      `<span>${lost === 1 ? 'A name is' : `${lost} names are`} recorded but not ` +
+      `joined to anybody yet.</span>` +
+      `<button type="button" id="lostGo">Join ${lost === 1 ? 'it' : 'them'} on</button></div>`);
+  }
+
   /* SOMEBODY JUST DELETED, and the seconds in which that can still be taken
      back. The one thing on this bar that is genuinely urgent, so it leads. */
   if (undoDelete){
@@ -9093,6 +9314,7 @@ function showLit(){
   el.hidden = !rows.length;
   if ($('litOff')) $('litOff').onclick = () => { lit = null; render(); };
   if ($('undelete')) $('undelete').onclick = putThemBack;
+  if ($('lostGo')) $('lostGo').onclick = openAdrift;
   if ($('foldOff')) $('foldOff').onclick = () => {
     for (const id of [...folded]) setLineFolded(id, false);
     render(); fit();
@@ -10835,6 +11057,13 @@ function hubRooms(){
        same weight as Fit. It is the final line of the final group, below
        everything a person actually came here to do. */
     { group:'Putting it right', rooms:[
+      (() => {
+        const lost = adrift().length;
+        return lost ? { id:'adrift', name:`Not joined to the tree · ${lost}`,
+          go:openAdrift, mark:lost,
+          why:'Names that are recorded but not joined to anybody yet, with ' +
+              'who each one might already be.' } : null;
+      })(),
       aside ? { id:'aside', name:`Set aside${aside ? ' · ' + aside : ''}`, go:openAside,
         mark: mine ? mine : 0,
         why: mine
@@ -10853,7 +11082,8 @@ function hubRooms(){
    at. Never a number for its own sake — only entries of YOURS that somebody
    took out, and pairs the app thinks may be one person. */
 function hubMark(){
-  return noticesFor(meName()).length + dupes.likely.length + newsCount();
+  return noticesFor(meName()).length + dupes.likely.length + newsCount() +
+         adrift().length;
 }
 function paintHub(){
   const mark = $('hubMark');
@@ -10949,6 +11179,102 @@ async function openNews(){
       ? `<p class="roothint">Showing the most recent ${lines.length}. ` +
         `Everything before them is still recorded.</p>` : ''));
   markSeen(d.head || headSeq);
+  el.addEventListener('keydown', e => { if (e.key === 'Escape'){ e.preventDefault(); closeForm(); } });
+}
+
+/* ── THE NAMES JOINED TO NOTHING, AND WHO THEY MIGHT ALREADY BE ──────────
+ *
+ * One room for both halves of the same problem, because on a real tree they
+ * are the same problem: a name floating on its own is usually either
+ * somebody's second copy of a person already here, or somebody whose link
+ * nobody has got round to writing down.
+ *
+ * So each one is shown with what is known about it, with the best match in
+ * the tree named underneath where there is one, and with both ways out one
+ * tap away: this IS that person, or join them on properly.
+ *
+ * THE MATCH IS OFFERED AND NEVER TAKEN. An app that merged two records on a
+ * name and a year would be destroying somebody's work on a guess — and three
+ * living Garikais in one family is ordinary, because children are named
+ * after their grandfathers. The guess goes in front of the person who knows.
+ */
+function adriftRoom(){
+  const lost = adrift();
+  if (!lost.length) return '';
+  return lost.map(id => {
+    const p = state.people[id];
+    const maybe = mayAlreadyBe(id);
+    const life = p.born ? `b. ${esc(p.born)}` : 'no year recorded';
+    /* Who came in with them. descendantsOf, not branchFrom: branchFrom
+       includes the parents a branch hangs from, which would have counted a
+       floating child's own floating father as somebody "under" him. */
+    const withThem = descendantsOf(id).count;
+    const other = maybe ? state.people[maybe.id] : null;
+    return `<div class="lost">` +
+      `<u>${esc(p.name)}<small>${life}${p.totem ? ' · ' + esc(p.totem) : ''}` +
+      `${withThem ? ` · ${withThem} ${withThem === 1 ? 'person' : 'people'} recorded under them` : ''}` +
+      `</small></u>` +
+      (other
+        ? `<p class="maybe">This may be <b>${esc(other.name)}</b>, already in the tree` +
+          `${other.born ? ` (b. ${esc(other.born)})` : ''} — ${esc(positionOf(maybe.id))}.` +
+          `<br><i>${esc((maybe.why || []).join('; '))}</i></p>` +
+          `<span class="acts">` +
+            `<button type="button" class="mini" data-lostsee="${maybe.id}">Show that one</button>` +
+            `<button type="button" class="mini join" data-lostjoin="${id}">Join this one on…</button>` +
+            `<button type="button" class="mini" data-lostno="${id}|${maybe.id}">Different people</button>` +
+          `</span>`
+        : `<p class="maybe">Nobody in the tree looks like the same person. ` +
+          `Say who they belong to and they stop floating.</p>` +
+          `<span class="acts">` +
+            `<button type="button" class="mini" data-lostsee="${id}">Show them</button>` +
+            `<button type="button" class="mini join" data-lostjoin="${id}">Join them on…</button>` +
+          `</span>`) +
+      `</div>`;
+  }).join('');
+}
+
+function openAdrift(){
+  closeForm();
+  pending = { kind:'dupes', anchorId: sel || state.rootId };
+  const el = document.createElement('div');
+  el.id = 'form';
+  el.className = 'wide';
+  document.body.appendChild(el);
+  const lost = adrift();
+  const n = lost.length;
+  el.innerHTML =
+    `<p class="cap">Not joined to the tree</p>` +
+    (n
+      ? `<p class="covnote">${n} ${n === 1 ? 'name is' : 'names are'} recorded but not ` +
+        `joined to anybody, so ${n === 1 ? 'it is' : 'they are'} standing on ${n === 1 ? 'its' : 'their'} ` +
+        `own. Nothing is wrong with ${n === 1 ? 'it' : 'them'} — somebody wrote ` +
+        `${n === 1 ? 'a name' : 'names'} down and the link has not been said yet.</p>` +
+        adriftRoom()
+      : `<p class="browse">Every name in this tree is joined to somebody. ` +
+        `Anyone added without a link will be listed here until they are.</p>`) +
+    `<div class="row"><button class="btn" id="lostNo">Done</button></div>`;
+  placeForm(el);
+
+  el.querySelectorAll('[data-lostsee]').forEach(b => b.onclick = () => {
+    const id = b.dataset.lostsee;
+    sel = id; closeForm(); render();
+    if (layout.persons[id]) focusOn(id, Math.max(pos.k, 0.78));
+    revealBuds();
+    say(`${state.people[id].name} — ${positionOf(id)}.`);
+  });
+  el.querySelectorAll('[data-lostjoin]').forEach(b => b.onclick = () => {
+    /* Find, anchored on the floating one, so whatever is picked is joined
+       TO them rather than the other way round. */
+    openFind(b.dataset.lostjoin);
+  });
+  el.querySelectorAll('[data-lostno]').forEach(b => b.onclick = () => {
+    const [a, c] = b.dataset.lostno.split('|');
+    dismissDuplicate(a, c);
+    save();
+    openAdrift();
+    say('Noted as two different people. They will not be offered again.');
+  });
+  $('lostNo').onclick = closeForm;
   el.addEventListener('keydown', e => { if (e.key === 'Escape'){ e.preventDefault(); closeForm(); } });
 }
 
