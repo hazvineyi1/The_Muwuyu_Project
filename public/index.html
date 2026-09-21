@@ -906,6 +906,12 @@ body.carrying .pod{transition:none;}
 /* A second line inside one of those buttons: what the button does, said
    small, under the name it does it to. Used where the name alone would
    not say whether tapping it changes anything. */
+/* The Shona word leads; what it means follows it on the same line. */
+.seg.col button b.wayterm{
+  font-family:'Fraunces',Georgia,serif; font-weight:600; font-size:13.5px;
+  color:var(--ink); margin-right:5px;
+}
+.seg.col button[disabled] b.wayterm{color:var(--muted);}
 .seg.col button small{
   display:block; margin-top:1px; font-size:10px; letter-spacing:.06em;
   text-transform:uppercase; color:var(--muted); font-weight:600;
@@ -2847,6 +2853,37 @@ function derive(who, tid, byBloodOnly){
     if (a.union.id !== b.union.id || a.child === b.child) continue;
     const cost = a.up + b.up;
     if (!best || cost < best.cost) best = { cost, myUp:a.up, tgUp:b.up, myLink:a.child, tgLink:b.child };
+  }
+
+  /* OR AT A PERSON, WHERE THE MARRIAGES ARE TWO.
+   *
+   * "Victor is my half sister's son, therefore he is my son and brother to
+   *  my children."
+   *
+   * Everything above meets two lines at a shared MARRIAGE, which is right
+   * for full relatives and blind to every half one past the first step. A
+   * half-brother was handled by a rule of his own a few lines up, so he came
+   * back Mukoma and the tree looked correct — but HIS CHILDREN met nothing
+   * at all, because the two lines descend from two different marriages of
+   * one man. Victor fell all the way through to "both Mwendamberi, of one
+   * house, though the line where the two meet is not recorded here", which
+   * is the app saying it cannot see a link that is two steps away.
+   *
+   * So two marriages that share a partner are a meeting too, and the two
+   * children through whom the lines descend are the pair everything below
+   * already reasons about. Nothing else changes — the skew, the seniority,
+   * the words are the same rules, reached at last by the half-line.
+   *
+   * Costed a shade higher than a full meeting so that where a pair are
+   * related both ways, the closer kinship still wins. */
+  for (const a of mine.joins) for (const b of theirs.joins){
+    if (a.union.id === b.union.id || a.child === b.child) continue;
+    const shared = a.union.partners.find(x => b.union.partners.includes(x) && present(x));
+    if (!shared) continue;
+    const cost = a.up + b.up + 0.5;
+    if (!best || cost < best.cost){
+      best = { cost, myUp:a.up, tgUp:b.up, myLink:a.child, tgLink:b.child, half:true };
+    }
   }
 
   if (best){
@@ -8406,16 +8443,42 @@ function waysToAdd(anchorId){
   const kids = unionsOf(anchorId).flatMap(u => u.children).filter(present);
   const sons = kids.filter(k => state.people[k].sex === 'm');
   const daughters = kids.filter(k => state.people[k].sex === 'f');
+  /* EVERY SISTER, not only the ones from the same marriage.
+   *
+   * "My half siblings are just my siblings." They are — the kinship engine
+   * has always said so, and it is why a half-brother older than you comes
+   * back Mukoma. This list did not: it read the children of ONE marriage, so
+   * a man's sister by his father's other wife was not a sister here at all,
+   * and "your sister's child" quietly meant "your full sister's child".
+   *
+   * Which is exactly how "Victor is my half sister's son" had no way to be
+   * said. The word was in the list; the woman it had to go through was not.
+   *
+   * Anybody who shares a parent. Ordered eldest first, because where a word
+   * still has to pick one that is the one a family would name. */
   const sisters = (() => {
-    const pu = parentUnionOf(anchorId);
-    if (!pu) return [];
-    return pu.children.filter(c => c !== anchorId && present(c) &&
-                                   state.people[c].sex === 'f');
+    const out = new Set();
+    for (const par of parentsOf(anchorId)){
+      for (const u of unionsOf(par)){
+        for (const c of u.children){
+          if (c !== anchorId && present(c) && (state.people[c] || {}).sex === 'f') out.add(c);
+        }
+      }
+    }
+    return [...out].sort((a, b) => (birthYear(a) ?? 9999) - (birthYear(b) ?? 9999));
   })();
   const out = [];
-  const add = (term, gloss, band, on, kind, preset, missing) =>
-    out.push({ term, gloss, band, on, kind, preset:preset || {}, missing:missing || null,
-               done:false });
+  /* `on` may be ONE person or ALL the people a word could go through. Adding
+     a new person only ever needs the first — a family naming a sister's child
+     is naming a new child and the app puts them under the senior sister. But
+     JOINING somebody already in the tree has to say which sister, or the
+     offer is a guess dressed as a question. So both are carried: `on` for
+     the add, `all` for the join. */
+  const add = (term, gloss, band, on, kind, preset, missing) => {
+    const list = (Array.isArray(on) ? on : [on]).filter(Boolean);
+    out.push({ term, gloss, band, on:list[0] || null, all:list, kind,
+               preset:preset || {}, missing:missing || null, done:false });
+  };
   const done = (term, gloss, band) => out.push({ term, gloss, band, done:true, preset:{} });
 
   /* THE WORDS ARE THE ENGINE'S OWN. Amaiguru, not Maiguru: whichever form
@@ -8469,18 +8532,76 @@ function waysToAdd(anchorId){
   // ── the row below ──
   add('Mwanakomana', 'your son', 'down', anchorId, 'child', { sex:'m' });
   add('Mwanasikana', 'your daughter', 'down', anchorId, 'child', { sex:'f' });
-  add('Muroora', "your son's wife", 'down', sons[0], 'partner',
+  add('Muroora', "your son's wife", 'down', sons, 'partner',
       { sex:'f' }, sons.length ? null : 'a son');
-  add('Mukwasha', "your daughter's husband", 'down', daughters[0], 'partner',
+  add('Mukwasha', "your daughter's husband", 'down', daughters, 'partner',
       { sex:'m' }, daughters.length ? null : 'a daughter');
-  add('Muzukuru', "your son's child", 'down', sons[0], 'child',
+  add('Muzukuru', "your son's child", 'down', sons, 'child',
       {}, sons.length ? null : 'a son');
-  add('Muzukuru', "your daughter's child", 'down', daughters[0], 'child',
+  add('Muzukuru', "your daughter's child", 'down', daughters, 'child',
       {}, daughters.length ? null : 'a daughter');
-  add('Muzukuru', "your sister's child", 'down', sisters[0], 'child',
+  add('Muzukuru', "your sister's child", 'down', sisters, 'child',
       {}, sisters.length ? null : 'a sister');
 
   return out.map(w => ({ ...w, ready: !w.done && !w.missing && !!w.on }));
+}
+
+/* EVERY WAY THIS PERSON COULD BE JOINED ON, said in the family's own words.
+ *
+ * "Victor is my half sister's son... All possible relationships need to be
+ *  shown to make the link. Allow for explanation with title and then be
+ *  intuitive."
+ *
+ * The join panel offered four: child, mother or father, brother or sister,
+ * husband or wife. Those are the four links this model HAS, and they are the
+ * wrong four to ask a family about — because a sister's son is not any of
+ * them. To record Victor you had to already know that the way in was to find
+ * the sister first and add him under her, which is the app's data model
+ * showing through as if it were a question about the family.
+ *
+ * The words already existed: waysToAdd is this same list, used for adding a
+ * NEW person by the word for them. So the panel asks with those instead —
+ * the title the family would say, and under it what it means.
+ *
+ * NAMED, WHERE THE WORD GOES THROUGH SOMEBODY. "Your sister's child" is one
+ * offer when you have one sister and a guess when you have three, so each
+ * sister gets her own line.
+ *
+ * AND THE WORD IS STILL WORKED OUT AFTERWARDS. Choosing Mukoma records a
+ * brother; whether he comes back Mukoma or Munin'ina is decided by the years,
+ * as everywhere else in this app. */
+function waysToJoin(anchorId, otherId){
+  const them = state.people[otherId];
+  if (!them || anchorId === otherId) return [];
+  const out = [];
+  for (const w of waysToAdd(anchorId)){
+    if (w.done || !w.kind) continue;
+    // A word that says which sex it is for is not for somebody recorded as
+    // the other. It stays out of the list rather than standing there refused.
+    if (w.preset.sex && them.sex && w.preset.sex !== them.sex) continue;
+    if (!w.all.length){
+      /* A word that has to go through somebody nobody has recorded. It is
+         shown rather than dropped: "there is no daughter recorded yet" tells
+         a family what is missing, where an absence tells them nothing. */
+      /* The list writes what is missing as a family would say it — "a
+         daughter", "your father" — so the sentence has to be built round
+         each shape rather than bolted in front of both. */
+      const need = w.missing;
+      out.push({ ...w, via:null, through:'', move:false,
+                 blocked: !need ? 'there is nobody for this word to go through'
+                   : /^your /.test(need) ? `${need} is not recorded yet`
+                   : `no ${need.replace(/^an? /, '')} is recorded yet` });
+      continue;
+    }
+    for (const via of w.all){
+      if (via === otherId) continue;
+      const why = canLink(w.kind, via, otherId);
+      out.push({ term:w.term, gloss:w.gloss, band:w.band, kind:w.kind, via,
+                 through: w.all.length > 1 ? ((state.people[via] || {}).name || '') : '',
+                 move: why === MOVE, blocked: why === MOVE ? null : why });
+    }
+  }
+  return out;
 }
 
 const BANDS = { up: 'Older than you', own: 'Your own row', down: 'Younger than you' };
@@ -9123,29 +9244,38 @@ function openJoin(anchorId, otherId){
   document.body.appendChild(el);
   const first = x => (x.name || '').split(' ')[0];
 
+  const ways = waysToJoin(anchorId, otherId);
+  const open = ways.filter(w => !w.blocked);
+  el.className = 'wide';
   el.innerHTML =
     `<p class="cap">${esc(b.name)}</p>` +
     `<p class="browse">is <b>${esc(first(a))}</b>'s…</p>` +
-    `<div class="seg col" id="joinKind">` +
-      ['child', 'parent', 'sibling', 'partner'].map(k => {
-        const why = canLink(k, anchorId, otherId);
-        const move = why === MOVE;
-        const blocked = move ? null : why;
-        const label = { child:'child', parent:'mother or father',
-                        sibling:'brother or sister', partner:'husband or wife' }[k];
-        return `<button type="button" data-kind="${k}"${blocked ? ' disabled' : ''}` +
-          `${move ? ' data-move="1"' : ''} title="${esc(blocked || '')}">` +
-          `${label}${move ? `<small>moves them out of the household they are ` +
-                            `recorded under now</small>` : ''}` +
-          `${blocked ? `<small>${esc(blocked)}</small>` : ''}</button>`;
-      }).join('') +
-    `</div>` +
+    (open.length ? '' :
+      `<p class="browse">There is no way to join these two yet — every word ` +
+      `below needs somebody in between who is not recorded.</p>`) +
+    ['up', 'own', 'down'].map(band => {
+      const rows = ways.filter(w => w.band === band);
+      if (!rows.length) return '';
+      return `<p class="lbl">${esc(BANDS[band])}</p><div class="seg col">` +
+        rows.map((w, i) =>
+          `<button type="button" data-way="${band}:${i}"${w.blocked ? ' disabled' : ''}` +
+          ` title="${esc(w.blocked || w.gloss)}">` +
+          `<b class="wayterm">${esc(w.term)}</b> ${esc(w.gloss)}` +
+          (w.through ? `<small>through ${esc(w.through)}</small>` : '') +
+          (w.move ? `<small>moves them out of the household they are ` +
+                    `recorded under now</small>` : '') +
+          (w.blocked ? `<small>${esc(w.blocked)}</small>` : '') +
+          `</button>`).join('') + `</div>`;
+    }).join('') +
     `<div class="row"><button class="btn ghost" id="joinNo">Back</button></div>`;
   placeForm(el);
 
-  el.querySelectorAll('[data-kind]:not([disabled])').forEach(btn => btn.onclick = () => {
-    const kind = btn.dataset.kind, moved = btn.dataset.move === '1';
-    linkExisting(kind, anchorId, otherId);
+  el.querySelectorAll('[data-way]:not([disabled])').forEach(btn => btn.onclick = () => {
+    const [band, i] = btn.dataset.way.split(':');
+    const w = ways.filter(x => x.band === band)[Number(i)];
+    if (!w) return;
+    const kind = w.kind, moved = w.move, on = w.via;
+    linkExisting(kind, on, otherId);
     closeForm(); sel = otherId; render(); save();
     if (layout.persons[otherId]) focusOn(otherId, Math.max(pos.k, 0.7));
     /* The word is read off the tree once the link is in it, never off the
@@ -9155,6 +9285,9 @@ function openJoin(anchorId, otherId){
     const said = k && k.list.length ? k.list.map(t => t.term).join(' · ') : '';
     say(`${b.name} ${moved ? 'has been moved' : 'is joined'} on` +
         `${said ? ` — ${said} to ${first(a)}` : ` to ${first(a)}`}.` +
+        (said && said !== w.term
+          ? ` You said ${w.term}; the tree works the word out from the ` +
+            `years and the rows, and it makes ${said}.` : '') +
         (moved ? ' Undo puts it back.' : ''));
   });
   $('joinNo').onclick = () => openFind(anchorId);

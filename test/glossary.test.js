@@ -292,6 +292,63 @@ section('THE SAME RULE FOR THE MEN WHO STAND AS FATHERS BESIDE HIM');
         w(me, wLil).join(' + ') || 'no word at all');
 }
 
+section('AND THE LINE CARRIES ON PAST A HALF SIBLING');
+/* "Victor is my half sister's son, therefore he is my son and brother to my
+ *  children."
+ *
+ * The rule was already here and right: a woman's sister's children are her
+ * children, told to this app by the family it is built for. What was not
+ * here was the LINE. Every meeting of two family lines was looked for at a
+ * shared MARRIAGE, which is correct for full relatives and blind to every
+ * half one past the first step — a half-brother had a rule of his own, so he
+ * came back Mukoma and the tree looked right, but HIS CHILDREN met nothing
+ * at all, because the two lines descend from two different marriages of one
+ * man.
+ *
+ * Victor fell through to "both Mwendamberi, of one house, though the line
+ * where the two meet is not recorded here" — the app saying it could not see
+ * a link two steps away. */
+function halfLine(sex){
+  const fe = loadFrontend();
+  const P = (n, s, t, b) => fe.addPerson(n, s, t, b, '');
+  const dad   = P('Sydney', 'm', 'Mwendamberi', '1940');
+  const mum   = fe.grow('partner', dad, 'Evelyn', 'f', 'Moyondizvo', { born:'1954' });
+  const other = fe.grow('partner', dad, 'Mai Ida', 'f', 'Shava', { born:'1945' });
+  const me    = fe.grow('child', mum, 'Hazvineyi', sex, 'Mwendamberi', { born:'1979' });
+  const half  = fe.grow('child', other, 'Bertha', 'f', 'Mwendamberi', { born:'1975' });
+  const victor = fe.grow('child', half, 'Victor', 'm', 'Mwendamberi', { born:'2000' });
+  const myKid = fe.grow('child', me, 'Munyaradzi', 'm', 'Mwendamberi', { born:'2013' });
+  fe.setMe(me);
+  const w = (a, b) => {
+    const k = fe.kinTerms(a, b);
+    return (k && k.list.length) ? k.list.map(x => x.term).filter(Boolean) : [];
+  };
+  return { fe, me, half, victor, myKid, w };
+}
+{
+  const t = halfLine('f');
+  check('her half sister is her sister, as she always was',
+        t.w(t.me, t.half).includes('Mukoma'), t.w(t.me, t.half).join(' + '));
+  check('and that sister\u2019s son is HER SON',
+        t.w(t.me, t.victor).includes('Mwanakomana'),
+        t.w(t.me, t.victor).join(' + ') || 'no word at all');
+  check('and a brother to her own children',
+        t.w(t.myKid, t.victor).includes('Mukoma'),
+        t.w(t.myKid, t.victor).join(' + ') || 'no word at all');
+}
+
+section('and a man in the same place gets the other word, as he always did');
+/* The one rule in this engine that turns on who is ASKING. The line being
+   traced at all is the fix; what it then says is the rule that was already
+   there, and it must not have moved. */
+{
+  const t = halfLine('m');
+  check('his half sister is Hanzvadzi', t.w(t.me, t.half).includes('Hanzvadzi'),
+        t.w(t.me, t.half).join(' + '));
+  check('and her son is Muzukuru to him', t.w(t.me, t.victor).includes('Muzukuru'),
+        t.w(t.me, t.victor).join(' + ') || 'no word at all');
+}
+
 section('EVERY WORD ON THE LIST IS REACHED BY SOMEBODY');
 /* The check above tests each word where it belongs. This one is the ledger:
    if a word on the family's list is never produced by this household at all,

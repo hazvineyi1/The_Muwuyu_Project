@@ -146,4 +146,76 @@ section('AND THE CARD IS A WAY IN TO IT, because that is where a wrong word is s
         JSON.stringify(before.fe.relationship(before.me, before.rosa)));
 }
 
+section('THE JOIN PANEL ASKS IN THE FAMILY\u2019S OWN WORDS, not in the model\u2019s');
+/* "All possible relationships need to be shown to make the link. Allow for
+ *  explanation with title and then be intuitive."
+ *
+ * It offered four: child, mother or father, brother or sister, husband or
+ * wife. Those are the four LINKS this model has, and they are the wrong four
+ * to ask a family about — a sister's son is not any of them. To record Victor
+ * you had to already know that the way in was to find the sister first and
+ * add him under her, which is the data model showing through as if it were a
+ * question about the family.
+ *
+ * The words already existed. waysToAdd is this same list, used for adding a
+ * NEW person by the word for them; the panel now asks with those instead. */
+{
+  const fe = loadFrontend();
+  const P = (n, s, t, b) => fe.addPerson(n, s, t, b, '');
+  const dad   = P('Sydney', 'm', 'Mwendamberi', '1940');
+  const mum   = fe.grow('partner', dad, 'Evelyn', 'f', 'Moyondizvo', { born:'1954' });
+  const other = fe.grow('partner', dad, 'Mai Ida', 'f', 'Shava', { born:'1945' });
+  const me    = fe.grow('child', mum, 'Hazvineyi', 'f', 'Mwendamberi', { born:'1979' });
+  const half  = fe.grow('child', other, 'Bertha', 'f', 'Mwendamberi', { born:'1975' });
+  const full  = fe.grow('child', mum, 'Farirai', 'f', 'Mwendamberi', { born:'2002' });
+  fe.setMe(me);
+  const victor = P('Victor', 'm', 'Mwendamberi', '2000');   // in the tree, joined to nobody
+
+  const ways = fe.waysToJoin(me, victor);
+  const say = w => `${w.term} — ${w.gloss}`;
+
+  check('there are more than four ways offered', ways.filter(w => !w.blocked).length > 4,
+        String(ways.filter(w => !w.blocked).length));
+  check('each carries its title and what it means',
+        ways.every(w => w.term && w.gloss), JSON.stringify(ways.slice(0, 3)));
+  check("a sister's child is one of them",
+        ways.some(w => w.gloss === "your sister's child" && !w.blocked),
+        ways.map(say).join(' | '));
+
+  section('and where a word goes through somebody, every one of them is named');
+  /* "Your sister's child" is one offer when you have one sister and a guess
+     when you have three. */
+  const viaSisters = ways.filter(w => w.gloss === "your sister's child");
+  eq('both sisters are offered', viaSisters.length, 2);
+  eq('by name', viaSisters.map(w => w.through).sort(), ['Bertha', 'Farirai']);
+
+  section('INCLUDING THE HALF SISTER, which is the case that could not be said at all');
+  /* The list read the children of ONE marriage, so a sister by the father's
+     other wife was not a sister here — and "Victor is my half sister's son"
+     had no way to be said. The word was in the list; the woman it had to go
+     through was not. */
+  const throughHalf = viaSisters.find(w => w.through === 'Bertha');
+  check('she is there', !!throughHalf && !throughHalf.blocked, JSON.stringify(throughHalf));
+
+  fe.linkExisting(throughHalf.kind, throughHalf.via, victor);
+  const w = (a, b) => {
+    const k = fe.kinTerms(a, b);
+    return (k && k.list.length) ? k.list.map(x => x.term).filter(Boolean) : [];
+  };
+  check('and once he is joined she is told what he is to her, not what she typed',
+        w(me, victor).includes('Mwanakomana'), w(me, victor).join(' + ') || 'no word');
+}
+
+section('a word for the other sex is not offered at all, rather than refused');
+{
+  const fe = loadFrontend();
+  const a = fe.addPerson('A man', 'm', 'Nzou', '1950', '');
+  const she = fe.addPerson('A woman', 'f', 'Shava', '1955', '');
+  const ways = fe.waysToJoin(a, she);
+  check('no Murume for a woman', !ways.some(w => w.term === 'Murume'),
+        ways.map(w => w.term).join(', '));
+  check('but Mukadzi is there', ways.some(w => w.term === 'Mukadzi'),
+        ways.map(w => w.term).join(', '));
+}
+
 report();
