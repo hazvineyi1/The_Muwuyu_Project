@@ -371,6 +371,64 @@ section('deleting somebody who is already gone is refused, not silently ignored'
 }
 
 
+section('ONE TAP DELETES, AND THE GUARD MOVES TO AFTER IT');
+/* "I want to be able to delete by clicking the x, no need to type name to
+ *  delete."
+ *
+ * The typed name was guarding something real — the server has no undelete —
+ * so taking it away without putting anything in its place would be doing as
+ * asked and not as meant. But what it guarded against is a MIS-TAP, and a
+ * name to type is a poor guard against that: it makes the deliberate case
+ * tedious and the accidental case merely slower.
+ *
+ * So the guard moved from before the act to after it. */
+{
+  const fe = loadFrontend();
+  const dad = fe.addPerson('Chaitezvi Musoni', 'm', 'Mwendamberi', '1900', '');
+  const kid = fe.grow('child', dad, 'Wrong Entry', 'm', 'Soko', { born:'1930' });
+  const grandkid = fe.grow('child', kid, 'Below Them', 'm', 'Soko', { born:'1960' });
+
+  check('one tap takes them out', fe.deleteInOneTap(kid));
+  check('they are gone at once', !fe.getState().people[kid]);
+  check('nothing was asked first', true);
+
+  section('and the way back is real, not a message about one');
+  fe.putThemBack();
+  check('they are here again', !!fe.getState().people[kid]);
+  eq('with their name', fe.getState().people[kid].name, 'Wrong Entry');
+  /* BOTH HALVES WOUND BACK. Setting aside and deleting each took their own
+     snapshot, so a single step back would leave somebody set aside and
+     invisible — which looks exactly like the delete having half worked. */
+  check('and not left set aside, which would look like a half-done delete',
+        !fe.getState().people[kid].aside,
+        JSON.stringify(fe.getState().people[kid].aside));
+  check('their father is still there too', !!fe.getState().people[dad]);
+  check('and so is the person below them', !!fe.getState().people[grandkid]);
+  eq('who is once again recorded under them',
+     (fe.parentUnionOf(grandkid).partners || [])[0], kid);
+}
+
+section('THE WINDOW CLOSES, AND THEN IT IS SENT');
+{
+  const fe = loadFrontend();
+  const a = fe.addPerson('Alone', 'm', 'Mwendamberi', '1940', '');
+  const b = fe.grow('child', a, 'Going', 'm', 'Mwendamberi', { born:'1970' });
+  const synced = JSON.parse(JSON.stringify(fe.getState()));
+  for (const p of Object.values(synced.people)) p.v = 1;
+
+  fe.deleteInOneTap(b);
+  fe.closeDeleteWindow();
+  check('putting them back after that does nothing',
+        (fe.putThemBack(), !fe.getState().people[b]));
+
+  const ops = fe.diffOps(synced, fe.getState());
+  const kinds = ops.map(o => o.op);
+  check('and the batch is the one the server accepts',
+        kinds.indexOf('setAside') >= 0 &&
+        kinds.indexOf('setAside') < kinds.indexOf('deletePerson'),
+        JSON.stringify(kinds));
+}
+
 section('DELETING FROM THE CARD SENDS A BATCH THE SERVER ACCEPTS');
 /* THE BUG THIS PINS, reported from a live tree: "the last change could not be
    saved (the server answered 400)".

@@ -1853,6 +1853,68 @@ function setAside(id, why){
    only ever read by diffOps, immediately, and dropped once used. */
 const deleteWhy = new Map();
 
+/* DELETING IN ONE TAP, and the way back that makes that safe.
+ *
+ * "I want to be able to delete by clicking the x, no need to type name to
+ *  delete."
+ *
+ * The typed name was guarding something real — deleting destroys a record and
+ * the server has no undelete — so taking it away without putting anything in
+ * its place would be doing as asked and not as meant. What it was actually
+ * guarding against is a mis-tap, and a name to type is a poor guard against
+ * that: it makes the deliberate case tedious and the accidental case merely
+ * slower.
+ *
+ * So the guard moves from BEFORE to AFTER. The tap deletes at once, and for
+ * the next few seconds nothing has been sent anywhere — the bar says so and
+ * offers to put them back. Only when that window closes does the batch go.
+ * A page closed inside the window sends nothing at all, which is the safe
+ * way round: the person is simply still there.
+ *
+ * AND THE WINDOW NEVER LIES. Any other change saves the whole batch, delete
+ * included, so making one closes the window and the offer disappears with
+ * it rather than sitting there promising something it can no longer do. */
+const DELETE_GRACE = 12000;
+let undoDelete = null, deleteTimer = null;
+
+function deleteInOneTap(id){
+  const p = state.people[id];
+  if (!p) return false;
+  const name = p.name || 'They';
+  const below = descendantsOf(id);
+  const mark = history.length;                 // where to wind back to
+  if (!p.aside) setAside(id, 'removed from the tree');
+  if (!deleteForever(id)) return false;
+  undoDelete = { mark, name, n: below.count };
+  clearTimeout(deleteTimer);
+  deleteTimer = setTimeout(closeDeleteWindow, DELETE_GRACE);
+  sel = null; closeForm(); render();
+  return true;
+}
+
+// The window shutting: what was held is now sent, and the offer goes.
+function closeDeleteWindow(){
+  clearTimeout(deleteTimer);
+  if (!undoDelete) return;
+  undoDelete = null;
+  render();
+  save();
+}
+
+/* Winding back past BOTH halves of the act — the setting-aside and the
+   delete each took their own snapshot, so one step back would leave somebody
+   set aside and invisible, which looks exactly like the delete having half
+   worked. */
+function putThemBack(){
+  if (!undoDelete) return;
+  clearTimeout(deleteTimer);
+  const { mark, name } = undoDelete;
+  undoDelete = null;
+  while (history.length > mark) state = JSON.parse(history.pop());
+  sel = null; closeForm(); render(); fit();
+  say(`${name} is back in the tree. Nothing was ever sent.`);
+}
+
 function deleteForever(id){
   const p = state.people[id];
   if (!p) return false;
@@ -5441,7 +5503,8 @@ function draw(){
       (sel === p.id ? ordControls(p.id) : '') +
       (sel === p.id ? `<span class="rm" data-card="${p.id}" role="button" tabindex="0"` +
         ` aria-label="Details for ${esc(p.name)}" style="left:-9px;right:auto;">⋯</span>` : '') +
-      (sel === p.id ? `<span class="rm" data-rm="${p.id}" role="button" tabindex="0" aria-label="Set ${esc(p.name)} aside — nothing is deleted">✕</span>` : '') +
+      (sel === p.id ? `<span class="rm" data-rm="${p.id}" role="button" tabindex="0"` +
+        ` aria-label="Delete ${esc(p.name)} — the bar offers to put them back">✕</span>` : '') +
       `</div>`);
   }
   podsEl.innerHTML = html.join('');
@@ -7695,6 +7758,18 @@ function showLit(){
     }
   }
 
+  /* SOMEBODY JUST DELETED, and the seconds in which that can still be taken
+     back. The one thing on this bar that is genuinely urgent, so it leads. */
+  if (undoDelete){
+    const n = undoDelete.n;
+    rows.push(
+      `<div class="pill"><b>${esc(undoDelete.name)} deleted</b>` +
+      `<span>Nothing has been sent yet` +
+      `${n ? `, and ${n} ${n === 1 ? 'person' : 'people'} below them lost their ` +
+             `link to this part of the tree` : ''}.</span>` +
+      `<button type="button" id="undelete">Put them back</button></div>`);
+  }
+
   /* A lit word, as a chip the size of the word. The lighting itself is the
      message; this is only the way out of it, and tapping bare canvas is the
      other way. */
@@ -7707,6 +7782,7 @@ function showLit(){
   el.innerHTML = rows.join('');
   el.hidden = !rows.length;
   if ($('litOff')) $('litOff').onclick = () => { lit = null; render(); };
+  if ($('undelete')) $('undelete').onclick = putThemBack;
   if ($('reachOff')) $('reachOff').onclick = () => {
     writePref(REACH_KEY, ''); setReach(''); render(); fit();
     say('The whole family is back.');
@@ -8161,7 +8237,8 @@ function openCard(id){
     `</div>` +
     `<p class="roothint">Set aside takes them out of the picture and keeps ` +
     `every record — Set aside in the toolbar puts them back. Delete for good ` +
-    `cannot be undone once the page saves.</p>` +
+    `goes at once; the bar offers to put them back for a few seconds, and ` +
+    `after that it cannot be undone.</p>` +
     `<div class="row"><button class="btn" id="cSave">Save</button>` +
     `<button class="btn ghost" id="cNo">Close</button></div>`;
   document.body.appendChild(el);
@@ -8226,31 +8303,12 @@ function openCard(id){
   });
   $('cAside').onclick = () => { commit(); closeForm(); openSetAside(id); };
   $('cGone').onclick = () => {
-    const below = descendantsOf(id);
-    const typed = prompt(
-      `Delete ${p.name} for good?\n\n` +
-      `This cannot be undone once the page saves. Their place in every ` +
-      `marriage goes with them` +
-      (below.count ? `, and ${below.count} ${below.count === 1 ? 'person' : 'people'} ` +
-                     `recorded below them lose their link to this part of the tree`
-                   : '') + `.\n\n` +
-      `Set aside is there if you only want them out of the picture.\n\n` +
-      `Type their name to confirm: ${p.name}`);
-    if (typed === null) return;
-    if (typed.trim().toLowerCase() !== (p.name || '').trim().toLowerCase()){
-      say('That is not the name. Nothing has been deleted.');
-      return;
-    }
+    commit();
     const name = p.name;
-    /* Set aside first, always — the rule the record model is built on, and
-       the server refuses the delete without it. Doing both here does not
-       weaken it: typing the name IS the deliberate second half, and making
-       somebody perform the first half in another panel only ever taught
-       them that deleting is hard to find, never that it is serious. */
-    if (!state.people[id].aside) setAside(id, 'deleted from their card');
-    if (!deleteForever(id)){ say('That could not be deleted.'); return; }
-    closeForm(); sel = null; render(); save();
-    say(`${name} has been deleted.`);
+    /* The same one tap the ✕ does, and the same way back. It asked for the
+       name to be typed until a family said plainly that it should not. */
+    if (!deleteInOneTap(id)){ say('That could not be deleted.'); return; }
+    say(`${name} deleted — put them back from the bar.`);
   };
   $('cNo').onclick = closeForm;
   el.querySelectorAll('[data-vis]').forEach(b => b.onclick = () => {
@@ -9592,7 +9650,11 @@ podsEl.addEventListener('click', e => {
     return;
   }
   const rm = e.target.closest('.rm');
-  if (rm){ openSetAside(rm.dataset.rm); return; }
+  if (rm){
+    const id = rm.dataset.rm, name = (state.people[id] || {}).name || '';
+    if (deleteInOneTap(id)) say(`${name} deleted — put them back from the bar.`);
+    return;
+  }
   const socket = e.target.closest('.socket');
   if (socket){ openForm('parent', socket.dataset.socket); return; }
 
@@ -10289,6 +10351,9 @@ function diffOps(was, now){
 function save(){
   // A browser that could not read the tree does not get to write to it.
   if (store === 'stalled') return;
+  /* A change made while a delete is still held sends the delete with it —
+     so the offer to put them back stops being true, and goes. */
+  if (undoDelete){ undoDelete = null; clearTimeout(deleteTimer); showLit(); }
   // Which houses are joined may have changed with whatever is being saved.
   // render() clears this too; both are here because either can come first.
   forgetHouses();
