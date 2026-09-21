@@ -4960,6 +4960,18 @@ function computeLayout(){
   for (const u of us){
     for (const pp of u.partners) borne.set(pp, (borne.get(pp) || 0) + u.children.length);
   }
+  /* Whoever the picture is reckoned from, and every ancestor of theirs: the
+     line of descent, as a set, so a claim can be tested against it in one
+     lookup. Empty where nobody is marked You and no root is set, which is
+     the case where there is no line to protect and the counting below is
+     the whole rule again. */
+  const mine = new Set();
+  {
+    const from = (meId && present(meId)) ? meId
+               : (state.rootId && present(state.rootId)) ? state.rootId : null;
+    if (from){ mine.add(from); for (const a of ancestry(from).up.keys()) mine.add(a); }
+  }
+
   const knownCache = new Map();
   const houseKnown = m => {
     if (knownCache.has(m)) return knownCache.get(m);
@@ -4991,8 +5003,30 @@ function computeLayout(){
        as everywhere else in this file, and the same reason for the last one:
        two candidates the rule cannot separate must still come out the same
        way on every draw. */
+    /* IS THIS HOUSEHOLD ON YOUR OWN LINE OF DESCENT? Both partners of it
+       usually are — your grandfather and your grandmother both — so this is
+       a fact about the household, not a way of choosing between two people
+       in it. What it chooses is which RULE settles the claim. */
+    const onMyLine = b.members.some(m => mine.has(m));
     claims.sort((c1, c2) => {
-      /* THE SIDE THIS TREE KNOWS MORE OF, first. A family enters its own line
+      /* YOUR OWN LINE OF DESCENT, BEFORE ANYTHING ELSE.
+       *
+       * "Siblings, parents, children should show in the same branch and
+       *  should be grouped together."
+       *
+       * The rule below counts how much of each side the tree holds, and on a
+       * real family it can hand your own grandfather's household to his
+       * WIFE'S father — because her side happened to have one more brother
+       * recorded. Your grandfather then leaves his own brothers and sisters,
+       * his parents stand over somebody else, and the line of descent that
+       * this whole shape exists to keep straight takes a step sideways into
+       * a family you are not descended from.
+       *
+       * Counting is a fair way to settle a household nobody is descended
+       * from. It is not a fair way to settle YOURS. So a claim that runs
+       * through somebody on your own line wins outright, and the counting
+       * goes back to deciding the cases it was written for. */
+      /* THE SIDE THIS TREE KNOWS MORE OF, next, and NOT on your own line. A family enters its own line
          generation by generation and its in-laws one name at a time, so the
          depth of what is recorded above somebody is a fair reading of whose
          tree this is. Hanging the household under the side with four
@@ -5005,7 +5039,7 @@ function computeLayout(){
          the other side" was one of dad's sisters being claimed by her
          husband's father — correct by the house rule, and the wrong picture
          for the family looking at it, because this is THEIR tree. */
-      if (houseKnown(c1.child) !== houseKnown(c2.child))
+      if (!onMyLine && houseKnown(c1.child) !== houseKnown(c2.child))
         return houseKnown(c2.child) - houseKnown(c1.child);
 
       /* Then the house. Two lines equally traced — the case where a tree
@@ -5027,6 +5061,7 @@ function computeLayout(){
        claim on this household, and the family looking at the result is
        entitled to the reason rather than left to infer it. */
     b.whyParent = { pick, rival: claims.find(c => c !== pick) || null,
+                    byCount: !onMyLine,
                     knownPick: houseKnown(pick.child),
                     knownRival: claims.find(c => c !== pick)
                       ? houseKnown(claims.find(c => c !== pick).child) : null };
@@ -5614,6 +5649,105 @@ function computeLayout(){
     }
   }
 
+  /* ── AND A FAMILY STANDS OVER ALL OF ITS CHILDREN ────────────────────────
+   *
+   * "Siblings, parents, children should show in the same branch and should
+   *  be grouped together."
+   *
+   * The pass above gathers the children a household still HAS. This one is
+   * about the ones it lost. A row of people can hang beneath only one set of
+   * parents, so when a daughter marries, her household goes to whichever
+   * side the tree knows more of — and her own father is then left standing
+   * over whoever did not marry away, with a line to her running the width of
+   * the canvas. Measured on an ordinary tree: a woman seventeen hundred
+   * pixels from her father, her brother four households further on, and four
+   * strangers sitting between the two of them.
+   *
+   * Nothing there is wrong. Every line is correct and the picture is still
+   * unreadable, which is the same fault the stray rescue was written for and
+   * the same fix: the ones whose position was never carrying information get
+   * to move. A root household — one with nobody above it — is standing
+   * wherever the packing left it. So it goes and stands over its children,
+   * ALL of them, and brings the children that stayed with it.
+   *
+   * ROOTS ONLY, and the reason is the spine. A household with parents of its
+   * own is already standing under them; moving it would trade one long line
+   * for another and bend the line of descent this whole shape exists to keep
+   * straight. A root is free, and moving it costs nothing but the order the
+   * packing happened to leave it in.
+   *
+   * Furthest first, so the outermost comes in and the ones behind follow
+   * into the room it leaves — the same reason as above. */
+  {
+    const wants = [];
+    for (const b of blocks){
+      if (b.visiting || b.socket || b.parent || onSpine.has(b)) continue;
+      const xs = [];
+      let away = false;
+      for (const u of (b.unions || []))
+        for (const c of u.children){
+          const cb = ofPerson[c];
+          if (!cb || cb === b || cb.socket) continue;
+          xs.push(personXIn(cb, c));
+          if (cb.parent !== b) away = true;
+        }
+      // Only where a child actually went elsewhere. A family whose children
+      // are all gathered round it already is left alone: this is a rescue,
+      // not a rearrangement.
+      if (!away || xs.length < 1) continue;
+      const target = xs.reduce((t, v) => t + v, 0) / xs.length;
+      const want = target - b.x;
+      if (Math.abs(want) < POD_W) continue;
+      wants.push({ b, want });
+    }
+    /* AND IT MUST NOT SIT DOWN IN THE MIDDLE OF SOMEBODY ELSE'S ROW.
+     *
+     * The first cut of this moved a father four households closer to his
+     * daughter and put him between two of his son-in-law's aunts — which is
+     * the very fault being fixed, committed by the fix. A run of brothers
+     * and sisters is a statement; walking into the middle of one is worse
+     * than standing further off, so a move that would land inside a family
+     * not your own is refused and a shorter one taken instead.
+     *
+     * Read off the blocks as they stand rather than worked out once, because
+     * every slide moves the runs as well as the mover. */
+    const splitsARun = (nodes, dx) => {
+      const mine = new Set(nodes);
+      const runs = new Map();
+      for (const b of blocks){
+        if (b.visiting || b.socket) continue;
+        for (const u of (b.unions || [])){
+          const kin = u.children.map(c => ofPerson[c])
+            .filter(cb => cb && !cb.socket && !cb.visiting);
+          if (kin.length < 2) continue;
+          const lo = Math.min(...kin.map(k => k.x - width(k)/2));
+          const hi = Math.max(...kin.map(k => k.x + width(k)/2));
+          const y = kin[0].y;
+          if (!kin.every(k => k.y === y)) continue;
+          (runs.get(y) || runs.set(y, []).get(y)).push({ lo, hi, of:new Set(kin) });
+        }
+      }
+      return nodes.some(n => {
+        const at = n.x + dx;
+        return (runs.get(n.y) || []).some(r =>
+          !r.of.has(n) && !mine.has([...r.of][0]) && at > r.lo && at < r.hi);
+      });
+    };
+
+    wants.sort((a, c) => Math.abs(c.want) - Math.abs(a.want) ||
+                         (a.b.id < c.b.id ? -1 : 1));
+    for (const { b, want } of wants){
+      const nodes = branchOf(b);
+      for (let step = 32; step >= 1; step--){
+        const dx = want * step / 32;
+        if (Math.abs(dx) < POD_W) break;
+        if (!roomFor(nodes, dx) || splitsARun(nodes, dx)) continue;
+        slide(nodes, dx);
+        break;
+      }
+    }
+  }
+
   /* AND NOBODY STANDS ON ANYBODY.
    *
    * A visiting family belongs one generation below the household it came to
@@ -5831,7 +5965,8 @@ function computeLayout(){
             rival: b.whyParent.rival
               ? { via: b.whyParent.rival.child,
                   house: b.whyParent.rival.home.members.slice(),
-                  beaten: b.whyParent.knownRival < b.whyParent.knownPick }
+                  beaten: b.whyParent.byCount &&
+                          b.whyParent.knownRival < b.whyParent.knownPick }
               : null }
         : null,
       root: !b.parent

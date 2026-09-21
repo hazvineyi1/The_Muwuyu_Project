@@ -21,21 +21,44 @@
 
 const { check, eq, section, report, loadFrontend } = require('./helpers');
 
-/* A tree with all four cases in it: a root, a household with two families
-   claiming it, a house pushed into the visiting lane, and both sides. */
+/* A tree with all four cases in it: a root, a household on the line of
+   descent with two families claiming it, a household OFF the line where the
+   counting rule settles it the other way, a house pushed into the visiting
+   lane, and both sides. */
 function tree(){
   const fe = loadFrontend();
   const P = (n, s, t, b) => fe.addPerson(n, s, t, b, '');
   const ggf = P('Musoni Elder', 'm', 'Mwendamberi', '1870');
   const gf  = fe.grow('child', ggf, 'Chaitezvi Musoni', 'm', 'Mwendamberi', { born:'1900' });
-  // his wife, whose own father and sister the tree also holds — so HER side
-  // is the better-known one, and the household hangs there
+  // his wife, whose own father and sister the tree also holds
   const gm  = fe.grow('partner', gf, 'Baya Musoni', 'f', 'Shava', { born:'1905' });
   const gmDad = P('Shava Elder', 'm', 'Shava', '1875');
   fe.linkExisting('child', gmDad, gm);
   const gmSis = fe.grow('child', gmDad, 'Ruth Shava', 'f', 'Shava', { born:'1910' });
+
   const aunt = fe.grow('child', gf, 'Tsowhe', 'f', 'Mwendamberi', { born:'1935' });
-  const dad = fe.grow('child', gf, 'Sydney Musoni', 'm', 'Mwendamberi', { born:'1940' });
+  const dad  = fe.grow('child', gf, 'Sydney Musoni', 'm', 'Mwendamberi', { born:'1940' });
+
+  /* HIS UNCLE'S HOUSEHOLD, which is NOT on his line of descent — so the
+     counting rule still settles it, and settles it the other way: the
+     Marumahoko are four deep here and Terence's own father has only the
+     three children already recorded. */
+  const unc = fe.grow('child', gf, 'Terence Musoni', 'm', 'Mwendamberi', { born:'1945' });
+  const aWife = fe.grow('partner', unc, 'Daisy Marumahoko', 'f', 'Soko', { born:'1948' });
+  const herDad = P('Marumahoko Elder', 'm', 'Soko', '1920');
+  fe.linkExisting('child', herDad, aWife);
+  for (const [n, y] of [['David Marumahoko', '1944'], ['Phineas Marumahoko', '1950'],
+                        ['Doreen Marumahoko', '1952']])
+    fe.grow('child', herDad, n, 'm', 'Soko', { born:y });
+
+  /* AND A HOUSE WITH NOWHERE OF ITS OWN TO STAND. Tafara's father has only
+     Tafara in this tree, so the Musoni side takes their household and he is
+     left with nothing beneath him — the case the visiting lane exists for. */
+  const aunt2 = fe.grow('child', gf, 'Netsai Musoni', 'f', 'Mwendamberi', { born:'1943' });
+  const hisMan = fe.grow('partner', aunt2, 'Tafara Shumba', 'm', 'Shumba', { born:'1941' });
+  const hisDad = P('Shumba Elder', 'm', 'Shumba', '1915');
+  fe.linkExisting('child', hisDad, hisMan);
+
   const mum = fe.grow('partner', dad, 'Evelyn Mandaba', 'f', 'Moyondizvo', { born:'1954' });
   const mgf = P('James Mandaba', 'm', 'Moyondizvo', '1925');
   fe.linkExisting('child', mgf, mum);
@@ -43,7 +66,8 @@ function tree(){
   const me = fe.grow('child', dad, 'Hazvineyi Musoni', 'm', 'Mwendamberi', { born:'1979' });
   fe.setMe(me);
   fe.setShape('');
-  return { fe, me, ggf, gf, gm, gmDad, gmSis, aunt, dad, mum, mgf, mBro };
+  return { fe, me, ggf, gf, gm, gmDad, gmSis, aunt, dad, unc, aWife, herDad,
+           aunt2, hisMan, hisDad, mum, mgf, mBro };
 }
 const why = (t, id) => t.fe.whyHere(id);
 
@@ -55,7 +79,7 @@ section('EVERYBODY ON THE SCREEN CAN SAY WHY THEY ARE THERE');
   const drawn = Object.keys(t.fe.layoutOf().persons);
   const silent = drawn.filter(id => !why(t, id))
                       .map(id => t.fe.getState().people[id].name);
-  check('eleven of them are drawn', drawn.length === 11, String(drawn.length));
+  check('twenty of them are drawn', drawn.length === 20, String(drawn.length));
   eq('and not one of them is stuck for an answer', silent, []);
 }
 
@@ -75,6 +99,41 @@ section('AND EVERYBODY ELSE SAYS WHAT THEY HANG FROM');
         /through Sydney Musoni/.test(why(t, t.mum)), why(t, t.mum));
 }
 
+section('YOUR OWN LINE OF DESCENT HANGS FROM YOUR OWN FAMILY');
+/* "Siblings, parents, children should show in the same branch and should be
+   grouped together."
+ *
+ * The counting rule below was written to stop a man's sisters growing on the
+ * other side of the canvas, and on a real tree it went on to hand HIS OWN
+ * GRANDFATHER'S household to the grandfather's wife's father — because her
+ * side happened to have one more brother recorded. His grandfather then left
+ * his own brothers and sisters, his father was pushed into the visiting lane
+ * over somebody else's marriage, and the line of descent this whole shape
+ * exists to keep straight took a step sideways into a family he is not
+ * descended from.
+ *
+ * Counting is a fair way to settle a household nobody is descended from. It
+ * is not a fair way to settle yours. */
+{
+  const t = tree();
+  const said = why(t, t.gf);
+  check('his grandfather hangs beneath his own father',
+        /Hanging beneath Musoni Elder/.test(said), said);
+  check('and the wife\u2019s father is named as the claim that lost',
+        /Shava Elder has a claim on this household too/.test(said), said);
+  check('settled by the house rather than by what is recorded',
+        /a house descends through its men/.test(said), said);
+  check('his father hangs from his grandfather in turn',
+        /Hanging beneath Chaitezvi Musoni/.test(why(t, t.dad)), why(t, t.dad));
+
+  /* AND THE PICTURE ACTUALLY SHOWS IT: four generations on one x, which is
+     what the line being straight means, and what it could not be while a
+     household of it was hanging off an in-law. */
+  const L = t.fe.layoutOf();
+  const down = [t.ggf, t.gf, t.dad, t.me].map(id => Math.round(L.persons[id].x));
+  eq('and all four of them stand on one line', new Set(down).size, 1);
+}
+
 section('WHERE TWO FAMILIES BOTH CLAIM A HOUSEHOLD, IT SAYS WHICH LOST AND WHY');
 /* THE ONE THAT ACTUALLY ANSWERS THE QUESTION. A row of people can only hang
    beneath one set of parents; the other family's line then stretches right
@@ -82,12 +141,12 @@ section('WHERE TWO FAMILIES BOTH CLAIM A HOUSEHOLD, IT SAYS WHICH LOST AND WHY')
    It is not broken — it was decided, and this is the decision. */
 {
   const t = tree();
-  const said = why(t, t.gf);
+  const said = why(t, t.unc);
   check('the family that lost the claim is named',
-        /Musoni Elder has a claim on this household too/.test(said), said);
-  check('through whom', /through Chaitezvi Musoni/.test(said), said);
-  check('with the reason it went the other way',
-        /the tree holds more of Shava Elder's side/.test(said), said);
+        /Marumahoko Elder has a claim on this household too/.test(said), said);
+  check('through whom', /through Daisy Marumahoko/.test(said), said);
+  check('with the reason it went the other way — which side the tree holds more of',
+        /the tree holds more of Chaitezvi Musoni and Baya Musoni's side/.test(said), said);
   check('and the promise that their line is still drawn',
         /The line to them is still drawn/.test(said), said);
   check('and why it is long, which is the thing being looked at',
@@ -121,9 +180,9 @@ section('A HOUSE IN THE VISITING LANE SAYS WHAT IT IS STANDING OVER');
    ought to be, joined to one household and nothing else. */
 {
   const t = tree();
-  const said = why(t, t.ggf);
+  const said = why(t, t.hisDad);
   check('it is standing over a household rather than hanging from one',
-        /Standing over Chaitezvi Musoni's household/.test(said), said);
+        /Standing over Tafara Shumba's household/.test(said), said);
   check('because nobody above it is recorded',
         /nobody above this one is recorded/.test(said), said);
 }
