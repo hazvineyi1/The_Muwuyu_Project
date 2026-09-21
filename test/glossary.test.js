@@ -208,6 +208,90 @@ section('AND THE SAME HOUSE IN A WOMAN’S WORDS, which are not his');
         words(h.wifeOlder, h.muroora).join(' + ') || 'nothing');
 }
 
+section('A HALF SIBLING IS A SIBLING, AND THEIR MOTHER IS A MOTHER');
+/* "My half siblings are just my siblings and they are treated the same as my
+ *  full siblings. Their mothers are either amaiguru or amainini depending on
+ *  whether they were before or after my mother."
+ *
+ * The first half was already true and is pinned here so it stays true: the
+ * row is the row, and a half-brother older than you is Mukoma exactly as a
+ * full brother is. There is no word in this system for "half".
+ *
+ * The second half was not true at all. Every one of these women came back
+ * with no word — only a description. Your father's other wives, and the
+ * wives of the men who stand as fathers beside him, are the women who raised
+ * half the household, and they were the one group the engine had nothing to
+ * say about. */
+{
+  const fe = loadFrontend();
+  const P = (n, s, t, b) => fe.addPerson(n, s, t, b, '');
+  const dad = P('Baba Musoni', 'm', 'Mwendamberi', '1930');
+  // Married in this order: Ruth, then my mother Esther, then Grace — and
+  // Grace is OLDER than my mother, so her own age must not decide the word.
+  const ruth   = fe.grow('partner', dad, 'Ruth Musoni', 'f', 'Shava', { born:'1934' });
+  const esther = fe.grow('partner', dad, 'Esther Musoni', 'f', 'Moyo', { born:'1940' });
+  const grace  = fe.grow('partner', dad, 'Grace Musoni', 'f', 'Nzou', { born:'1936' });
+  const rBoy  = fe.grow('child', ruth,   'Tendai Musoni', 'm', 'Mwendamberi', { born:'1955' });
+  const rGirl = fe.grow('child', ruth,   'Rudo Musoni',   'f', 'Mwendamberi', { born:'1958' });
+  const me    = fe.grow('child', esther, 'Tonderai Musoni', 'm', 'Mwendamberi', { born:'1962' });
+  const sis   = fe.grow('child', esther, 'Netsai Musoni', 'f', 'Mwendamberi', { born:'1965' });
+  const gBoy  = fe.grow('child', grace,  'Kuda Musoni',   'm', 'Mwendamberi', { born:'1970' });
+  fe.setMe(me);
+  const w = (a, b) => {
+    const k = fe.kinTerms(a, b);
+    return (k && k.list.length) ? k.list.map(x => x.term).filter(Boolean) : [];
+  };
+  const one = (label, a, b, want) =>
+    check(label, w(a, b).includes(want), `wanted ${want}, got ${w(a, b).join(' + ') || 'no word at all'}`);
+
+  one("his half brother, older — Mukoma, exactly as a full brother",  me, rBoy,  'Mukoma');
+  one("his half sister — Hanzvadzi, exactly as a full sister",        me, rGirl, 'Hanzvadzi');
+  one("his half brother, younger — Munin'ina",                       me, gBoy,  "Munin'ina");
+  one('and his full sister, for comparison, the same word',          me, sis,   'Hanzvadzi');
+  check('nothing anywhere says half',
+        ![rBoy, rGirl, gBoy].some(x => /half/i.test(w(me, x).join(' '))),
+        JSON.stringify([rBoy, rGirl, gBoy].map(x => w(me, x))));
+
+  section('and the mothers are graded against HIS mother, not by their own age');
+  /* Grace was born four years before his mother and married four years after
+     her. If the engine graded these women by their birth years — the obvious
+     thing, and the wrong thing — Grace would come back Amaiguru. */
+  one('the wife married before his mother is Amaiguru', me, ruth,  'Amaiguru');
+  one('the wife married after her is Amainini',         me, grace, 'Amainini');
+  check('even though that one is the older woman of the two',
+        (fe.getState().people[grace].born < fe.getState().people[esther].born),
+        `${fe.getState().people[grace].born} vs ${fe.getState().people[esther].born}`);
+  one('and his own mother is Amai',                     me, esther, 'Amai');
+}
+
+section('THE SAME RULE FOR THE MEN WHO STAND AS FATHERS BESIDE HIM');
+/* One rule, not two: a woman married to a man who is a father to you is a
+   mother to you, graded exactly as he is. The grading is never worked out a
+   second time — whether his brother is senior is already the difference
+   between Babamukuru and Babamudiki, so the engine reads the answer off the
+   word it has. */
+{
+  const fe = loadFrontend();
+  const P = (n, s, t, b) => fe.addPerson(n, s, t, b, '');
+  const gf  = P('Sekuru', 'm', 'Mwendamberi', '1900');
+  const big = fe.grow('child', gf, 'Tafara', 'm', 'Mwendamberi', { born:'1925' });
+  const dad = fe.grow('child', gf, 'Farai',  'm', 'Mwendamberi', { born:'1930' });
+  const lil = fe.grow('child', gf, 'Tendai', 'm', 'Mwendamberi', { born:'1936' });
+  const wBig = fe.grow('partner', big, 'Miriam', 'f', 'Shava', { born:'1928' });
+  const wLil = fe.grow('partner', lil, 'Netsai', 'f', 'Nzou',  { born:'1940' });
+  fe.grow('partner', dad, 'Esther', 'f', 'Moyo', { born:'1934' });
+  const me = fe.grow('child', dad, 'Tonderai', 'm', 'Mwendamberi', { born:'1962' });
+  fe.setMe(me);
+  const w = (a, b) => {
+    const k = fe.kinTerms(a, b);
+    return (k && k.list.length) ? k.list.map(x => x.term).filter(Boolean) : [];
+  };
+  check("his Babamukuru's wife is Amaiguru", w(me, wBig).includes('Amaiguru'),
+        w(me, wBig).join(' + ') || 'no word at all');
+  check("his Babamudiki's wife is Amainini", w(me, wLil).includes('Amainini'),
+        w(me, wLil).join(' + ') || 'no word at all');
+}
+
 section('EVERY WORD ON THE LIST IS REACHED BY SOMEBODY');
 /* The check above tests each word where it belongs. This one is the ledger:
    if a word on the family's list is never produced by this household at all,

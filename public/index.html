@@ -1847,10 +1847,17 @@ function setAside(id, why){
  * Undo still works, because snapshot() runs first: until the page saves, this
  * is as reversible as anything else here. After the save it is not, anywhere,
  * and the button that calls this says so.  */
+/* WHY SOMEBODY WAS DELETED, held just long enough for the next batch to
+   carry it. It cannot live on the person — they are about to stop existing —
+   and it must not live in `state`, which is diffed against the server. It is
+   only ever read by diffOps, immediately, and dropped once used. */
+const deleteWhy = new Map();
+
 function deleteForever(id){
   const p = state.people[id];
   if (!p) return false;
   if (!p.aside) return false;            // the server refuses this too
+  deleteWhy.set(id, (p.aside && p.aside.why) || 'removed from the tree');
 
   snapshot();
   for (const u of unions()){
@@ -2947,6 +2954,48 @@ function derive(who, tid, byBloodOnly){
   return { term:null, why:'no traced link yet — add the people in between' };
 }
 
+/* WHICH OF A MAN'S MARRIAGES CAME FIRST.
+ *
+ * The app has always refused to number the houses, and the refusal was right
+ * as far as it went: nothing in this record says when a marriage happened,
+ * and ordering the wives by their own birth years would invent a fact about
+ * a family's seniority. A woman ten years older than her husband's first
+ * wife can perfectly well be his second.
+ *
+ * But Amaiguru and Amainini turn on exactly this, so "we cannot know" is no
+ * longer an answer — it is a whole class of mothers left unnamed. So the
+ * tree uses what it actually has, in this order, and says in the `why` which
+ * of the two it used, so the family can see the reasoning and correct it:
+ *
+ *   THE CHILDREN, when every house has a dated one. A house whose eldest was
+ *   born in 1955 was standing before a house whose eldest was born in 1970.
+ *   That is evidence out of the record rather than a guess about dates
+ *   nobody entered, and it is the same evidence Mukoma and Munin'ina already
+ *   rest on.
+ *
+ *   OTHERWISE THE ORDER THEY WERE RECORDED IN, which is what the family
+ *   themselves typed. It is weaker — somebody entering their father's wives
+ *   may well start with the one they knew best — which is why it is second
+ *   and why it is said out loud.
+ *
+ * Either way the answer carries a shape, so a family who knows better can
+ * teach the word and have it stick. */
+function houseOrder(fatherId){
+  const us = unionsOf(fatherId).filter(u => u.partners.includes(fatherId));
+  const eldest = u => {
+    let y = null;
+    for (const c of u.children){
+      const b = birthYear(c);
+      if (b !== null && (y === null || b < y)) y = b;
+    }
+    return y;
+  };
+  if (us.length > 1 && us.every(u => eldest(u) !== null)){
+    return { order: us.slice().sort((a, b) => eldest(a) - eldest(b)), by:'children' };
+  }
+  return { order: us, by:'recorded' };
+}
+
 /* Relatives by marriage. Only the terms the family already uses are named;
    anything else is described rather than invented. */
 function marriedIn(who, tid){
@@ -3124,6 +3173,66 @@ function marriedIn(who, tid){
                shape:`inlaw:married-to-my:brother:woman`,
                plain:"your brother's wife",
                why:"your brother's wife — she married into your house" };
+    }
+
+    /* THE WIFE OF A MAN WHO IS A FATHER TO YOU IS A MOTHER TO YOU.
+     *
+     * "My half siblings are just my siblings and they are treated the same as
+     *  my full siblings. Their mothers are either amaiguru or amainini
+     *  depending on whether they were before or after my mother."
+     *
+     * The first half of that was already true — a half-brother older than you
+     * is Mukoma exactly as a full brother is, because the row is the row. The
+     * second half was not true at all: every one of these women came back
+     * with no word, only a description. Your father's other wives, your
+     * Babamukuru's wife, your Babamudiki's wife — the women who actually
+     * raised half the household — were the one group this engine had nothing
+     * to say about.
+     *
+     * They are all the same case: a woman married to a man who stands as a
+     * father, and she stands as a mother, graded exactly as he is.
+     *
+     *   Babamukuru's wife  → Amaiguru. He is senior to your father, so is she.
+     *   Babamudiki's wife  → Amainini. He is junior, so is she.
+     *
+     * The grading is not computed again: whether his brother is senior is
+     * already the difference between those two words, so the engine reads the
+     * answer off the word it has. One place decides who is older.
+     *
+     * YOUR OWN FATHER'S OTHER WIVES are the case the family stated, and they
+     * are graded against YOUR MOTHER rather than against anybody's age —
+     * before her marriage or after it. See houseOrder for what the tree is
+     * allowed to conclude about that, and for what it does when it cannot. */
+    if (them.sex === 'f' && ['Babamukuru', 'Babamudiki'].includes(r.term)){
+      const senior = r.term === 'Babamukuru';
+      return {
+        term: senior ? 'Amaiguru' : 'Amainini',
+        shape: `mother:wife-of-my-${senior ? 'senior' : 'junior'}-father`,
+        plain: `the wife of your ${r.term}`,
+        why: `married to ${possess(sp)}, your ${r.term} — a man who stands as ` +
+             `a father to you, so his wife stands as a mother, graded as he is`
+      };
+    }
+    if (them.sex === 'f' && r.term === 'Baba'){
+      const mine = parentUnionOf(who);
+      const hers = unionsOf(sp).find(u => u.partners.includes(tid));
+      if (mine && hers && mine.id !== hers.id){
+        const { order, by } = houseOrder(sp);
+        const iM = order.findIndex(u => u.id === mine.id);
+        const iH = order.findIndex(u => u.id === hers.id);
+        if (iM >= 0 && iH >= 0 && iM !== iH){
+          const senior = iH < iM;
+          return {
+            term: senior ? 'Amaiguru' : 'Amainini',
+            shape: `mother:my-fathers-${senior ? 'earlier' : 'later'}-wife`,
+            plain: `your father's other wife`,
+            why: `your father's other wife, married ${senior ? 'before' : 'after'} ` +
+                 `your own mother — ${by === 'children'
+                   ? `her house has the ${senior ? 'older' : 'younger'} children`
+                   : 'that is the order the marriages are recorded in here'}`
+          };
+        }
+      }
     }
 
     if (r.term) return {
@@ -10066,7 +10175,30 @@ function diffOps(was, now){
    * op fails, so the order is the difference between "deleted" and "nothing
    * happened at all". */
   for (const id of Object.keys(was.people)){
-    if (!now.people[id]) ops.push({ op:'deletePerson', id, expect:was.people[id].v });
+    if (now.people[id]) continue;
+    /* SET ASIDE FIRST, ALWAYS — and the batch has to SAY so, which it did
+       not. The rule is the server's and it is right: deleting is the second
+       half of a deliberate act. But the act can now be done in one breath on
+       a person's card, and when it is, the setting-aside never reaches the
+       server at all — the person is gone from `state` before the diff runs,
+       so the batch carried a bare deletePerson for somebody the server had
+       never been told was aside. It answered 400 and refused the whole
+       batch, which stalls the tree: "the last change could not be saved".
+       Undo, reaching back past somebody who had been added and saved, could
+       do the same thing.
+    
+       So the batch carries both, in the order the rule requires. No version
+       is claimed for the delete because the setAside immediately before it
+       has just moved that version on. Both run inside one transaction, so
+       there is no moment where somebody is aside but not deleted. */
+    if (!was.people[id].aside){
+      ops.push({ op:'setAside', id, expect:was.people[id].v,
+                 why: deleteWhy.get(id) || 'removed from the tree' });
+      ops.push({ op:'deletePerson', id });
+    } else {
+      ops.push({ op:'deletePerson', id, expect:was.people[id].v });
+    }
+    deleteWhy.delete(id);
   }
 
   const ref = id => refOf[id] || id;

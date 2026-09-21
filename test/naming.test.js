@@ -25,31 +25,48 @@
 
 const { check, eq, section, report, loadFrontend } = require('./helpers');
 
-/* The tree in the photograph: a father, his elder brother Ben, and Ben's
-   wife Esther, who is the one with no word. */
+/* A woman, her husband Ben, and Ben's sister Esther — who is the one with no
+   word.
+ *
+ * THE FIXTURE MOVED, and why it moved is worth keeping. It used to be a
+ * father's elder brother's wife, because she was the clearest example in the
+ * tree of somebody the app could describe and not name. She has a word now:
+ * a man who stands as a father has a wife who stands as a mother, and she is
+ * Amaiguru. So the suite needs a pair that is still genuinely unnamed, and a
+ * wife's words for her husband's brothers and sisters are exactly that —
+ * this app was told to ask about them rather than answer, and it does.
+ *
+ * Ben keeps his name and his place as the one WITH a word, so the second
+ * half of the file still has its Babamukuru to fold away. */
 function theirs(){
   const fe = loadFrontend();
   const gf  = fe.addPerson('Grandfather', 'm', 'Mwendamberi', '1930', '');
   const dad = fe.grow('child', gf, 'Dad', 'm', 'Mwendamberi', { born:'1962' });
   const ben = fe.grow('child', gf, 'Ben Musoni', 'm', 'Mwendamberi', { born:'1958' });
   const me  = fe.grow('child', dad, 'Hazvineyi', 'm', 'Mwendamberi', { born:'1990' });
-  const esther = fe.grow('partner', ben, 'Esther', 'f', 'Shava', { born:'1960' });
+  // The unnamed pair: a wife and her husband's sister.
+  const her = fe.addPerson('Chenai', 'f', 'Nzou', '1990', '');
+  const hus = fe.grow('partner', her, 'Tapiwa Moyo', 'm', 'Moyo', { born:'1988' });
+  const hisDad = fe.addPerson('Moyo Elder', 'm', 'Moyo', '1955', '');
+  fe.linkExisting('child', hisDad, hus);
+  const esther = fe.grow('child', hisDad, 'Esther', 'f', 'Moyo', { born:'1992' });
   fe.setMe(me);
-  return { fe, gf, dad, ben, me, esther };
+  return { fe, gf, dad, ben, me, esther, her, hus, hisDad };
 }
 const hasBox = html => /<div class="teach"/.test(html);
 
 section('THE CARD THAT ASKED FOR A WORD NOW TAKES ONE');
 {
   const t = theirs();
+  t.fe.setMe(t.her);
   const card = t.fe.kinOnCard(t.esther);
-  check('it still says what she is — married to your Babamukuru',
-        /married to your Babamukuru \(Ben Musoni\)/.test(card), card);
+  check('it still says what she is — your husband\u2019s sister',
+        /husband's sister/.test(card), card);
   check('and still says there is no word for it',
         /name it below/.test(card), card);
   check('and below it, at last, is the box', hasBox(card), card);
   check('filed under the shape, not under the two names',
-        /data-shape="inlaw:married-to-my:Babamukuru:woman"/.test(card), card);
+        /data-shape="inlaw:through-my-husband:/.test(card), card);
 }
 
 section('the box stands open where there is no word');
@@ -57,6 +74,7 @@ section('the box stands open where there is no word');
    question; a family that has to find the box first will not answer it. */
 {
   const t = theirs();
+  t.fe.setMe(t.her);
   const card = t.fe.kinOnCard(t.esther);
   check('nothing to open first', !/teachfold/.test(card), card);
 }
@@ -66,22 +84,22 @@ section('A WORD NAMED FROM THE CARD IS A WORD NAMED');
 // the same place, which is the whole reason the app files by shape.
 {
   const t = theirs();
-  const shape = t.fe.kinTerms(t.me, t.esther).base.shape;
-  t.fe.teachTerm(shape, 'Maiguru', "she is the wife of my father's elder brother");
+  t.fe.setMe(t.her);
+  const shape = t.fe.kinTerms(t.her, t.esther).base.shape;
+  t.fe.teachTerm(shape, 'Vatete', "she is my husband's sister");
 
   const card = t.fe.kinOnCard(t.esther);
-  check('the card now leads with the word', /<b>Maiguru<\/b>/.test(card), card);
+  check('the card now leads with the word', /<b>Vatete<\/b>/.test(card), card);
   check('and says whose word it is',
-        /your family's word, from Hazvineyi/.test(card), card);
+        /your family's word, from Chenai/.test(card), card);
   check('with the rule they gave for it',
-        /wife of my father's elder brother/.test(card), card);
+        /my husband's sister/.test(card), card);
   check('and no longer says it has no word', !/name it below/.test(card), card);
 
-  // another uncle, another wife, never mentioned to the app
-  const unc2 = t.fe.grow('child', t.gf, 'Another uncle', 'm', 'Mwendamberi', { born:'1955' });
-  const ruth = t.fe.grow('partner', unc2, 'Ruth', 'f', 'Nzou', { born:'1957' });
+  // another sister of his, never mentioned to the app
+  const sis2 = t.fe.grow('child', t.hisDad, 'Ruth', 'f', 'Moyo', { born:'1995' });
   eq('and the next woman in the same place carries it',
-     t.fe.kinTerms(t.me, ruth).list.map(x => x.term), ['Maiguru']);
+     t.fe.kinTerms(t.her, sis2).list.map(x => x.term), ['Vatete']);
 }
 
 section('a word the app already has is folded away, but is still changeable');
@@ -125,7 +143,11 @@ section('WHEREVER THE APP SAYS "NAME IT BELOW", THERE IS A BELOW');
   const sis = fe.grow('child', t.dad, 'Sister', 'f', 'Mwendamberi', { born:'1993' });
   const her = fe.grow('partner', sis, 'Her husband', 'm', 'Shava', { born:'1990' });
   const kid = fe.grow('child', her, 'Their child', 'm', 'Shava', { born:'2015' });
-  const all = [t.gf, t.dad, t.ben, t.esther, mai, sis, her, kid];
+  /* Reckoned from the wife who married in, because hers is the vocabulary
+     with gaps in it: a wife's words for her husband's people are the ones
+     this app was told to ask about rather than answer. */
+  fe.setMe(t.her);
+  const all = [t.gf, t.dad, t.ben, t.esther, t.hus, t.hisDad, mai, sis, her, kid];
 
   let promised = 0, broken = [];
   for (const id of all){
@@ -158,7 +180,8 @@ section('THE PANEL AND THE CARD OFFER THE SAME BOX, BECAUSE IT IS THE SAME BOX')
    at when the panel was changed. */
 {
   const t = theirs();
-  const fromPanel = t.fe.kinVerdict(t.me, t.esther);
+  t.fe.setMe(t.her);
+  const fromPanel = t.fe.kinVerdict(t.her, t.esther);
   const fromCard  = t.fe.kinOnCard(t.esther);
   const box = html => (html.match(/<div class="teach"[\s\S]*<\/div>$/) || [''])[0];
   check('the panel has one', hasBox(fromPanel), fromPanel);
@@ -181,9 +204,10 @@ section('a word with a quote in it does not break the box it is written into');
 section('naming a relationship is undoable like everything else');
 {
   const t = theirs();
-  const shape = t.fe.kinTerms(t.me, t.esther).base.shape;
-  t.fe.teachTerm(shape, 'Maiguru', '');
-  check('it took', /Maiguru/.test(t.fe.kinOnCard(t.esther)));
+  t.fe.setMe(t.her);
+  const shape = t.fe.kinTerms(t.her, t.esther).base.shape;
+  t.fe.teachTerm(shape, 'Vatete', '');
+  check('it took', /Vatete/.test(t.fe.kinOnCard(t.esther)));
   check('undo works', t.fe.undo());
   check('and the card is asking again', /name it below/.test(t.fe.kinOnCard(t.esther)),
         t.fe.kinOnCard(t.esther));

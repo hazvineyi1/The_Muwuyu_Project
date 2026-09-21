@@ -262,7 +262,32 @@ section('and the sync says so, because silence used to mean a bug');
   const del = ops.filter(o => o.op === 'deletePerson');
   eq('one delete op', del.length, 1);
   eq('naming them', del[0].id, a);
-  check('and carrying the version it expects', del[0].expect === 1, JSON.stringify(del[0]));
+  /* THE VERSION IS CLAIMED BY THE SETASIDE, not by the delete. Both halves of
+     the act were done before anything was sent, so the batch has to carry
+     both — and the setAside immediately before moves the version on, which is
+     why the delete can no longer claim the one it started with. */
+  const aside = ops.filter(o => o.op === 'setAside' && o.id === a);
+  eq('with the setting-aside sent in front of it', aside.length, 1);
+  check('and that is what carries the version', aside[0].expect === 1, JSON.stringify(aside[0]));
+  check('so the delete claims none', !del[0].expect, JSON.stringify(del[0]));
+  check('in that order', ops.indexOf(aside[0]) < ops.indexOf(del[0]));
+}
+
+section('but somebody already set aside on the server is deleted on its own');
+/* The other path, and the older one: set aside, saved, and deleted later from
+   the Set aside panel. The server has been told; nothing needs saying twice,
+   and the delete claims the version as it always did. */
+{
+  const fe = loadFrontend();
+  const a = fe.addPerson('A', 'm', 'Mwendamberi', '1940', '');
+  fe.setAside(a, 'x');
+  const synced = JSON.parse(JSON.stringify(fe.getState()));
+  for (const p of Object.values(synced.people)) p.v = 1;
+  fe.deleteForever(a);
+  const ops = fe.diffOps(synced, fe.getState());
+  eq('no second setting-aside', ops.filter(o => o.op === 'setAside').length, 0);
+  const del = ops.find(o => o.op === 'deletePerson');
+  check('and the delete carries the version', del && del.expect === 1, JSON.stringify(del));
 }
 
 // ── on the server ──────────────────────────────────────────────────────────
@@ -343,6 +368,75 @@ section('deleting somebody who is already gone is refused, not silently ignored'
   await run([{ op:'setAside', id, why:'x' }]);
   await run([{ op:'deletePerson', id }]);
   await rejects('the second attempt', () => run([{ op:'deletePerson', id }]), /./);
+}
+
+
+section('DELETING FROM THE CARD SENDS A BATCH THE SERVER ACCEPTS');
+/* THE BUG THIS PINS, reported from a live tree: "the last change could not be
+   saved (the server answered 400)".
+ *
+ * Deleting is the second half of a deliberate act and the server enforces it,
+ * rightly. But the card now lets both halves be done in one breath — and when
+ * they are, the setting-aside never reached the server at all: the person was
+ * gone from the page's state before the diff ran, so the batch carried a bare
+ * deletePerson for somebody the server had never been told was aside. 400,
+ * and the whole batch refused, which stalls the tree for every later change
+ * too.
+ *
+ * The fix is in the diff, not in the rule: the batch has to SAY what was
+ * done. This test builds the batch the page would build and puts it to a real
+ * server, because the page passing its own tests is exactly what happened
+ * last time. */
+{
+  const fe = loadFrontend();
+  const dad = fe.addPerson('Chaitezvi Musoni', 'm', 'Mwendamberi', '1900', '');
+  const kid = fe.grow('child', dad, 'Wrong Entry', 'm', 'Soko', { born:'1930' });
+
+  // Everything so far is on the server, as it would be by the time anybody
+  // is looking at a card.
+  const born = await run(fe.diffOps({ people:{}, unions:{} }, fe.getState()));
+  const realDad = born.refs['$' + dad], realKid = born.refs['$' + kid];
+  check('the tree saved to start with', !!born.seq, JSON.stringify(born));
+
+  /* The page renames its provisional ids to the server's own the moment a
+     save comes back, so the second batch talks about the rows that exist. */
+  for (const [refName, realId] of Object.entries(born.refs)) fe.remapId(refName.slice(1), realId);
+  const synced = JSON.parse(JSON.stringify(fe.getState()));
+
+  // What the card does: set aside and delete, in one breath, then save.
+  fe.setAside(realKid, 'entered twice');
+  check('and the delete goes through locally', fe.deleteForever(realKid));
+
+  const ops = fe.diffOps(synced, fe.getState());
+  const kinds = ops.map(o => o.op);
+  check('the batch sets them aside before deleting them',
+        kinds.indexOf('setAside') >= 0 &&
+        kinds.indexOf('setAside') < kinds.indexOf('deletePerson'),
+        JSON.stringify(kinds));
+  eq('and carries the reason the family gave',
+     (ops.find(o => o.op === 'setAside') || {}).why, 'entered twice');
+  check('the delete claims no version, because the setAside just moved it',
+        !(ops.find(o => o.op === 'deletePerson') || {}).expect,
+        JSON.stringify(ops.find(o => o.op === 'deletePerson')));
+
+  /* AND THE SERVER TAKES IT. This is the assertion that would have caught
+     the fault: the page was perfectly happy with itself. */
+  const out = await run(ops);
+  check('the server accepts the batch', !!out.seq, JSON.stringify(out));
+  const gone = await pool.query(
+    'SELECT count(*)::int AS n FROM people WHERE id = $1', [realKid]);
+  eq('and they are actually gone', gone.rows[0].n, 0);
+  const left = await pool.query(
+    'SELECT count(*)::int AS n FROM people WHERE id = $1', [realDad]);
+  eq('while their father is untouched', left.rows[0].n, 1);
+}
+
+section('and a bare delete is still refused, because the rule has not moved');
+/* The fix is in what the batch SAYS, not in what the server allows. */
+{
+  const r = await run([{ op:'addPerson', ref:'$x', name:'Still Here', sex:'f' }]);
+  await rejects('deleting somebody the server was never told was aside',
+                () => run([{ op:'deletePerson', id:r.refs.$x }]), /set them aside first/);
 }
 
 await pool.end();
