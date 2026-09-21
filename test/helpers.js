@@ -135,7 +135,7 @@ function loadFrontend(){
       setAside, restore, deleteForever, unlinkParents, unlinkPartner, searchPeople, deleteInOneTap, putThemBack, closeDeleteWindow, noticesFor, asidePeople, present, mergePeople, meName,
       knownTotem, totemKey, totemsHere, totemSuggestions, MITUPO,
       sameHouse, mutupoNotes, housesJoined, housesJoin,
-      familyLines, foldableLines, foldedAway, forgetLines, isFolded, loadFolded, FAM_HUES, famPanel,
+      familyLines, foldableLines, foldedAway, forgetLines, isFolded, loadFolded, FAM_TINTS, famPanel,
       whyHere(id){ computeLayout(); return whyHere(id); }, positionOf,
       whyOnCard(id){ computeLayout(); return whyOnCard(id); },
       branchPath, BAR, yearOf, hubRooms, hubMark, startAgain,

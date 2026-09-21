@@ -298,7 +298,15 @@ section('THE PICTURE SAYS WHICH FAMILY IS WHICH');
   const t = tree();
   const html = t.fe.draw();
   check('the pods carry the family they belong to', /data-fam="/.test(html), html.slice(0, 400));
-  check('with a hue to tell them apart', /--fam:\d+/.test(html));
+  /* A NAMED COLOUR, not a number worked out here. The six tints live in the
+     stylesheet with one set per face, so a family reading at midnight gets
+     the colours that were measured against a midnight page — and the page
+     cannot invent a seventh that nobody checked. */
+  check('with a tint to tell them apart', /--fam:var\(--fam-[1-6]\)/.test(html),
+        (html.match(/--fam:[^";]*/g) || []).join(' | '));
+  const used = [...new Set((html.match(/--fam:var\(--fam-(\d)\)/g) || []))];
+  check('and no tint outside the six that were measured',
+        used.every(u => /--fam-[1-6]\)/.test(u)), JSON.stringify(used));
   check('the Marumahoko are named once, under the woman they come down from',
         (html.match(/class="famname"/g) || []).length === 3,
         JSON.stringify((html.match(/famname">[^<]*/g) || [])));
