@@ -539,6 +539,61 @@ async function liveSessions(pool, { treeId = null, scope = null, limit = 100, st
   return rows;
 }
 
+/* WHO ELSE OF THE FAMILY IS HERE.
+ *
+ * "...intuitive, cohesive and collaborative."
+ *
+ * Separate from liveSessions() on purpose, and the difference is the whole
+ * point. liveSessions() is read by the KEEPER, who is outside every family
+ * and is told only THAT somebody answered who they are, never who. This one
+ * is read from inside one family, by somebody who already holds the passcode
+ * and can already see every name in the tree — so a name here tells them
+ * nothing the tree has not already told them, and it is theirs.
+ *
+ * WHAT IT DOES NOT SAY, deliberately: no address, no browser, no time
+ * beyond "recently", and nothing whatever about what anybody is looking at.
+ * Only that a relative has the tree open, which is the fact that makes two
+ * people filling it in together feel like two people rather than one person
+ * and a database.
+ *
+ * A session that has not said who is viewing is counted and not named,
+ * because there is no name to give — not because it is being withheld.
+ *
+ * `minutes` is coarse on purpose: last_seen_at is written at most once every
+ * five minutes per session (see touch()), so anything finer would be a
+ * precision the column does not have. */
+async function whoIsHere(pool, treeId, { exceptSessionId = null, minutes = 10, limit = 40 } = {}) {
+  if (!treeId) return { here: [], unnamed: 0 };
+  const args = [treeId, Math.max(1, Math.min(120, Number(minutes) || 10))];
+  let skip = '';
+  if (exceptSessionId){ args.push(exceptSessionId); skip = `AND s.id <> $${args.length}::uuid`; }
+  args.push(Math.max(1, Math.min(200, Number(limit) || 40)));
+  const { rows } = await pool.query(
+    `SELECT s.person_id, p.name
+       FROM sessions s
+       LEFT JOIN people p ON p.id = s.person_id AND p.tree_id = s.tree_id
+      WHERE s.tree_id = $1::uuid
+        AND s.scope = 'family'
+        AND s.revoked_at IS NULL
+        AND s.expires_at > clock_timestamp()
+        AND s.last_seen_at > clock_timestamp() - ($2 || ' minutes')::interval
+        ${skip}
+      ORDER BY s.last_seen_at DESC
+      LIMIT $${args.length}`, args);
+
+  // One relative with the tree open on a phone and a laptop is one relative.
+  const byPerson = new Map();
+  let unnamed = 0;
+  for (const r of rows){
+    if (r.person_id && r.name) byPerson.set(r.person_id, r.name);
+    else unnamed++;
+  }
+  return {
+    here: [...byPerson].map(([id, name]) => ({ id, name })),
+    unnamed
+  };
+}
+
 /* Sessions that ended a long time ago are of no use to anybody: the audit
    table is the history, this one is the live state. Not called automatically —
    see mw_drop_audit_before for the same reasoning about retention. */
@@ -715,6 +770,7 @@ async function revokeInvite(pool, inviteId, { treeId = null, by = '' } = {}) {
 }
 
 module.exports = {
+  whoIsHere,
   SESSION_DAYS, INVITE_DAYS,
   makePasscode, splitPasscode, hashPasscode, checkPasscode, issuePasscode,
   setPasscode, handleFor,

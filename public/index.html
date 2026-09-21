@@ -1098,6 +1098,14 @@ body.carrying .pod{transition:none;}
    — a guess with its evidence and the ways to act on it — and looking like
    a different kind of thing would say it was one. Dashed, because none of
    it is an error; gold, because it is waiting on somebody. */
+/* Who else has the tree open. A quiet line, gold because it is a person and
+   not a warning, and never bigger than the record underneath it. */
+#form .herenow{
+  margin:0 0 10px; padding:7px 10px; border-radius:10px 3px 10px 3px;
+  background:var(--pod-hi); border:1.5px solid var(--pod-edge);
+  font-family:'Karla',sans-serif; font-size:11.5px; line-height:1.5;
+  color:var(--gold); font-weight:700;
+}
 #form .lost{
   padding:11px; margin-bottom:9px; border-radius:14px 4px 14px 4px;
   background:var(--pod-hi); border:1.5px dashed var(--pod-edge);
@@ -11203,6 +11211,40 @@ function paintHub(){
    the tail rather than the whole of it, because a family three years in has
    tens of thousands of lines and nobody is reading to the bottom. */
 const NEWS_BACK = 200;
+/* WHO ELSE HAS THE TREE OPEN, in a line.
+ *
+ * "...intuitive, cohesive and collaborative."
+ *
+ * The record of what the others have DONE keeps for good and is the heavy
+ * half of working together. This is the light half: whether anybody else is
+ * there at all. It goes at the top of the same panel, because that is where
+ * somebody goes to find out what the family has been doing, and it must not
+ * become another thing that appears over the tree uninvited.
+ *
+ * Deliberately vague about time. last_seen is written at most once every
+ * five minutes per session, so "right now" would be a precision the record
+ * does not have, and "here" is the true word for it.
+ *
+ * Nobody named is ever a surprise: it is a name the reader can already see
+ * on the tree, said by that relative about themselves. */
+function hereWords(d){
+  const names = ((d && d.here) || []).map(h => h.name).filter(Boolean);
+  const quiet = Math.max(0, (d && d.unnamed) || 0);
+  if (!names.length && !quiet) return '';
+  const list = names.length === 1 ? names[0]
+             : names.length === 2 ? `${names[0]} and ${names[1]}`
+             : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  if (!names.length){
+    return quiet === 1
+      ? 'Somebody else has the tree open. They have not said who they are.'
+      : `${quiet} others have the tree open. They have not said who they are.`;
+  }
+  const head = `${list} ${names.length === 1 ? 'has' : 'have'} the tree open too.`;
+  if (!quiet) return head;
+  return `${head} So ${quiet === 1 ? 'does somebody' : `do ${quiet} others`} who ` +
+         `${quiet === 1 ? 'has' : 'have'} not said who they are.`;
+}
+
 async function openNews(){
   closeForm();
   pending = { kind:'dupes', anchorId: sel || state.rootId };
@@ -11233,6 +11275,15 @@ async function openNews(){
   }
   paint(`<p class="browse">Reading the record…</p>`);
 
+  /* Asked for alongside the record, not before it: who is here is the nicer
+     thing to know and the record is the thing that was asked for, so a slow
+     or failed answer here must never hold the panel up. */
+  let hereNow = '';
+  const asking = fetch('/api/here', { headers:{ Accept:'application/json' } })
+    .then(r => r.ok ? r.json() : null)
+    .then(x => { hereNow = hereWords(x); })
+    .catch(() => {});
+
   let d = null;
   try {
     const since = Math.max(0, headSeq - NEWS_BACK);
@@ -11240,6 +11291,8 @@ async function openNews(){
                           { headers:{ Accept:'application/json' } });
     if (r.ok) d = await r.json();
   } catch (e) {}
+  await asking;
+  const hereLine = hereNow ? `<p class="herenow">${esc(hereNow)}</p>` : '';
   if (!d || !Array.isArray(d.changes)){
     paint(`<p class="browse">The record could not be read just now. Nothing is ` +
           `wrong with the tree — try again in a moment.</p>`);
@@ -11250,13 +11303,15 @@ async function openNews(){
   const mine = meName();
   const unseen = lines.filter(l => l.seq > seenSeq).length;
   if (!lines.length){
-    paint(`<p class="browse">Nothing has been changed yet. Every name anybody ` +
+    paint(hereLine +
+          `<p class="browse">Nothing has been changed yet. Every name anybody ` +
           `adds will be listed here, with who added it and when.</p>`);
     markSeen(d.head || headSeq);
     return;
   }
 
   paint(
+    hereLine +
     `<p class="browse">` +
       (unseen
         ? `<b>${unseen} ${unseen === 1 ? 'change' : 'changes'}</b> since you last looked.`

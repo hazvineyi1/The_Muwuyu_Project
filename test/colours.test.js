@@ -84,6 +84,9 @@ const TEXT = [
   ['--muted', '--pod-hi',      'a note on a panel row'],
   ['--gold',  '--pod',         'a term on a card'],
   ['--ink',   '--pod-hi',      'a name on a highlighted row'],
+  // The not-joined room names the match in gold on a highlighted row, and so
+  // does the line saying who else has the tree open.
+  ['--gold',  '--pod-hi',      'a name picked out on a highlighted row'],
   ['--muted', '--sky',         'the hint under the tree'],
   ['--ink',   '--sky',         'text on the canvas'],
   ['--sky',   '--gold',        'the label on a gold chip'],

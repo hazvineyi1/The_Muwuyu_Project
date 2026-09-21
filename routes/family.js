@@ -154,6 +154,32 @@ module.exports = function familyRoutes(pool) {
     } catch (e) { fail(res, e); }
   });
 
+  /* WHO ELSE OF THE FAMILY HAS THE TREE OPEN.
+
+     "...intuitive, cohesive and collaborative."
+
+     The project already tells you what the others have DONE — every change,
+     with who made it, kept for good. This is the other half of working
+     together and it is much smaller: whether anybody else is there at all.
+     Two relatives filling in the same branch from two countries have had no
+     way of knowing they were both at it.
+
+     Everything it can say, it already knows. It adds no new claim: a name
+     here is a name the session itself gave when it answered who is viewing,
+     about a person the caller can already see in the tree. It says nothing
+     about where anybody is, what they are reading, or when beyond "just now",
+     and a session that never said who it is is counted rather than named.
+
+     Family scope only, and the caller's own session is left out — a page
+     telling you that you are here is not news. */
+  r.get('/api/here', familyOnly, async (req, res) => {
+    try {
+      res.json(await access.whoIsHere(pool, req.muti.treeId, {
+        exceptSessionId: req.muti?.session?.id || null
+      }));
+    } catch (e) { fail(res, e); }
+  });
+
   r.get('/api/invites', familyOnly, async (req, res) => {
     try {
       res.json({ invites: await access.listInvites(pool, req.muti.treeId, {
