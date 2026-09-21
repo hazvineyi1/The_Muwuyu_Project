@@ -136,6 +136,13 @@ function loadFrontend(){
       knownTotem, totemKey, totemsHere, totemSuggestions, MITUPO,
       sameHouse, mutupoNotes, housesJoined, housesJoin,
       familyLines, foldableLines, foldedAway, forgetLines, isFolded, loadFolded, FAM_HUES, famPanel,
+      // The standing notices on the bar, as the page assembles them.
+      barNotices(){ const out = []; const el = { hidden:false,
+        set innerHTML(v){ out.push(v); }, get innerHTML(){ return out[0] || ''; } };
+        const was = document.getElementById;
+        document.getElementById = id => (id === 'litbar' ? el : was(id));
+        try { computeLayout(); showLit(); } finally { document.getElementById = was; }
+        return out[0] || ''; },
       setLineFolded(id, on){ setLineFolded(id, on); },
       clearFolds(){ folded = new Set(); },
       PALETTES, THEMES,

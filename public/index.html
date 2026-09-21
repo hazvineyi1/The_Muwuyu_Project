@@ -8284,6 +8284,28 @@ function showLit(){
     }
   }
 
+  /* AND WHOEVER IS BEHIND A FOLD, said the same way the reach says it. The
+     panel lists the folds and the marriage each one hangs off carries a
+     button, but both of those have to be gone looking for — and a family
+     folded a fortnight ago is a button somewhere off the side of a tree that
+     has been panned and zoomed a hundred times since. A standing line on the
+     bar is what stops "where did my mother's people go" ever being a
+     question. One line however many are folded: a pill per family would be
+     the bar taken over by a setting. */
+  {
+    const shut = foldableLines().filter(l => isFolded(l.id));
+    const on = layout && layout.persons ? Object.keys(layout.persons).length : 0;
+    const all = people().length;
+    if (shut.length && all > on){
+      const names = shut.map(l => l.name).filter(Boolean);
+      rows.push(
+        `<div class="pill"><b>${names.length ? esc(names.join(', ')) : 'Folded'}</b>` +
+        `<span>${on} of ${all} — ${names.length === 1 ? 'that family is' : 'those families are'} ` +
+        `folded away, not removed.</span>` +
+        `<button type="button" id="foldOff">Open them</button></div>`);
+    }
+  }
+
   /* SOMEBODY JUST DELETED, and the seconds in which that can still be taken
      back. The one thing on this bar that is genuinely urgent, so it leads. */
   if (undoDelete){
@@ -8309,6 +8331,11 @@ function showLit(){
   el.hidden = !rows.length;
   if ($('litOff')) $('litOff').onclick = () => { lit = null; render(); };
   if ($('undelete')) $('undelete').onclick = putThemBack;
+  if ($('foldOff')) $('foldOff').onclick = () => {
+    for (const l of foldableLines()) setLineFolded(l.id, false);
+    render(); fit();
+    say('Every family is back on the tree.');
+  };
   if ($('reachOff')) $('reachOff').onclick = () => {
     writePref(REACH_KEY, ''); setReach(''); render(); fit();
     say('The whole family is back.');

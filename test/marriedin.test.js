@@ -354,6 +354,53 @@ section('and once folded it says how many are behind it, and offers them back');
         (html.match(/famname">[^<]*/g) || []).join(' | '));
 }
 
+section('AND THE BAR SAYS SO FOR AS LONG AS ANYBODY IS FOLDED AWAY');
+/* Said the way the reach says it, and for the same reason: a family folded
+   a fortnight ago is a button somewhere off the side of a tree that has been
+   panned and zoomed a hundred times since. "Where did my mother's people go"
+   must never be a question this app leaves anybody holding. */
+{
+  const t = tree();
+  eq('nothing on the bar while everybody is showing', t.fe.barNotices(), '');
+
+  fold(t, 'Mandaba');
+  const one = t.fe.barNotices();
+  check('the family is named', /<b>Mandaba<\/b>/.test(one), one);
+  check('with how many of them are on the screen', /13 of 18/.test(one), one);
+  check('and the word that matters — not removed',
+        /folded away, not removed/.test(one), one);
+  check('and a way out of it', /id="foldOff"/.test(one), one);
+
+  fold(t, 'Marumahoko');
+  const two = t.fe.barNotices();
+  check('two folded families are still one line, not two pills',
+        (two.match(/class="pill"/g) || []).length === 1, two);
+  check('both named on it', /Marumahoko/.test(two) && /Mandaba/.test(two), two);
+  check('and it reads as a plural', /those families are/.test(two), two);
+
+  fold(t, 'Mandaba', false);
+  fold(t, 'Marumahoko', false);
+  eq('and it goes when they come back', t.fe.barNotices(), '');
+}
+
+section('and folding one that is already behind another changes the names, not the count');
+/* The Chikowore are on this screen only through the Mandabas, so with the
+   Mandabas folded they have already gone. Folding them as well takes nobody
+   further off the picture — but it IS a second fold, and "Open them" now
+   opens two families rather than one, so the line has to say both. Counting
+   them twice would be the bug. */
+{
+  const t = tree();
+  fold(t, 'Mandaba');
+  check('one family, thirteen showing', /<b>Mandaba<\/b>/.test(t.fe.barNotices()) &&
+        /13 of 18/.test(t.fe.barNotices()), t.fe.barNotices());
+  fold(t, 'Chikowore');
+  const both = t.fe.barNotices();
+  check('still thirteen showing, because nobody new went', /13 of 18/.test(both), both);
+  check('and both are named, because opening now opens both',
+        /<b>Mandaba, Chikowore<\/b>/.test(both), both);
+}
+
 section('THE FAMILIES ARE LISTED WHERE THEY CAN BE FOUND AGAIN');
 /* A button on a pod is only findable if you already know it is there, and a
    family folded last week is a button somewhere off the side of a tree you
