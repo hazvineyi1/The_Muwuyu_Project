@@ -888,6 +888,21 @@ body.carrying .pod{transition:none;}
 #form .teachfold>summary::marker{content:'';}
 #form .teachfold[open]>summary{border-radius:0; color:var(--muted);}
 #form .teachfold[open] .teach{margin:0; border-radius:0 0 12px 12px;}
+/* "Why are these names all the way here?" — folded, because almost every
+   answer is "because this is correct, and here is the rule", and a card that
+   opened with a paragraph of layout reasoning would be answering a question
+   most people are not asking. One line, and the reason behind it. */
+#form .whyfold{margin:-2px 0 10px;}
+#form .whyfold>summary{
+  list-style:none; cursor:pointer; padding:6px 2px;
+  font-family:'Karla',sans-serif; font-size:10.5px; font-weight:700;
+  letter-spacing:.02em; color:var(--gold);
+}
+#form .whyfold>summary::-webkit-details-marker{display:none;}
+#form .whyfold>summary::marker{content:'';}
+#form .whyfold[open]>summary{color:var(--muted);}
+#form .whyfold p{margin:2px 0 0;}
+
 .linkbtn{
   background:none; border:none; padding:0; cursor:pointer; color:var(--gold);
   font-family:'Karla',sans-serif; font-size:10.5px; font-weight:700; text-decoration:underline;
@@ -2109,6 +2124,102 @@ function nameSimilarity(nameA, nameB){
 }
 
 /* Where somebody sits, in a phrase — enough to tell one Tendai from another. */
+/* ── WHY SOMEBODY IS DRAWN WHERE THEY ARE ────────────────────────────────
+ *
+ * "Why are these names all the way here?"
+ *
+ * Asked four times in different words, of a tree that has never once
+ * answered. Where a pod lands is the end of a chain of real decisions — two
+ * families both claiming a household and one of them winning; a woman
+ * standing over the daughter who married out rather than under her own
+ * father; a household on your father's half of the line rather than your
+ * mother's — and every one of those is a sentence a family can read. They
+ * were simply never written down.
+ *
+ * WHAT THIS IS NOT. It is not a warning and it is not a complaint about the
+ * tree. Almost every answer here is "because this is correct, and here is
+ * the rule": the point is that a person who cannot see WHY the picture is
+ * shaped like this has no way to tell a rule from a mistake, and so has to
+ * treat all of it as a mistake. One sentence is the whole difference.
+ *
+ * Reckoned from the drawn layout, so it describes the picture actually on
+ * the screen — including a narrowing, a fold, or a shape the reader chose. */
+function whyHere(id){
+  if (!layout || !layout.persons || !layout.persons[id]){
+    if (!present(id)) return '';
+    return 'Not on the screen at the moment — the reach, a fold, or the ' +
+           'branch being worked on is holding them back. Everything about ' +
+           'them is still in the tree.';
+  }
+  const w = (layout.why || {})[id];
+  if (!w) return '';
+  const nm = x => (state.people[x] || {}).name || 'somebody';
+  const list = xs => xs.map(nm).join(' and ');
+  const are = xs => xs.length > 1 ? 'have' : 'has';
+  const others = w.mates.filter(x => x !== id);
+  const bits = [];
+
+  /* FIRST, THE ROW THEY STAND IN, because that is what is being asked about:
+     a pod on its own in open canvas is a household of one, and the question
+     is what it is hanging from. */
+  if (w.visiting){
+    bits.push(`Standing over ${nm(w.visiting.over)}'s household, because ` +
+      `nobody above this one is recorded. A house whose own line the tree ` +
+      `does not yet hold stands above the marriage that brought it in, ` +
+      `rather than out on its own.`);
+  } else if (w.under){
+    bits.push(w.under.via === id
+      ? `Hanging beneath ${list(w.under.house)}.`
+      : `Hanging beneath ${list(w.under.house)}, through ${nm(w.under.via)}.`);
+    /* THE PART THAT ACTUALLY ANSWERS IT. A household with two sets of
+       parents can only hang from one; the other family's line then stretches
+       across the canvas to reach it, which is exactly what looks wrong and
+       is exactly what was decided on purpose. */
+    if (w.under.rival){
+      const r = w.under.rival;
+      bits.push(`${list(r.house)} ${are(r.house)} a claim on this household ` +
+        `too, through ${nm(r.via)}` +
+        (r.beaten
+          ? `, and it hangs this way because the tree holds more of ` +
+            `${list(w.under.house)}'s side.`
+          : `, and it hangs this way because a house descends through its men.`) +
+        ` The line to them is still drawn — it is long because they stand elsewhere.`);
+    }
+  } else if (w.root){
+    bits.push('At the head of a line: nobody above this household is ' +
+      'recorded yet, so it stands on the ground rather than hanging from ' +
+      'anybody.');
+  }
+
+  if (others.length)
+    bits.push(`Beside ${list(others)}, because a marriage stands together.`);
+
+  /* AND WHICH HALF OF THE PICTURE. "All the way HERE" is as much about the
+     side as the row. */
+  if (w.spine){
+    bits.push(w.spine === id
+      ? 'On the line itself, which runs straight down the middle to you.'
+      : `On the line itself, which runs through ${nm(w.spine)}.`);
+  } else if (w.side === -1){
+    bits.push('Left of the line, with your father’s people.');
+  } else if (w.side === 1){
+    bits.push('Right of the line, with your mother’s people.');
+  }
+
+  return bits.join(' ');
+}
+
+/* The same answer, folded into one line on a card. Only offered when there
+   is something to say: a tree of three people laid out the only way three
+   people can be laid out is not owed an explanation. */
+function whyOnCard(id){
+  const text = whyHere(id);
+  if (!text) return '';
+  const first = esc(((state.people[id] || {}).name || '').split(' ')[0] || 'this person');
+  return `<details class="whyfold"><summary>Why is ${first} drawn here?</summary>` +
+    `<p class="roothint">${esc(text)}</p></details>`;
+}
+
 function positionOf(id){
   const bits = [];
   const mates = partnersOf(id);
@@ -4911,6 +5022,14 @@ function computeLayout(){
     const pick = claims.find(c => !isAncestorBlock(b, c.home));
     if (!pick) continue;
     b.parent = pick.home; b.viaChild = pick.child; b.viaUnion = pick.union;
+    /* AND WHY IT WAS THAT SIDE. Kept so the picture can be asked about: the
+       rule above is a real decision between two families who both have a
+       claim on this household, and the family looking at the result is
+       entitled to the reason rather than left to infer it. */
+    b.whyParent = { pick, rival: claims.find(c => c !== pick) || null,
+                    knownPick: houseKnown(pick.child),
+                    knownRival: claims.find(c => c !== pick)
+                      ? houseKnown(claims.find(c => c !== pick).child) : null };
     pick.home.kids.push(b);
   }
 
@@ -5007,6 +5126,7 @@ function computeLayout(){
     const host = given[0].block;
     if (isAncestorBlock(b, host)) continue;          // never under its own line
     b.parent = host; b.visiting = true; b.forPerson = given[0].child;
+    b.whyVisiting = { host, forPerson: given[0].child };
     host.kids.push(b);
   }
 
@@ -5682,7 +5802,43 @@ function computeLayout(){
     }
   }
 
-  layout = { persons, sockets, links };
+  /* WHY EVERYBODY IS WHERE THEY ARE, written down as the picture is made.
+   *
+   * "Why are these names all the way here?" — asked of two pods sitting on
+   * their own in open canvas, and the honest answer at the time was that
+   * nobody could tell without reading this function. Everything that decides
+   * a position is decided here: which of two families claimed the household,
+   * which side of the line it fell on, whether it is standing over a married
+   * daughter rather than hanging from its own parents. All of it was thrown
+   * away the moment the x was set.
+   *
+   * It is kept now. Not as a debugging aid — as an answer the family can
+   * read, in the words they would use, on the card of whoever they tapped. A
+   * layout that cannot explain itself is one a family has to take on trust,
+   * and this one has been asked to justify itself four times. */
+  const why = {};
+  for (const b of blocks){
+    if (b.socket) continue;
+    const on = onSpine.has(b) ? onSpine.get(b) : null;
+    const note = {
+      side: side(b), spine: on, mates: b.members.slice(),
+      visiting: b.whyVisiting
+        ? { over: b.whyVisiting.forPerson, house: b.whyVisiting.host.members.slice() }
+        : null,
+      under: b.whyParent
+        ? { via: b.whyParent.pick.child,
+            house: b.whyParent.pick.home.members.slice(),
+            rival: b.whyParent.rival
+              ? { via: b.whyParent.rival.child,
+                  house: b.whyParent.rival.home.members.slice(),
+                  beaten: b.whyParent.knownRival < b.whyParent.knownPick }
+              : null }
+        : null,
+      root: !b.parent
+    };
+    for (const m of b.members) why[m] = note;
+  }
+  layout = { persons, sockets, links, why };
 }
 
 /* ── drawing ────────────────────────────────────────────────────────── */
@@ -8737,6 +8893,7 @@ function openCard(id){
       `<div class="row"><button class="btn ghost wide" id="cJoin">` +
       `Join ${esc((p.name || '').split(' ')[0])} to somebody</button></div>`
       : '') +
+    whyOnCard(id) +
     `<input id="cName" class="fld" value="${esc(p.name)}" placeholder="Name" autocomplete="off">` +
     /* THE OTHER NAME. One field, not a maiden/married pair — that pair decides
        which of the two is the real one, and different families answer that
