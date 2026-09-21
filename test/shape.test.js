@@ -162,4 +162,75 @@ section('WITH NOBODY MARKED YOU, THE LINE RUNS THROUGH THE ROOT');
      Math.round(L.persons[a].x), Math.round(L.persons[b].x));
 }
 
+section('AND A REACH, because a straight line is no use on a picture nobody can read');
+/* The line this shape straightens is one column among sixty on a real tree,
+   and "the whole family at once" means every pod thirty pixels tall. Counted
+   in steps along the family rather than in generations, because a generation
+   is not a distance: a row can hold four people or four hundred. */
+{
+  const t = line();
+  t.fe.setShape('');
+  const all = Object.keys(t.fe.layoutOf().persons).length;
+
+  t.fe.setReach('near');
+  const near = t.fe.layoutOf().persons;
+  check('the person it is reckoned from is always on the screen', !!near[t.me],
+        Object.keys(near).length + ' shown');
+  check('so are their father and their brothers and sisters',
+        !!near[t.sydney] && !!near[t.tsitsi], JSON.stringify(Object.keys(near).length));
+  check('and their grandfather, four steps off', !!near[t.thomas]);
+
+  t.fe.setReach('');
+  eq('and Everyone puts them all back', Object.keys(t.fe.layoutOf().persons).length, all);
+}
+
+section('THE REACH ACTUALLY CUTS SOMETHING OFF, or it is not a reach');
+/* A test that only proves the near people are near proves nothing. This one
+   builds a line long enough to fall outside six steps and checks it does. */
+{
+  const fe = loadFrontend();
+  let prev = fe.addPerson('Elder 0', 'm', 'Shumba', '1800', '');
+  const chain = [prev];
+  for (let i = 1; i <= 7; i++){
+    prev = fe.grow('child', prev, `Elder ${i}`, 'm', 'Shumba', { born:String(1800 + i * 25) });
+    chain.push(prev);
+  }
+  fe.setMe(chain[chain.length - 1]);
+  fe.setShape('');
+
+  fe.setReach('');
+  eq('the whole line is there to start with',
+     Object.keys(fe.layoutOf().persons).length, 8);
+
+  fe.setReach('near');
+  const shown = fe.layoutOf().persons;
+  check('your father, grandfather and great-grandfather are within six steps',
+        !!shown[chain[6]] && !!shown[chain[5]] && !!shown[chain[4]],
+        JSON.stringify(Object.keys(shown).length));
+  check('the elders beyond that are not on the screen',
+        !shown[chain[0]] && !shown[chain[1]],
+        'shown: ' + Object.keys(shown).length + ' of 8');
+
+  fe.setReach('wide');
+  const wider = Object.keys(fe.layoutOf().persons).length;
+  check('and Wider reaches further than Near me', wider > Object.keys(shown).length,
+        `${wider} vs ${Object.keys(shown).length}`);
+
+  /* NOTHING IS DELETED BY LOOKING AT LESS OF IT. The narrowing is a property
+     of the picture and of nothing else — the records, the words and the
+     saving all still see the whole family. */
+  eq('and the tree itself still holds everybody',
+     Object.keys(fe.getState().people).length, 8);
+  eq('kinship still reckons through people who are off the screen',
+     (fe.kinTerms(chain[7], chain[5]).list[0] || {}).term, 'Sekuru');
+}
+
+section('AN UNKNOWN REACH SHOWS EVERYBODY, rather than nobody');
+{
+  const t = line();
+  t.fe.setReach('a setting from a later version');
+  eq('it falls back to the whole family',
+     Object.keys(t.fe.layoutOf().persons).length, 12);
+}
+
 report();

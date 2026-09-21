@@ -3808,6 +3808,33 @@ function closeBuild(){ building = null; }
  * puts it. Kept, and reachable in one tap from the Muwuyu panel, because a
  * shape is a matter of taste before it is a matter of correctness and nobody
  * should have to live with mine. */
+/* HOW MUCH OF THE FAMILY IS ON THE SCREEN AT ONCE.
+ *
+ * A straight line is no use on a picture nobody can read, and on a tree of a
+ * few hundred people the whole family on one screen is exactly that: every
+ * pod thirty pixels tall, branches running the width of a wall, and the line
+ * this app just straightened one column among sixty. Fitting everybody is
+ * not the same as showing anybody.
+ *
+ * So: a reach. Counted in steps along the family itself rather than in
+ * generations, because a generation is not a distance — a row can hold four
+ * people or four hundred. A step is one link: you to the marriage you came
+ * from is a step, that marriage to your father is another. Your parents and
+ * your brothers and sisters are two steps away, your grandparents and your
+ * uncles four, your cousins six.
+ *
+ * EVERYONE IS STILL THE DEFAULT. A family who opened this app and found most
+ * of their relatives missing would be right to stop trusting it, and this
+ * project has already frightened one twice. Narrowing is a thing you ask
+ * for, and while it is on the bar says so and offers to undo it. */
+let treeReach = '';
+const REACHES = [
+  { v:'',     label:'Everyone', note:'the whole family at once',      hops:Infinity },
+  { v:'near', label:'Near me',  note:'out as far as your cousins',    hops:6 },
+  { v:'wide', label:'Wider',    note:'out as far as second cousins',  hops:10 }
+];
+function setReach(v){ treeReach = REACHES.some(x => x.v === v) ? v : ''; }
+
 let treeShape = '';
 const SHAPES = [
   { v:'',     label:'Mudzi', note:'your line straight down the middle' },
@@ -3829,7 +3856,48 @@ function computeLayout(){
      for the rest of this function and nowhere else in the app. */
   const inBuild = building ? branchFrom(building.from) : null;
 
-  const shown = id => (!inBuild || inBuild.has(id)) && present(id);
+  /* WHO IS WITHIN REACH. Walked on the graph of people AND marriages rather
+     than people alone, for the same reason the rest of this file walks it
+     that way: a marriage of two partners and three children is five people
+     who are all one step from the marriage, and treating them as ten links
+     between each other would make a big household look like a short walk to
+     everywhere. */
+  const reachSetting = REACHES.find(x => x.v === treeReach) || REACHES[0];
+  let inReach = null;
+  if (reachSetting.hops !== Infinity){
+    const from = (meId && state.people[meId] && present(meId)) ? meId
+               : (state.rootId && state.people[state.rootId] && present(state.rootId))
+                 ? state.rootId : null;
+    if (from){
+      const ofUnion = {};                       // union id -> the people in it
+      const ofPeople = {};                      // person id -> the unions they are in
+      for (const u of unions()){
+        const all = u.partners.concat(u.children).filter(present);
+        ofUnion[u.id] = all;
+        for (const x of all) (ofPeople[x] = ofPeople[x] || []).push(u.id);
+      }
+      inReach = new Set([from]);
+      let edge = [from], hop = 0;
+      while (edge.length && hop < reachSetting.hops){
+        const nextUnions = [];
+        for (const x of edge) for (const uid of (ofPeople[x] || [])) nextUnions.push(uid);
+        hop++;
+        if (hop >= reachSetting.hops) break;
+        const nextPeople = [];
+        for (const uid of nextUnions){
+          for (const y of (ofUnion[uid] || [])){
+            if (inReach.has(y)) continue;
+            inReach.add(y); nextPeople.push(y);
+          }
+        }
+        hop++;
+        edge = nextPeople;
+      }
+    }
+  }
+
+  const shown = id => (!inBuild || inBuild.has(id)) &&
+                      (!inReach || inReach.has(id)) && present(id);
   const width = b => b.socket ? 112 : b.members.length * POD_W + (b.members.length - 1) * COUPLE_GAP;
 
   /* The unions as the DRAWN tree sees them: set-aside people are filtered out
@@ -7171,6 +7239,21 @@ function showLit(){
     building = null;                            // they were set aside or deleted
   }
 
+  /* NARROWED ON PURPOSE, AND SAYING SO. The same promise Start build makes:
+     people are off the screen because you asked, and one tap brings them
+     back. The picture cannot say this for itself, which is the only reason
+     anything is said here at all. */
+  if (treeReach && layout && layout.persons){
+    const r = REACHES.find(x => x.v === treeReach) || REACHES[0];
+    const on = Object.keys(layout.persons).length, all = people().length;
+    if (all > on){
+      rows.push(
+        `<div class="pill"><b>${esc(r.label)}</b>` +
+        `<span>${on} of ${all} — the rest are standing aside, not removed.</span>` +
+        `<button type="button" id="reachOff">Show everyone</button></div>`);
+    }
+  }
+
   /* A lit word, as a chip the size of the word. The lighting itself is the
      message; this is only the way out of it, and tapping bare canvas is the
      other way. */
@@ -7183,6 +7266,10 @@ function showLit(){
   el.innerHTML = rows.join('');
   el.hidden = !rows.length;
   if ($('litOff')) $('litOff').onclick = () => { lit = null; render(); };
+  if ($('reachOff')) $('reachOff').onclick = () => {
+    writePref(REACH_KEY, ''); setReach(''); render(); fit();
+    say('The whole family is back.');
+  };
   if ($('buildOff')) $('buildOff').onclick = () => {
     closeBuild(); render(); fit(); say('The whole family is back.');
   };
@@ -8253,6 +8340,7 @@ function kinshipCoverage(budget){
    Three states, not two. "Auto" follows the device, which is what most people
    want and what the page did before this existed; the other two override it,
    for a bright room with a dark system setting or the reverse. */
+const REACH_KEY = 'muti-baobab-reach';
 const SHAPE_KEY = 'muti-baobab-shape';
 const THEME_KEY = 'muti-baobab-theme';
 const PALETTE_KEY = 'muti-baobab-palette';
@@ -8309,6 +8397,7 @@ function applyLook(theme, palette){
 function loadTheme(){
   applyLook(readPref(THEME_KEY, THEMES), readPref(PALETTE_KEY, PALETTES));
   setShape(readPref(SHAPE_KEY, SHAPES));
+  setReach(readPref(REACH_KEY, REACHES));
 }
 
 // Is the page dark right now? Decides which face of each swatch to show, so
@@ -8335,6 +8424,7 @@ function openLook(){
     const theme = readPref(THEME_KEY, THEMES);
     const pal = readPref(PALETTE_KEY, PALETTES);
     const shape = readPref(SHAPE_KEY, SHAPES);
+    const reach = readPref(REACH_KEY, REACHES);
     const dark = nowDark();
     el.innerHTML =
       `<p class="cap">How the tree looks</p>` +
@@ -8347,6 +8437,13 @@ function openLook(){
       `</div>` +
       `<p class="roothint">${esc((SHAPES.find(x => x.v === shape) || SHAPES[0]).note)}` +
       `${shape === '' ? ' — the line runs through whoever is marked You.' : ''}</p>` +
+      `<p class="lbl" style="margin-top:14px;">How much</p>` +
+      `<div class="seg" id="lookReach">` +
+        REACHES.map(x => `<button type="button" data-reach="${x.v}" ` +
+          `aria-pressed="${x.v === reach}" title="${esc(x.note)}">${x.label}</button>`).join('') +
+      `</div>` +
+      `<p class="roothint">${esc((REACHES.find(x => x.v === reach) || REACHES[0]).note)}` +
+      `${reach ? ' — everybody else is still in the tree, just not on the screen.' : ''}</p>` +
       `<p class="lbl" style="margin-top:14px;">Light</p>` +
       `<div class="seg" id="lookTheme">` +
         THEMES.map(t => `<button type="button" data-theme="${t.v}" ` +
@@ -8368,6 +8465,14 @@ function openLook(){
       (BUILD ? `<p class="build">Build ${esc(BUILD)}</p>` : '');
     placeForm(el);
 
+    el.querySelectorAll('[data-reach]').forEach(b => b.onclick = () => {
+      writePref(REACH_KEY, b.dataset.reach);
+      setReach(b.dataset.reach);
+      draw();
+      render(); fit();
+      const x = REACHES.find(q => q.v === b.dataset.reach) || REACHES[0];
+      say(`${x.label} — ${x.note}.`);
+    });
     el.querySelectorAll('[data-shape]').forEach(b => b.onclick = () => {
       writePref(SHAPE_KEY, b.dataset.shape);
       setShape(b.dataset.shape);
