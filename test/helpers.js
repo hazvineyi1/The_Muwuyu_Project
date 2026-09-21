@@ -97,7 +97,21 @@ function loadFrontend(){
     addEventListener(){}, removeEventListener(){},
     innerWidth: 1280, innerHeight: 800,
     setTimeout, clearTimeout, Math, JSON, Date, Set, Map, Object, Array, String, Number,
-    localStorage: { getItem: () => null, setItem(){}, removeItem(){} },
+    /* A REAL ONE, not a stub that always answers null. The page keeps what
+       belongs to a device here — the theme, the shape, the reach, and which
+       families are folded away — and a stub that forgets everything makes
+       every one of those look like it works when nothing was ever written.
+       Backed by a Map so a suite can prove a setting survives being read
+       back, and cleared for each fresh tree. */
+    localStorage: (() => {
+      const m = new Map();
+      return {
+        getItem: k => (m.has(String(k)) ? m.get(String(k)) : null),
+        setItem(k, v){ m.set(String(k), String(v)); },
+        removeItem(k){ m.delete(String(k)); },
+        clear(){ m.clear(); }
+      };
+    })(),
     // The page reads the family key out of the address; under test there is
     // no address, so this is what it reads instead.
     location: { protocol:'https:', origin:'https://example.test',
@@ -121,6 +135,9 @@ function loadFrontend(){
       setAside, restore, deleteForever, unlinkParents, unlinkPartner, searchPeople, deleteInOneTap, putThemBack, closeDeleteWindow, noticesFor, asidePeople, present, mergePeople, meName,
       knownTotem, totemKey, totemsHere, totemSuggestions, MITUPO,
       sameHouse, mutupoNotes, housesJoined, housesJoin,
+      familyLines, foldableLines, foldedAway, forgetLines, isFolded, loadFolded, FAM_HUES, famPanel,
+      setLineFolded(id, on){ setLineFolded(id, on); },
+      clearFolds(){ folded = new Set(); },
       PALETTES, THEMES,
       diffOps, remapId, familyLink, titleFor, treeStamp, TITLE_BUDGET,
       seniorSide, insertByAge, canLink, linkExisting, linkCandidates, KIND_AS,
@@ -137,7 +154,10 @@ function loadFrontend(){
           .sort((a, b) => a[1].x - b[1].x).map(([k]) => k);
         return xs; },
       setMe(id){ meId = id; },
-      setState(s){ state = s; }, getState(){ return state; }
+      setState(s){ state = s; }, getState(){ return state; },
+      // The device's own settings, so a suite can see what was written and
+      // hand the page back a device that already had an opinion.
+      prefs: localStorage
     };`, sandbox);
   if (typeof sandbox.api.sameness !== 'function'){
     throw new Error('the frontend script did not expose sameness()');

@@ -592,6 +592,80 @@ body.carrying .pod{transition:none;}
   font-size:8.5px; font-weight:700; letter-spacing:.16em; text-transform:uppercase;
 }
 
+/* ── A FAMILY THAT MARRIED IN ────────────────────────────────────────────
+   Quiet on purpose. A tint down the left edge of every pod in a family, ONE
+   name written under the person it descends from, and one small button where
+   it joins yours. The last time this app put something on every pod it was
+   asked to take it off again: "these keep popping up and they are
+   intrusive." A whole married-in family costs the canvas one caption. */
+:root{ --fam-s:34%; --fam-l:42%; }
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --fam-s:40%; --fam-l:66%; }
+}
+:root[data-theme="dark"]{ --fam-s:40%; --fam-l:66%; }
+
+.pod[data-fam]{
+  border-left:4px solid hsl(var(--fam) var(--fam-s) var(--fam-l) / .85);
+}
+/* Under the pod rather than over it: TAPROOT and YOU are already written
+   above, and a family name that sometimes collided with them would be worse
+   than no family name at all. */
+.pod .famname{
+  position:absolute; bottom:-9px; left:50%; transform:translateX(-50%);
+  padding:2px 9px; border-radius:999px; white-space:nowrap;
+  background:hsl(var(--fam) var(--fam-s) var(--fam-l)); color:var(--pod);
+  font-size:8.5px; font-weight:700; letter-spacing:.14em; text-transform:uppercase;
+}
+/* The door. Where the two families are joined by a marriage, and therefore
+   the one place it makes sense to put them away or bring them back. */
+.pod .fold{
+  position:absolute; right:-10px; top:-10px; z-index:3;
+  min-width:21px; height:21px; padding:0 5px;
+  display:flex; align-items:center; justify-content:center;
+  border-radius:999px; border:1.5px solid hsl(var(--fam) var(--fam-s) var(--fam-l));
+  background:var(--pod); color:hsl(var(--fam) var(--fam-s) var(--fam-l));
+  font-size:10px; font-weight:700; line-height:1; font-variant-numeric:tabular-nums;
+  cursor:pointer;
+}
+/* A FINGER IS WIDER THAN THE MARK IT IS AIMING AT. The circle stays small
+   because a big one would be a second badge on a pod that already carries a
+   name, a mutupo, two dates and sometimes a word — but what you have to hit
+   is nine pixels wider all round than what you can see, which is the
+   difference between a control and a nuisance on a phone. */
+.pod .fold::after{
+  content:''; position:absolute; inset:-10px;
+  /* Square, not round. A circle of the same reach loses its corners, and a
+     thumb aiming at a small mark lands diagonally as often as it lands
+     square — the one place the enlarged target was measured missing. */
+}
+.pod .fold:hover,
+.pod .fold:focus-visible{
+  background:hsl(var(--fam) var(--fam-s) var(--fam-l)); color:var(--pod);
+}
+.pod .fold + .fold{ right:14px; }
+
+/* the families listed in the Muwuyu panel */
+#form .fams{display:flex; flex-direction:column; gap:6px; margin:2px 0 8px;}
+#form .fams .fam{
+  display:flex; align-items:center; gap:9px; width:100%;
+  padding:8px 10px; border-radius:10px; text-align:left;
+  border:1.5px solid var(--pod-edge); background:var(--pod); cursor:pointer;
+}
+#form .fams .fam:hover{border-color:var(--gold-soft);}
+#form .fams .fam i{
+  width:10px; height:10px; border-radius:3px; flex:none;
+  background:hsl(var(--fam) var(--fam-s) var(--fam-l));
+}
+#form .fams .fam u{flex:1; text-decoration:none; display:block; font-size:12.5px;}
+#form .fams .fam u small{display:block; font-size:10px; color:var(--muted); margin-top:2px;}
+#form .fams .fam b{
+  font-size:9px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted);
+}
+#form .fams .fam.shut{opacity:.72;}
+#form .fams .fam.shut i{background:transparent;
+  border:1.5px solid hsl(var(--fam) var(--fam-s) var(--fam-l));}
+#form .fams .fam.shut b{color:var(--gold);}
+
 /* an empty socket where somebody's parents will go */
 .pod.socket{
   background:transparent; border-style:dashed; border-color:var(--pod-edge);
@@ -4278,6 +4352,278 @@ function setShape(v){ treeShape = SHAPES.some(x => x.v === v) ? v : ''; }
    turns over with them. */
 const HOUSE_THROUGH = 'm';
 
+/* One hue per family that married in, walked round the wheel and kept well
+   clear of the brass and the leaf-green the app already spends on YOU and on
+   the root of the line. Eight of them, reused after that — and reuse costs
+   nothing here, because the tint is never the only thing saying which family
+   it is. The name is written under the person it descends from. */
+const FAM_HUES = [205, 338, 268, 168, 22, 300, 238, 128];
+
+/* ── THE FAMILIES THAT MARRIED IN ────────────────────────────────────────
+ *
+ * "This is the beginning of a new tree with possibly different roots. New
+ *  trees should be collapsible and also show up differently. If I am building
+ *  my tree, then branch to my mother and her parents and grandparents and
+ *  siblings, that is now a different tree from my father's, and the
+ *  connection is my mother being married to my father. I think when marriage
+ *  or partnerships happen, that's the indicator of a new tree growing in a
+ *  different direction with a separate root."
+ *
+ * That is the right reading of it, and this app had been drawing one tree
+ * where a family sees several. Your father's people are a line; your
+ * mother's people are another line that touches yours at exactly one place —
+ * her marriage — and has a root of its own that is nothing to do with your
+ * root. Your father's brother's wife brings a third. Drawn as one tree they
+ * all compete for the same canvas, which is how five Marumahoko ended up
+ * filling the top-left corner of a Musoni tree with nothing on screen to say
+ * they were a different family at all.
+ *
+ * WHERE ONE LINE ENDS. A child belongs to the line of the parent the house
+ * runs through, so the edges walked here are child-to-father and nothing
+ * else. Cut every other edge and the tree falls into exactly the families a
+ * family would name: follow it up from you and you get your father's, and
+ * your mother is a door rather than a step. Where no father is recorded the
+ * child stays with whoever is — a mother and her children are a family, not
+ * a gap — which is what keeps Mbuya VaMangwenya at the head of her own line
+ * instead of leaving each of her children stranded alone.
+ *
+ * WHAT A MARRIAGE IS HERE. Not a step in the walk, and the whole design
+ * turns on that. It is the doorway between two lines, it is the one thing
+ * holding them on the same canvas, and it is why the person who married in
+ * stays on screen when her family is folded away: she is standing in your
+ * father's household, and that household has not gone anywhere. */
+let linesCache = null;
+function forgetLines(){ linesCache = null; }
+
+function familyLines(){
+  if (linesCache) return linesCache;
+
+  const here = people().map(p => p.id);
+  const up = new Map();                  // id -> the parent whose line they are in
+
+  for (const id of here){
+    const pu = parentUnionOf(id);
+    if (!pu) continue;
+    const partners = pu.partners.filter(present);
+    const carriers = partners.filter(x => (state.people[x] || {}).sex === HOUSE_THROUGH);
+    const mine = carriers.length ? carriers : partners;
+    if (mine.length) up.set(id, mine[0]);
+  }
+
+  /* Walked rather than union-found, because the answer wanted is not "are
+     these two together" but WHOSE LINE IT IS, and the person at the top of
+     the walk is the only honest answer to that. A cycle cannot happen in a
+     tree of parents, but a tree entered by many hands over years is not a
+     guarantee — so the walk is bounded and gives up rather than hangs. */
+  const rootOf = new Map();
+  const headOfLine = id => {
+    if (rootOf.has(id)) return rootOf.get(id);
+    const path = [];
+    let x = id, guard = 0;
+    while (up.has(x) && !rootOf.has(x) && guard++ < 500){
+      path.push(x);
+      const next = up.get(x);
+      if (!present(next) || path.includes(next)) break;
+      x = next;
+    }
+    const head = rootOf.has(x) ? rootOf.get(x) : x;
+    for (const y of path) rootOf.set(y, head);
+    rootOf.set(x, head);
+    return head;
+  };
+
+  const byRoot = new Map();
+  for (const id of here){
+    const r = headOfLine(id);
+    if (!byRoot.has(r)) byRoot.set(r, []);
+    byRoot.get(r).push(id);
+  }
+
+  /* THE NAME A FAMILY WOULD USE FOR ITSELF: the surname most of them carry.
+     Not the root's own name — a line headed by a grandmother who kept her
+     father's name would then be filed under a name none of her descendants
+     answer to. Counted, so the family names itself. */
+  const nameOf = members => {
+    const tally = new Map();
+    for (const id of members){
+      const w = String((state.people[id] || {}).name || '').trim().split(/\s+/).pop();
+      if (w) tally.set(w, (tally.get(w) || 0) + 1);
+    }
+    let best = '', most = 0;
+    for (const [w, n] of tally) if (n > most || (n === most && w < best)){ best = w; most = n; }
+    return best;
+  };
+
+  const lineOf = new Map();
+  for (const [r, members] of byRoot) for (const id of members) lineOf.set(id, r);
+
+  const lines = [];
+  for (const [r, members] of byRoot){
+    /* WHO IS STANDING IN SOMEBODY ELSE'S HOUSEHOLD. The doors out of this
+       line, one per person who married beyond it — and the reason a fold
+       never leaves a marriage with one partner missing. */
+    const doors = [];
+    for (const id of members)
+      for (const u of unionsOf(id)){
+        const other = u.partners.find(x => x !== id && present(x) && lineOf.get(x) !== r);
+        if (other) doors.push({ person:id, union:u.id, to:lineOf.get(other), with:other });
+      }
+    members.sort((a, b) => seniorSide(a, b));
+    lines.push({ id:r, root:r, members, doors, name:nameOf(members) });
+  }
+  lines.sort((a, b) => seniorSide(a.root, b.root));
+
+  const anchor = (meId && present(meId)) ? meId
+               : (state.rootId && present(state.rootId)) ? state.rootId : null;
+  const homeId = anchor ? lineOf.get(anchor) : (lines[0] ? lines[0].id : null);
+  const byId = new Map(lines.map(l => [l.id, l]));
+
+  /* HOW FAR OUT EACH FAMILY IS, counted in marriages from your own line.
+     Your mother's people are one marriage away; her brother's wife's people
+     are two, and they are on this screen THROUGH the Mandabas rather than
+     through you.
+   *
+   * It decides which door a family is folded from, and the difference is not
+   * cosmetic. Two doors lead out of the Mandaba line: his mother, who married
+   * towards him, and her brother, who married away. A button on the brother
+   * offering to fold away the Mandabas would be a button that folds away the
+   * man wearing it — so only the doors facing home count, and each family is
+   * put away from the one marriage that is holding it on the screen. */
+  const depth = new Map();
+  if (homeId){
+    depth.set(homeId, 0);
+    let edge = [homeId];
+    while (edge.length){
+      const next = [];
+      for (const id of edge){
+        const l = byId.get(id);
+        if (!l) continue;
+        for (const d of l.doors){
+          if (depth.has(d.to)) continue;
+          depth.set(d.to, depth.get(id) + 1);
+          next.push(d.to);
+        }
+      }
+      edge = next;
+    }
+  }
+  for (const l of lines) l.depth = depth.has(l.id) ? depth.get(l.id) : Infinity;
+  for (const l of lines)
+    l.inward = l.doors.filter(d => ((byId.get(d.to) || {}).depth) < l.depth);
+
+  linesCache = { lines, homeId, of: id => lineOf.get(id) || null, byId };
+  return linesCache;
+}
+
+/* Which families can be folded away: everybody's but your own, and only
+   where there is something to fold. A woman who married in with no relatives
+   of her own recorded is not a family waiting to be tidied up — she is one
+   person, already on the screen beside her husband, and offering to hide her
+   would be offering to hide a wife. */
+function foldableLines(){
+  const L = familyLines();
+  return L.lines.filter(l => l.id !== L.homeId && l.members.length > 1 && l.inward.length);
+}
+
+const FOLDED_KEY = 'muti-baobab-folded';
+let folded = new Set();
+function loadFolded(){
+  try {
+    const raw = localStorage.getItem(FOLDED_KEY);
+    const ids = raw ? JSON.parse(raw) : [];
+    folded = new Set(Array.isArray(ids) ? ids.filter(x => typeof x === 'string') : []);
+  } catch (e) { folded = new Set(); }
+}
+function saveFolded(){
+  try {
+    if (folded.size) localStorage.setItem(FOLDED_KEY, JSON.stringify([...folded]));
+    else localStorage.removeItem(FOLDED_KEY);
+  } catch (e) {}
+}
+function isFolded(lineId){ return folded.has(lineId); }
+function setLineFolded(lineId, on){
+  if (on) folded.add(lineId); else folded.delete(lineId);
+  saveFolded();
+}
+
+/* WHO A FOLD TAKES OFF THE SCREEN, and nothing else — no record is touched,
+   the kinship engine still reckons straight through every one of them, and
+   the count on the bar still holds them all. The same promise the reach
+   makes, for the same reason: a family who found relatives missing would be
+   right to stop trusting this.
+ *
+ * Three steps, and the second and third are both about not leaving a hole:
+ *   1. everybody in a folded line, to begin with;
+ *   2. except whoever married OUT of it — she is standing in a household
+ *      that is still on the screen, and folding her away would leave her
+ *      husband married to nobody;
+ *   3. plus anybody who could only be reached THROUGH the fold. A wife's
+ *      brother's wife is her own line and nobody folded her, but with the
+ *      family she married into gone she would be left floating in open
+ *      canvas joined to nothing. Reckoned as the difference between what you
+ *      could reach before the fold and what you can reach after it, so a
+ *      family standing entirely on their own — nothing to do with you and
+ *      nothing to do with the fold — is never swept up by it. */
+function foldedAway(){
+  if (!folded.size) return null;
+  const L = familyLines();
+  const blocked = new Set();
+  for (const l of L.lines){
+    if (l.id === L.homeId || !folded.has(l.id)) continue;
+    for (const id of l.members) blocked.add(id);
+  }
+  if (!blocked.size) return null;
+
+  /* WHAT IS STILL STANDING, with the folded families out of the way. This is
+     worked out BEFORE the doors are, and the order is the whole of it: a man
+     in a folded family who has married is not a door out of it, because his
+     wife is only on this screen through him. Deciding the doors first would
+     keep him for her sake and her for his, and the two of them would be left
+     hanging in open canvas off a family that is no longer drawn. */
+  const anchor = (meId && present(meId)) ? meId
+               : (state.rootId && present(state.rootId)) ? state.rootId : null;
+  const walk = skip => {
+    const seen = new Set([anchor]);
+    const stack = [anchor];
+    while (stack.length){
+      const x = stack.pop();
+      const near = unionsOf(x);
+      const up = parentUnionOf(x);
+      if (up) near.push(up);
+      for (const u of near)
+        for (const y of u.partners.concat(u.children)){
+          if (seen.has(y) || skip.has(y) || !present(y)) continue;
+          seen.add(y); stack.push(y);
+        }
+    }
+    return seen;
+  };
+  let standing;
+  if (anchor && !blocked.has(anchor)){
+    const before = walk(new Set());
+    standing = walk(blocked);
+    // Anybody the fold cut off from you goes with it. Reckoned as the
+    // difference between the two walks, so a family standing entirely on
+    // their own — nothing to do with you and nothing to do with the fold —
+    // is never swept up by it.
+    for (const id of before) if (!standing.has(id)) blocked.add(id);
+  } else {
+    standing = new Set(people().map(p => p.id).filter(id => !blocked.has(id)));
+  }
+
+  /* AND NOW THE DOORS. Whoever married out of a folded family into a
+     household that is still on the screen stays on it — she is standing
+     beside her husband, and folding her away would leave him married to
+     nobody. */
+  const keep = new Set();
+  for (const id of blocked)
+    for (const u of unionsOf(id))
+      if (u.partners.some(x => x !== id && standing.has(x))){ keep.add(id); break; }
+  for (const id of keep) blocked.delete(id);
+
+  return blocked.size ? blocked : null;
+}
+
 function computeLayout(){
   const g = generations();
   const blocks = [], ofPerson = {};
@@ -4326,8 +4672,12 @@ function computeLayout(){
     }
   }
 
+  /* AND WHOEVER IS BEHIND A FOLD. Third of three narrowings, and they are
+     all the same promise: the picture is smaller, the family is not. */
+  const away = foldedAway();
   const shown = id => (!inBuild || inBuild.has(id)) &&
-                      (!inReach || inReach.has(id)) && present(id);
+                      (!inReach || inReach.has(id)) &&
+                      (!away || !away.has(id)) && present(id);
   const width = b => b.socket ? 112 : b.members.length * POD_W + (b.members.length - 1) * COUPLE_GAP;
 
   /* The unions as the DRAWN tree sees them: set-aside people are filtered out
@@ -5481,6 +5831,7 @@ function render(){
 function draw(){
   ancestryCache.clear();          // the tree may have changed shape
   forgetHouses();
+  forgetLines();                  // a new marriage can make a new family
   computeLayout();
 
   const svg = [];
@@ -5586,6 +5937,28 @@ function draw(){
   }
 
   const html = [];
+  /* WHICH FAMILY EACH POD BELONGS TO, worked out once for the whole draw.
+     Your own line takes no tint at all — it is not a family that married in,
+     it is the tree — so the canvas carries as many colours as there are
+     families joined to it and not one more. */
+  const fam = familyLines();
+  const famHue = new Map();
+  let nextHue = 0;
+  for (const l of fam.lines){
+    if (l.id === fam.homeId) continue;
+    famHue.set(l.id, FAM_HUES[nextHue++ % FAM_HUES.length]);
+  }
+  /* The doors, by the person standing in them. A man married to two women
+     from two different families is a door twice over, so this is a list —
+     dropping the second would leave one of those families with no way back
+     onto the screen. */
+  const foldAt = new Map();
+  for (const l of foldableLines())
+    for (const d of l.inward){
+      if (!layout.persons[d.person]) continue;
+      (foldAt.get(d.person) || foldAt.set(d.person, []).get(d.person)).push(l);
+    }
+
   /* The name of a house, written over the marriage it belongs to. Never
      tappable: it is a caption on two people who are both already there, and
      a third thing to tap between a husband and a wife would be in the way of
@@ -5603,14 +5976,38 @@ function draw(){
     const life = p.born || p.died ? (p.died ? `${p.born || '?'} – ${p.died}` : `b. ${p.born}`) : '';
     const badge = meId === p.id ? '<span class="badge">You</span>'
                 : p.root ? '<span class="badge">Root of the line</span>' : '';
+    const myLine = fam.of(p.id);
+    const hue = famHue.get(myLine);
+    const theirs = fam.byId.get(myLine);
+    /* One caption per family, on the person the rest of them come down from.
+       Not while it is folded — the button already says the name, and the
+       person wearing the caption is not on the screen to wear it. */
+    const capt = (hue !== undefined && theirs && theirs.root === p.id &&
+                  theirs.name && !isFolded(myLine))
+      ? `<span class="famname">${esc(theirs.name)}</span>` : '';
+    const folds = (foldAt.get(p.id) || []).map(l => {
+      const shut = isFolded(l.id);
+      const gone = l.members.filter(x => !layout.persons[x]).length;
+      const who = l.name ? `the ${l.name} family` : 'this family';
+      const n = shut ? gone : l.members.length - 1;
+      return `<button type="button" class="fold" data-fold="${l.id}"` +
+             ` style="--fam:${famHue.get(l.id)}"` +
+             ` title="${shut ? 'Open' : 'Fold away'} ${esc(who)} — ${n} ` +
+             `${n === 1 ? 'person' : 'people'}"` +
+             ` aria-label="${shut ? 'Open' : 'Fold away'} ${esc(who)}, ${n} ` +
+             `${n === 1 ? 'person' : 'people'}"` +
+             ` aria-expanded="${shut ? 'false' : 'true'}">${shut ? '+' + gone : '\u2212'}</button>`;
+    }).join('');
     html.push(
       `<div class="pod${sel === p.id ? ' sel' : ''}${fresh.has(p.id) ? ' sprout' : ''}` +
       `${p.root ? ' taproot' : ''}${meId === p.id ? ' you' : ''}` +
       `${lit ? (lit.ids.has(p.id) || p.id === lit.from ? ' lit' : ' dim') : ''}"` +
       ` data-id="${p.id}" tabindex="0" role="button"` +
+      (hue !== undefined ? ` data-fam="${esc(myLine)}"` : '') +
       ` aria-label="${esc(p.name)} — show where the tree can grow from here"` +
-      ` style="left:${at.x}px; top:${at.y}px">` +
-      badge +
+      ` style="left:${at.x}px; top:${at.y}px` +
+      (hue !== undefined ? `; --fam:${hue}` : '') + `">` +
+      capt + folds +
       (titled.has(p.id) ? titleFor(anchor, p.id) : '') +
       (mark ? `<span class="mk">${mark}</span>` : '') +
       (p.shown === false ? `<span class="shut" title="Not in the public record">·</span>` : '') +
@@ -5630,7 +6027,8 @@ function draw(){
         ` aria-label="Delete ${esc(p.name)} — the bar offers to put them back">✕</span>` : '') +
       `</div>`);
   }
-  podsEl.innerHTML = html.join('');
+  const pods = html.join('');
+  podsEl.innerHTML = pods;
 
   /* The tally counts what is on screen, or it contradicts the picture. */
   const onScreen = Object.keys(layout.persons).length;
@@ -5668,6 +6066,11 @@ function draw(){
   }
   fresh.clear();
   applyTransform();
+  /* Handed back so a test can read the picture that was just drawn. The page
+     itself has no use for it — it has already been written into the page —
+     and a suite that had to scrape a stubbed DOM instead would be testing its
+     own stub. */
+  return pods;
 }
 
 /* Eldest, then 2nd, 3rd… Only worth saying once there is more than one of
@@ -9212,6 +9615,7 @@ function loadTheme(){
   applyLook(readPref(THEME_KEY, THEMES), readPref(PALETTE_KEY, PALETTES));
   setShape(readPref(SHAPE_KEY, SHAPES));
   setReach(readPref(REACH_KEY, REACHES));
+  loadFolded();
 }
 
 // Is the page dark right now? Decides which face of each swatch to show, so
@@ -9380,6 +9784,54 @@ function openJoin(anchorId, otherId){
   el.addEventListener('keydown', e => { if (e.key === 'Escape'){ e.preventDefault(); closeForm(); } });
 }
 
+/* ── THE FAMILIES, NAMED AND COUNTED ─────────────────────────────────────
+ *
+ * The buttons on the canvas are where a fold belongs — at the marriage that
+ * joined the two families, which is the thing a family points at. But a
+ * button on a pod is only findable if you already know it is there, and a
+ * family folded away last week is a button somewhere off the side of a tree
+ * you have since panned away from. So the same folds are listed here, by
+ * name and by how many people each one is, with a way back for all of them
+ * at once. Nothing can be folded and then lost. */
+function famPanel(){
+  const list = foldableLines();
+  if (!list.length) return '';
+  const L = familyLines();
+  const mine = L.byId.get(L.homeId);
+  const shutCount = list.filter(l => isFolded(l.id)).length;
+  /* NOT "Families". The bar already has Other families, which means other
+     trees kept on this server — a different thing entirely, and two labels a
+     word apart would have somebody folding away their mother's people
+     looking for a neighbour's tree. */
+  return `<p class="lbl" style="margin-top:14px;">Who married in</p>` +
+    `<div class="fams">` +
+      list.map(l => {
+        const shut = isFolded(l.id);
+        const door = l.inward[0];
+        const by = door && state.people[door.with]
+          ? `joined by ${esc((state.people[door.person] || {}).name || '')}'s ` +
+            `marriage to ${esc(state.people[door.with].name)}`
+          : 'joined by marriage';
+        return `<button type="button" class="fam${shut ? ' shut' : ''}" ` +
+          `data-famfold="${l.id}" aria-pressed="${shut}" ` +
+          `style="--fam:${FAM_HUES[list.indexOf(l) % FAM_HUES.length]}">` +
+          `<i></i><u>${esc(l.name || 'A family')}` +
+          `<small>${l.members.length} ${l.members.length === 1 ? 'person' : 'people'} · ${by}</small></u>` +
+          `<b>${shut ? 'Folded' : 'Showing'}</b></button>`;
+      }).join('') +
+    `</div>` +
+    `<p class="roothint">` +
+      (mine && mine.name
+        ? `Your own line is the ${esc(mine.name)}, and it is never folded. `
+        : 'Your own line is never folded. ') +
+      `A family behind a fold is still in the tree — still counted, still ` +
+      `named, and the words still reckon straight through them.</p>` +
+    `<div class="seg" style="margin-top:6px;">` +
+      `<button type="button" data-famall="shut"${shutCount === list.length ? ' disabled' : ''}>Fold them all</button>` +
+      `<button type="button" data-famall="open"${shutCount === 0 ? ' disabled' : ''}>Open them all</button>` +
+    `</div>`;
+}
+
 function openLook(){
   closeForm();
   pending = { kind:'dupes', anchorId: sel || state.rootId };
@@ -9411,6 +9863,7 @@ function openLook(){
       `</div>` +
       `<p class="roothint">${esc((REACHES.find(x => x.v === reach) || REACHES[0]).note)}` +
       `${reach ? ' — everybody else is still in the tree, just not on the screen.' : ''}</p>` +
+      famPanel() +
       `<p class="lbl" style="margin-top:14px;">Light</p>` +
       `<div class="seg" id="lookTheme">` +
         THEMES.map(t => `<button type="button" data-theme="${t.v}" ` +
@@ -9431,6 +9884,24 @@ function openLook(){
       `<div class="row"><button class="btn" id="lookNo">Done</button></div>` +
       (BUILD ? `<p class="build">Build ${esc(BUILD)}</p>` : '');
     placeForm(el);
+
+    el.querySelectorAll('[data-famfold]').forEach(b => b.onclick = () => {
+      const id = b.dataset.famfold;
+      setLineFolded(id, !isFolded(id));
+      draw();                       // the panel says which are folded now
+      render(); fit();
+      const l = familyLines().byId.get(id);
+      const who = l && l.name ? `The ${l.name} family` : 'That family';
+      say(isFolded(id) ? `${who} is folded away.` : `${who} is back on the tree.`);
+    });
+    el.querySelectorAll('[data-famall]').forEach(b => b.onclick = () => {
+      const shut = b.dataset.famall === 'shut';
+      for (const l of foldableLines()) setLineFolded(l.id, shut);
+      draw();
+      render(); fit();
+      say(shut ? 'Only your own line is showing.'
+               : 'Every family is back on the tree.');
+    });
 
     el.querySelectorAll('[data-reach]').forEach(b => b.onclick = () => {
       writePref(REACH_KEY, b.dataset.reach);
@@ -9800,7 +10271,7 @@ podsEl.addEventListener('pointerdown', e => {
   e.stopPropagation();
   const pod = e.target.closest('.pod');
   // The small controls on a card are their own targets, not handles.
-  if (!pod || e.target.closest('.rm,.ord,[data-card],[data-vantage]')) return;
+  if (!pod || e.target.closest('.rm,.ord,.fold,[data-card],[data-vantage]')) return;
   const pressed = pod.dataset.id;
   if (!pressed || !state.people[pressed]) return;
   // The household is what is being reached for; the person who carries it may
@@ -9892,6 +10363,33 @@ podsEl.addEventListener('click', e => {
     say(`${state.people[who].name} is now ${rankLabel(who, true).toLowerCase() || 'moved'}.`);
     return;
   }
+  /* FOLDING A FAMILY AWAY, from the marriage that joined them to yours.
+     Nothing is recorded and nothing is sent: this is a fact about one
+     person's screen, like the zoom and the reach, and it is kept where those
+     are kept. Two relatives reading the same tree on the same afternoon can
+     have different halves of it folded and both be right. */
+  const fold = e.target.closest('[data-fold]');
+  if (fold){
+    const id = fold.dataset.fold;
+    const line = familyLines().byId.get(id);
+    const shut = !isFolded(id);
+    /* WHERE YOUR FINGER IS STAYS WHERE YOUR FINGER IS. Six people leaving
+       the picture re-lays the whole row out, and without this the marriage
+       you just pressed jumps somewhere else on the screen — sometimes clean
+       off it, so the way to undo what you did is gone. The person holding
+       the fold is held still and the tree moves around them. */
+    const held = fold.closest('.pod');
+    const who2 = held && held.dataset ? held.dataset.id : null;
+    const kept = who2 ? screenOf(who2) : null;
+    setLineFolded(id, shut);
+    render();
+    if (who2) keepSteady(who2, kept);
+    const who = line && line.name ? `The ${line.name} family` : 'That family';
+    say(shut ? `${who} is folded away — open it again from the same marriage.`
+             : `${who} is back on the tree.`);
+    return;
+  }
+
   const rm = e.target.closest('.rm');
   if (rm){
     const id = rm.dataset.rm, name = (state.people[id] || {}).name || '';
@@ -10597,9 +11095,11 @@ function save(){
   /* A change made while a delete is still held sends the delete with it —
      so the offer to put them back stops being true, and goes. */
   if (undoDelete){ undoDelete = null; clearTimeout(deleteTimer); showLit(); }
-  // Which houses are joined may have changed with whatever is being saved.
-  // render() clears this too; both are here because either can come first.
+  // Which houses are joined may have changed with whatever is being saved,
+  // and so may which families there are.
+  // render() clears these too; both are here because either can come first.
   forgetHouses();
+  forgetLines();
   clearTimeout(timer);
   timer = setTimeout(flush, 400);
   // The answer to "who might be the same person" is now stale. Asking is
