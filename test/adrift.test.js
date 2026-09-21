@@ -186,10 +186,20 @@ section('AND THE ROOM OFFERS THE MATCH, WITH THE EVIDENCE');
   check('with who it may already be',
         /This may be <b>Thomas Musoni<\/b>/.test(room), room);
   check('and why the app thinks so', /both born 1971/.test(room), room);
+  check('the tap that does it, first', /data-lostsame=/.test(room), room);
+  check('named so that the tap is the answer to the question',
+        /Yes — one person/.test(room), room);
   check('a way to look at that one', /data-lostsee=/.test(room), room);
-  check('a way to join this one on', /data-lostjoin=/.test(room), room);
   check('and a way to say they are two different people',
         /data-lostno=/.test(room), room);
+  /* Nobody is sent to a search box to find the man the app has just named.
+     The floating name with NO match still gets one, because there the search
+     is the only thing left to do. */
+  const matched = room.split('<div class="lost">').find(x => /This may be/.test(x)) || '';
+  check('and no search to do over again where the app already knows',
+        !/data-lostjoin=/.test(matched), matched);
+  check('while the one with no match is still sent to the search',
+        /data-lostjoin=/.test(room), room);
   check('it says how many came in with the floating one',
         /1 person recorded under them/.test(room), room);
   /* Counted downwards. The child floating under him has nobody of her own,
@@ -212,7 +222,41 @@ section('and a floating name with no match says that plainly');
         /data-lostjoin=/.test(room), room);
 }
 
-section('NOTHING IS MERGED BY ANY OF IT');
+section('AND THE TAP PUTS HIS CHILDREN ON THE RIGHT BRANCH');
+/* "Thomas Musoni, born in 1971 and his children should auto reconcile and be
+    showing on the correct branches." This is that, one tap, reversible. */
+{
+  const t = split();
+  const maybe = t.fe.mayAlreadyBe(t.stray);
+  eq('the app knows which man to fold him into', nm(t, maybe.id), 'Thomas Musoni');
+  t.fe.mergePeople(maybe.id, t.stray);
+
+  eq('nobody is floating any more', t.fe.adrift(), []);
+
+  const st = t.fe.getState();
+  const kids = new Set();
+  for (const u of Object.values(st.unions))
+    if (u.partners.includes(t.thomas)) u.children.forEach(c => kids.add(c));
+  eq('and the child came with him, onto his branch',
+     [...kids].map(id => nm(t, id)).sort(), ['A child of his', 'Hazvineyi Musoni']);
+  /* Which is the point of the whole thing: she is now his daughter, on the
+     line that runs up through his father to the top of the tree. */
+  check('so she is reckoned from the tree rather than from nowhere',
+        kids.has(t.kid), JSON.stringify([...kids].map(id => nm(t, id))));
+}
+
+section('and the record folded in is set aside, not deleted');
+{
+  const t = split();
+  t.fe.mergePeople(t.thomas, t.stray);
+  const st = t.fe.getState();
+  check('the floating record is still there to read back', !!st.people[t.stray]);
+  check('and says where its details went',
+        /Folded into Thomas/.test((st.people[t.stray].aside || {}).why || ''),
+        JSON.stringify(st.people[t.stray].aside));
+}
+
+section('NOTHING IS MERGED WITHOUT THE TAP');
 /* The offer is an offer. Three living Garikais in one family is ordinary. */
 {
   const t = split();

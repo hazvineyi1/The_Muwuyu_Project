@@ -11275,9 +11275,29 @@ function adriftRoom(){
         ? `<p class="maybe">This may be <b>${esc(other.name)}</b>, already in the tree` +
           `${other.born ? ` (b. ${esc(other.born)})` : ''} — ${esc(positionOf(maybe.id))}.` +
           `<br><i>${esc((maybe.why || []).join('; '))}</i></p>` +
+          /* ── THE ONE TAP THAT DOES IT ───────────────────────────────
+           *
+           * "Auto reconcile. For example Thomas Musoni, born in 1971 and his
+           *  children should auto reconcile and be showing on the correct
+           *  branches."
+           *
+           * The app already knows who he is — it says so in the line above.
+           * Sending somebody off to a search box to find the man the app has
+           * just named is making them do the work twice. This folds the
+           * floating record into the one already in the tree, and everybody
+           * recorded under it goes with it: his children land on his branch,
+           * which is the whole of what was asked for.
+           *
+           * Still not automatic, and it never will be. Three living Garikais
+           * in one family is ordinary, because children are named after their
+           * grandfathers. What is automatic is the finding, the evidence and
+           * the doing — the deciding stays with whoever knows. And the record
+           * folded in is SET ASIDE rather than deleted, so a wrong tap is
+           * read back and undone rather than discovered as an absence. */
           `<span class="acts">` +
+            `<button type="button" class="mini join" data-lostsame="${id}|${maybe.id}">` +
+              `Yes — one person</button>` +
             `<button type="button" class="mini" data-lostsee="${maybe.id}">Show that one</button>` +
-            `<button type="button" class="mini join" data-lostjoin="${id}">Join this one on…</button>` +
             `<button type="button" class="mini" data-lostno="${id}|${maybe.id}">Different people</button>` +
           `</span>`
         : `<p class="maybe">Nobody in the tree looks like the same person. ` +
@@ -11318,6 +11338,21 @@ function openAdrift(){
     if (layout.persons[id]) focusOn(id, Math.max(pos.k, 0.78));
     revealBuds();
     say(`${state.people[id].name} — ${positionOf(id)}.`);
+  });
+  el.querySelectorAll('[data-lostsame]').forEach(b => b.onclick = () => {
+    const [loose, here] = b.dataset.lostsame.split('|');
+    const came = descendantsOf(loose).count;
+    const gone = (state.people[loose] || {}).name || 'That record';
+    const kept = (state.people[here] || {}).name || 'the other';
+    // The one already in the tree is the keeper, so whatever was hanging off
+    // the floating record is carried onto its branch rather than the branch
+    // being carried off to nowhere.
+    mergePeople(here, loose);
+    save(); closeForm(); render(); fit();
+    say(`${gone} folded into ${kept}. One record now` +
+        (came ? `, and ${came === 1 ? 'the person' : `${came} people`} recorded ` +
+                `under ${came === 1 ? 'them' : 'them'} moved onto that branch.` : '.'));
+    if (adrift().length) openAdrift();
   });
   el.querySelectorAll('[data-lostjoin]').forEach(b => b.onclick = () => {
     /* Find, anchored on the floating one, so whatever is picked is joined
@@ -12792,7 +12827,10 @@ function remapId(from, to){
    Three shapes, because that is what the panels use: a bare id, an id behind
    a one-letter kind ("p:" / "u:"), and a pair joined by a bar. */
 const HELD_ID_ATTRS = ['share', 'parents', 'union', 'keep', 'drop', 'link',
-                       'card', 'rm', 'not', 'vis'];
+                       'card', 'rm', 'not', 'vis',
+                       // the not-joined room: three of these hold a bare id,
+                       // and two hold a pair joined by a bar
+                       'lostsee', 'lostjoin', 'lostno', 'lostsame'];
 
 function rewriteHeldIds(from, to){
   const form = typeof document !== 'undefined' && document.getElementById
