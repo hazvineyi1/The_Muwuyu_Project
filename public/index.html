@@ -7125,6 +7125,26 @@ function placeBuds(){
   ];
   if (canParent) out.push({ kind:'parent', icon:'↓',
     label:pu && pu.partners.length ? 'Other parent' : 'Parent', at:place([90, 60, 120, 35, 145]) });
+
+  /* ── SOMEBODY ALREADY HERE ───────────────────────────────────────────────
+   *
+   * "If I want to open an individual and make them part of the tree I am
+   *  working on, that should be possible."
+   *
+   * Every other bud makes a NEW person. That is the right default and it was
+   * the only offer, so the only way to bring somebody already recorded onto
+   * the branch you are working on was through their card, under a line about
+   * a word being wrong — which is where you go when something is wrong, not
+   * when you are building. Two relatives filling in the same family from
+   * opposite ends meet in the middle exactly here, and if the only door open
+   * at that moment makes a new record, that is the door they take.
+   *
+   * Not offered in a tree of two, where there is nobody to find. */
+  if (people().length > 2) out.push({ kind:'join', icon:'⇢',
+    label:'Somebody already here',
+    title:'Bring somebody already in this tree onto this branch. No second ' +
+          'record, no duplicate.',
+    at:place([140, -140, 180, -180, 40, -40, 0]) });
   // A rooted person loses the Parent bud, which on its own reads as "you
   // cannot go further" rather than "we said this was as far as we got".
   // This puts the way through in the same place the Parent bud would have
@@ -11830,6 +11850,8 @@ budsEl.addEventListener('click', e => {
     return;
   }
   if (bud.dataset.bud === 'ways'){ openWays(bud.dataset.anchor); return; }
+  // Find, anchored here, so whatever is picked is joined onto this branch.
+  if (bud.dataset.bud === 'join'){ openFind(bud.dataset.anchor); return; }
   openForm(bud.dataset.bud, bud.dataset.anchor);
 });
 budsEl.addEventListener('keydown', e => {
