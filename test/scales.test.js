@@ -356,4 +356,82 @@ section('THE VIEW GLIDES WHEN IT TAKES YOU SOMEWHERE, AND CUTS WHEN IT HOLDS STI
         /pointerdown[\s\S]{0,500}stopGlide\(\)/.test(js), 'nothing stops a glide on a drag');
 }
 
+// ── and the marks themselves ──────────────────────────────────────────────
+//
+// This app draws no icon files. Every mark on it is a character, which is
+// right for a page that has to open on a slow phone — but a character set is
+// still a vocabulary, and it had two words for one thing: ✕ (U+2715) took
+// somebody off the tree and × (U+00D7) let go of a chip on the bar. The same
+// job, two characters, drawn at visibly different weights by one font. That is
+// 10px and 10.5px all over again.
+
+section('ONE GLYPH PER JOB');
+{
+  const js = html.split('</style>')[1] || '';
+  /* The two comments that name the old character are the only place it may
+     still appear, and "11×11" is a measurement rather than a mark. */
+  const live = js.replace(/\/\*[\s\S]*?\*\//g, '');
+  check('the multiplication sign is gone from everything the page draws',
+        !/\u00d7/.test(live), (live.match(/.{40}\u00d7.{10}/) || [''])[0]);
+  check('and close is one character, everywhere',
+        (live.match(/\u2715/g) || []).length >= 4,
+        String((live.match(/\u2715/g) || []).length));
+  check('with no entity spelling of it left', !/&times;|&minus;/.test(html));
+  check('nor an escaped one', !/\\u2715|\\u2212|\\u25CF/i.test(html));
+}
+
+section('AND THE BUDS SPEAK THE TREE’S OWN GEOMETRY');
+/* The ways to grow are not arbitrary symbols. This tree is drawn with its
+   roots below the horizon, so the mark points where the thing it makes will
+   appear — which is the one piece of the interface a person can read without
+   being told anything. */
+{
+  const js = html.split('</style>')[1] || '';
+  const iconOf = kind => {
+    const at = js.indexOf(`kind:'${kind}'`);
+    if (at < 0) return null;
+    const m = /icon:'(.)'/.exec(js.slice(at, at + 220));
+    return m ? m[1] : null;
+  };
+  eq('a child rises',            iconOf('child'),   '\u2191');
+  eq('a parent goes down',       iconOf('parent'),  '\u2193');
+  eq('a sibling is across',      iconOf('sibling'), '\u2194');
+  eq('somebody already here is brought across', iconOf('join'), '\u21e2');
+  eq('a partner is a sign, not a direction',    iconOf('partner'), '\u26ad');
+  eq('and a word is a quotation',               iconOf('ways'),    '\u201c');
+  /* Deepening a root is going further back, which is the same direction as a
+     parent — and the two are never offered at once. */
+  eq('going further back points the same way as a parent',
+     iconOf('deepen'), iconOf('parent'));
+}
+
+section('AN ICON TAKES ITS SIZE FROM THE TYPE SCALE LIKE ANY OTHER CHARACTER');
+/* Not a question this scale has to answer twice. */
+{
+  const marks = ['.bud i', '.pod .rm', '.pod .fold', '.pod .mk'];
+  const rx = t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const off = marks.filter(sel => {
+    const rule = ([...css.matchAll(new RegExp(rx(sel) + '\\{[^}]*\\}', 'g'))]
+      .map(m => m[0]).find(r => /font-size/.test(r))) || '';
+    return !/font-size:var\(--t-/.test(rule);
+  });
+  eq('every one of them is on it', off, []);
+}
+
+section('AND THE MOST CONSEQUENTIAL MARK HAS A TARGET SOMEBODY CAN HIT');
+/* The ✕ takes a person off the tree and the ⋯ opens their card. Both were
+   drawn 22px across with nothing around them, while the fold beside them —
+   which is harmless and reversible — carries a 41px target, because that one
+   was measured once and fixed. */
+{
+  check('the pod controls have a target bigger than the glyph',
+        /\.pod \.rm::after\{[^}]*inset:-\d+px/.test(css), 'no expanded target on .pod .rm');
+  /* Squared, not rounded: a round target loses its own diagonal corners,
+     which is how the fold came to measure 11×11 the first time it was
+     checked in a browser. */
+  const rule = (css.match(/\.pod \.rm::after\{[^}]*\}/) || [''])[0];
+  check('and it is square, so the corners are really there',
+        !/border-radius/.test(rule), rule);
+}
+
 report();

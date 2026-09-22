@@ -163,6 +163,40 @@
    * --ease-move itself rather than approximating it, so the view travels on
    * exactly the curve the stylesheet names — one system, not two that look
    * alike. See bezier(). */
+  /* ── THE GLYPHS, AND ONE PER JOB ───────────────────────────────────────
+   *
+   * This app draws no icon files. Every mark on it is a character, which is
+   * right for a page that has to open on a slow phone — but a character set
+   * is still a vocabulary, and it had two words for one thing.
+   *
+   * CLOSE WAS TWO GLYPHS. The mark that takes somebody off the tree was ✕
+   * (U+2715, MULTIPLICATION X) and the one that lets go of a chip on the bar
+   * was × (U+00D7, MULTIPLICATION SIGN) — the same job, two characters, drawn
+   * at visibly different weights by the same font. That is 10px and 10.5px
+   * all over again. One glyph now, and the set is written here:
+   *
+   *   ✕  U+2715   close, let go, take off the tree
+   *   −  U+2212   fold a branch shut, and zoom out
+   *   ⋯  U+22EF   the card behind a person
+   *   ●  U+25CF   this switch is on
+   *   ♀ ♂         she, he — a mark, never a control
+   *
+   * AND THE BUDS SPEAK THE TREE'S OWN GEOMETRY. The ways to grow are not
+   * arbitrary symbols; they point where the thing they make will appear,
+   * because this tree is drawn with its roots below the horizon:
+   *
+   *   ↑  a child        descendants rise
+   *   ↓  a parent       roots go down
+   *   ↔  a sibling      across the row
+   *   ⇢  somebody already here — brought across from elsewhere, and dashed
+   *                     because they exist already
+   *   ⚭  a partner      the one that is a sign rather than a direction
+   *   "  the word your family uses — a quotation, because it is a word
+   *
+   * HOW BIG THEY ARE is not a question this scale answers: an icon is a
+   * character, so it takes a size off the type scale like any other. HOW BIG
+   * THE TARGET IS, is — see the hit areas below, and the test that measures
+   * them in a real browser. */
   --m-tap:  150ms;
   --m-in:   240ms;
   --m-far:  450ms;
@@ -756,6 +790,14 @@ body.carrying .pod{transition:none;}
 }
 .pod.sel .rm{display:flex;}
 .pod .rm:hover{border-color:var(--gold); color:var(--gold);}
+/* THE TARGET, WHICH WAS 22 PIXELS ON THE MOST CONSEQUENTIAL MARK HERE.
+   The ✕ takes somebody off the tree and the ⋯ opens their card, and both were
+   drawn 22px across with nothing around them — while the fold beside them,
+   which is harmless and reversible, carries a 41px target because that one
+   was measured once and fixed. Squared, and no border-radius: a round target
+   loses its own diagonal corners, which is how the fold came to measure
+   11×11 the first time it was checked. */
+.pod .rm::after{ content:''; position:absolute; inset:-7px; }
 
 /* move somebody earlier or later among their brothers and sisters */
 .pod .ord{
@@ -1774,7 +1816,7 @@ body.carrying .pod{transition:none;}
 <div id="bar" hidden>
   <span class="grp" role="group" aria-label="Move around the tree">
     <button id="fit">Fit</button>
-    <button class="zoom" id="zout" title="Smaller" aria-label="Show more of the tree">&minus;</button>
+    <button class="zoom" id="zout" title="Smaller" aria-label="Show more of the tree">−</button>
     <button class="zoom" id="zin" title="Bigger" aria-label="Show less of the tree, larger">+</button>
   </span>
   <span class="sep" aria-hidden="true"></span>
@@ -7398,7 +7440,7 @@ function draw(){
             `${esc((p.name || '').split(' ')[0])} — ${n} ${n === 1 ? 'person' : 'people'}"` +
             ` aria-label="${shutSector ? 'Open' : 'Close'} the branch below ` +
             `${esc((p.name || '').split(' ')[0])}, ${n} ${n === 1 ? 'person' : 'people'}"` +
-            ` aria-expanded="${shutSector ? 'false' : 'true'}">${shutSector ? '+' + n : '\u2212'}</button>`;
+            ` aria-expanded="${shutSector ? 'false' : 'true'}">${shutSector ? '+' + n : '−'}</button>`;
         })()
       : '';
     const folds = (foldAt.get(p.id) || []).map(l => {
@@ -7412,7 +7454,7 @@ function draw(){
              `${n === 1 ? 'person' : 'people'}"` +
              ` aria-label="${shut ? 'Open' : 'Fold away'} ${esc(who)}, ${n} ` +
              `${n === 1 ? 'person' : 'people'}"` +
-             ` aria-expanded="${shut ? 'false' : 'true'}">${shut ? '+' + gone : '\u2212'}</button>`;
+             ` aria-expanded="${shut ? 'false' : 'true'}">${shut ? '+' + gone : '−'}</button>`;
     }).join('');
     html.push(
       `<div class="pod${sel === p.id ? ' sel' : ''}${fresh.has(p.id) ? ' sprout' : ''}` +
@@ -7688,7 +7730,7 @@ function placeBuds(){
    * "Tete, Sekuru…". Nobody has to be told what that button is for. */
   const words = budWords(id);
   const out = [
-    { kind:'ways', icon:'\u201C',
+    { kind:'ways', icon:'“',
       label: words.length ? words.join(', ') + '\u2026' : 'The word you use',
       title: words.length
         ? `Add somebody by the word your family uses for them — ${words.join(', ')} and the rest. ` +
@@ -10103,7 +10145,7 @@ function showLit(){
       `<div class="chip picked"><b>Where it can grow</b>` +
       `<i>${n ? `${n} marked on the tree` : 'nothing left to ask'}</i>` +
       `<button type="button" id="growOff" aria-label="Stop showing where the tree ` +
-        `can grow">&times;</button></div>`);
+        `can grow">✕</button></div>`);
   }
 
   /* WHO IS PICKED, BY NAME.
@@ -10129,7 +10171,7 @@ function showLit(){
       `<i>${mine ? 'you — every word is from here'
                  : 'picked — every word is from here'}</i>` +
       `<button type="button" id="selOff" aria-label="Let go of ` +
-        `${esc(them.name || 'this person')}">&times;</button></div>`);
+        `${esc(them.name || 'this person')}">✕</button></div>`);
   }
 
   /* A lit word, as a chip the size of the word. The lighting itself is the
@@ -10138,7 +10180,7 @@ function showLit(){
   if (lit){
     rows.push(
       `<div class="chip"><b>${esc(lit.term)}</b><i>${lit.ids.size}</i>` +
-      `<button type="button" id="litOff" aria-label="Show everyone again">&times;</button></div>`);
+      `<button type="button" id="litOff" aria-label="Show everyone again">✕</button></div>`);
   }
 
   el.innerHTML = rows.join('');
@@ -10699,7 +10741,7 @@ function openCard(id){
         `${meId === id ? '● This is you' : 'This is me'}</button>` +
       `<button class="btn ghost wide${building && building.from === id ? ' on' : ''}" id="cBuild">` +
         `${building && building.from === id
-          ? '\u25CF Showing only this branch'
+          ? '● Showing only this branch'
           : 'Show only this branch'}</button>` +
       `<p class="roothint">${building && building.from === id
         ? 'Everybody else is off the screen while you work. Nothing has been changed or removed, ' +
