@@ -28,7 +28,13 @@ const TOKENS = ['sky','sky-far','soil','soil-deep','horizon','bark','bark-lit',
 function blockFor(selector){
   const at = css.indexOf(selector + '{');
   if (at < 0) return null;
-  const body = css.slice(at + selector.length + 1, css.indexOf('}', at));
+  /* COMMENTS OUT FIRST. This split on ';' and then on ':' as though a block
+     held nothing but declarations — so the moment somebody explained a token
+     in a comment above it, the colon inside the prose became the ':' this
+     read, the key became the whole sentence, and the token underneath it
+     vanished from the audit. A missing colour would then have passed. */
+  const body = css.slice(at + selector.length + 1, css.indexOf('}', at))
+                  .replace(/\/\*[\s\S]*?\*\//g, '');
   const out = {};
   for (const decl of body.split(';')){
     const i = decl.indexOf(':');

@@ -106,9 +106,57 @@
    * learn nothing. The tokens are here to be the list; test/scales.test.js
    * is what makes the list true, and it reads every declaration in the file
    * whether it was written as a token or as a number. */
+  /* ── HOW FAR OFF THE PAGE A THING IS ───────────────────────────────────
+   *
+   * Elevation is one idea wearing two clothes: how much shadow a thing casts,
+   * and what it therefore covers. They have to move together, or the screen
+   * says one thing with light and another with stacking.
+   *
+   * BEFORE THIS: eight stacking values — 2, 3, 45, 46, 50, 60, 78, 80 — with
+   * 45 and 46 a pair and 78 and 80 a pair, which is the same "nudge it until
+   * it works" signature the type sizes had. Nothing said which layer anything
+   * belonged to, so every new thing picked its number by looking at whatever
+   * was already nearby.
+   *
+   * Eight bands, ten apart from the toolbar up so that something can be put
+   * between two of them without renumbering the screen:
+   *
+   *   --z-veil    the vignette that lets the corners fall away
+   *   --z-pods    the people
+   *   --z-buds    the ways to grow, which stand around a person
+   *   --z-frame   the toolbar, the top bar, the chips, the hint
+   *   --z-over    the welcome screen
+   *   --z-panel   a panel, which covers whatever opened it
+   *   --z-said    what somebody else has done
+   *   --z-state   what the app says about its own ability to save — over
+   *               everything, because everything under it is a lie while it
+   *               is showing
+   *
+   * AND A BUG THE NUMBERS WERE HIDING. The vignette was z-index 2 and #pods
+   * had none at all, so a decoration meant to darken the CANVAS was painted
+   * over every person standing on it: a tenth of black in daylight and
+   * forty-two per cent of it at night, across the names nearest the edge of
+   * the screen. Measured by taking the vignette away and watching a pod's
+   * pixels change. The bands put it back under the people, where it was
+   * always meant to be. */
+  --z-veil:   1;  --z-pods:  2;  --z-buds:  3;
+  --z-frame: 40;  --z-over: 50;  --z-panel: 60;
+  --z-said:  70;  --z-state: 80;
+
+  /* Within the people, two small steps and no more: a pod a word has lit, and
+     the one that was tapped. Relative to --z-pods, which is their own layer. */
+  --z-up: 2;  --z-picked: 3;
+
   --s-1: 2px;  --s-2: 4px;  --s-3: 6px;  --s-4: 8px;
   --s-5: 10px; --s-6: 12px; --s-7: 16px; --s-8: 24px;
 
+  /* TWO DEPTHS, AND THE RULE THAT PICKS BETWEEN THEM: a thing that sits ON
+     the page casts --shadow; a thing that has come OFF it casts --lift. So
+     pods at rest, the toolbar, the top bar and the chips take the first, and
+     a lifted pod, a panel and the two banners take the second.
+     Light and stacking have to agree, and they did not: #others and #stalled
+     are the highest things on the screen and were casting the shallowest
+     shadow of anything on it, while a panel below them cast the deeper one. */
   --shadow:0 2px 10px rgba(34,28,19,.14);
   --lift:0 10px 30px rgba(34,28,19,.24);
 }
@@ -316,7 +364,7 @@ body.carrying .pod{transition:none;}
    is most of what separates a page that feels composed from one that feels
    flat — it settles the eye in the middle, where the family is. */
 #stage::after{
-  content:''; position:absolute; inset:0; pointer-events:none; z-index:2;
+  content:''; position:absolute; inset:0; pointer-events:none; z-index:var(--z-veil);
   background:radial-gradient(ellipse 78% 68% at 50% 46%,
     transparent 55%, rgba(34,28,19,.10) 100%);
 }
@@ -393,11 +441,13 @@ body.carrying .pod{transition:none;}
    a pointer now — the same arrangement #buds has always had, and for the same
    reason. Empty space between pods was never doing anything with a click
    anyway; it can pass it down. */
-#pods{position:absolute; inset:0; pointer-events:none;}
+/* THE PEOPLE, ABOVE THE VIGNETTE. Without a band of their own they sat
+   below it — see --z-veil. */
+#pods{position:absolute; inset:0; pointer-events:none; z-index:var(--z-pods);}
 #pods .pod{pointer-events:auto;}
 /* Buds live in screen space, not in the tree's, so they stay a constant,
    finger-sized distance from a person however far you have zoomed out. */
-#buds{position:absolute; inset:0; pointer-events:none;}
+#buds{position:absolute; inset:0; pointer-events:none; z-index:var(--z-buds);}
 #buds .bud{pointer-events:auto;}
 .layer{position:absolute; left:0; top:0; transform-origin:0 0; will-change:transform;}
 
@@ -463,7 +513,7 @@ body.carrying .pod{transition:none;}
   border-color:var(--gold); border-width:2px;
   box-shadow:0 0 0 4px var(--pod), 0 0 0 6px var(--gold), var(--lift);
   transform:translate(-50%,-50%) scale(1.045);
-  z-index:3;
+  z-index:var(--z-picked);
 }
 .pod.sel .nm{font-weight:600;}
 /* The vantage line is the one piece of the pod that says WHY it is picked.
@@ -502,13 +552,13 @@ body.carrying .pod{transition:none;}
 #gtree.hushed .branch, #gtree.hushed .bond{opacity:.2;}
 .pod.lit{
   border-color:var(--gold); border-width:2.5px; box-shadow:var(--lift);
-  z-index:2;
+  z-index:var(--z-up);
 }
 .pod.lit .nm{font-weight:600;}
 /* The bar is a ROW of small things now, not a stack of banners. It only ever
    holds one of each, and a chip is the width of its own word. */
 #litbar{
-  position:fixed; left:50%; bottom:74px; transform:translateX(-50%); z-index:46;
+  position:fixed; left:50%; bottom:74px; transform:translateX(-50%); z-index:var(--z-frame);
   display:flex; flex-wrap:wrap; align-items:center; justify-content:center;
   gap:8px; max-width:min(92vw,600px); pointer-events:none;
 }
@@ -789,7 +839,7 @@ body.carrying .pod{transition:none;}
 /* The door. Where the two families are joined by a marriage, and therefore
    the one place it makes sense to put them away or bring them back. */
 .pod .fold{
-  position:absolute; right:-10px; top:-10px; z-index:3;
+  position:absolute; right:-10px; top:-10px; z-index:var(--z-picked);
   min-width:21px; height:21px; padding:0 6px;
   display:flex; align-items:center; justify-content:center;
   border-radius:999px; border:1.5px solid var(--fam);
@@ -962,7 +1012,7 @@ body.carrying .pod{transition:none;}
      opened from the planting screen used to sit underneath it. Still
      below the two banners, which report on the connection and must stay
      readable whatever is open. */
-  z-index:60;
+  z-index:var(--z-panel);
   width:252px; padding:16px; border-radius:22px 6px 22px 6px;
   background:var(--pod); border:2px solid var(--gold);
   box-shadow:var(--lift); animation:bud .2s ease-out backwards;
@@ -1378,7 +1428,7 @@ body.carrying .pod{transition:none;}
 /* ── first run ──────────────────────────────────────────────────────── */
 #seed{
   position:fixed; left:50%; top:50%; transform:translate(-50%,-50%);
-  width:min(430px,calc(100vw - 36px)); text-align:center; z-index:50;
+  width:min(430px,calc(100vw - 36px)); text-align:center; z-index:var(--z-over);
 }
 #seed h1{
   font-family:'Fraunces',Georgia,serif; font-weight:600; font-size:clamp(31px,6vw,46px);
@@ -1406,11 +1456,11 @@ body.carrying .pod{transition:none;}
    temporary — a tree that changes shape with no explanation reads as a bug,
    but this is the system working. */
 #others{
-  position:fixed; left:50%; top:14px; transform:translateX(-50%); z-index:78;
+  position:fixed; left:50%; top:14px; transform:translateX(-50%); z-index:var(--z-said);
   max-width:min(520px, calc(100vw - 28px));
   padding:10px 16px; border-radius:999px;
   background:var(--pod); border:1.5px solid var(--pod-edge);
-  box-shadow:var(--shadow);
+  box-shadow:var(--lift);
   font-family:'Karla',sans-serif; font-size:var(--t-read); line-height:1.5;
   color:var(--muted);
   animation:bud .25s ease-out backwards;
@@ -1419,11 +1469,11 @@ body.carrying .pod{transition:none;}
 /* Shown only when the shared tree could not be read. It has to be
    unmissable: everything below it is a browser that must not write. */
 #stalled{
-  position:fixed; left:50%; top:14px; transform:translateX(-50%); z-index:80;
+  position:fixed; left:50%; top:14px; transform:translateX(-50%); z-index:var(--z-state);
   max-width:min(560px, calc(100vw - 28px));
   padding:12px 16px; border-radius:12px;
   background:var(--pod); border:1.5px solid var(--gold);
-  box-shadow:var(--shadow);
+  box-shadow:var(--lift);
   font-family:'Karla',sans-serif; font-size:var(--t-read); line-height:1.55;
   color:var(--muted);
 }
@@ -1438,7 +1488,7 @@ body.carrying .pod{transition:none;}
 /* The banner. Two pills with the canvas showing between them, so it names
    the place without walling off the top of the tree. */
 #top{
-  position:fixed; left:14px; right:14px; top:14px; z-index:46;
+  position:fixed; left:14px; right:14px; top:14px; z-index:var(--z-frame);
   display:flex; align-items:center; gap:10px; pointer-events:none;
 }
 #top .brand{
@@ -1473,7 +1523,7 @@ body.carrying .pod{transition:none;}
 #top #signout:hover{background:rgba(156,97,25,.14); color:var(--gold);}
 
 #bar{
-  position:fixed; left:14px; bottom:14px; z-index:45;
+  position:fixed; left:14px; bottom:14px; z-index:var(--z-frame);
   display:flex; align-items:center; gap:2px; padding:6px;
   background:var(--pod); border:1.5px solid var(--pod-edge);
   border-radius:999px; box-shadow:var(--shadow);
@@ -1594,7 +1644,7 @@ body.carrying .pod{transition:none;}
 }
 #bar .dupes:hover{background:var(--gold); border-color:var(--gold); color:var(--pod);}
 #hint{
-  position:fixed; right:16px; bottom:18px; z-index:45; max-width:240px;
+  position:fixed; right:16px; bottom:18px; z-index:var(--z-frame); max-width:240px;
   margin:0; text-align:right; color:var(--muted); font-size:var(--t-read); line-height:1.55;
   pointer-events:none;   /* a caption should never swallow a click */
 }

@@ -127,4 +127,92 @@ section('THE POD STILL FITS WHAT IS PUT IN IT');
         nums.length > 0 && nums.every(v => SPACE.includes(v)), pad);
 }
 
+// ── and how far off the page things are ───────────────────────────────────
+//
+// Elevation is one idea wearing two clothes: how much shadow a thing casts,
+// and what it therefore covers. They have to move together, or the screen says
+// one thing with light and another with stacking.
+//
+// BEFORE THIS: eight stacking values — 2, 3, 45, 46, 50, 60, 78, 80 — with 45
+// and 46 a pair and 78 and 80 a pair, which is the same "nudge it until it
+// works" signature the type sizes had. Nothing said which layer anything
+// belonged to, so every new thing picked its number off whatever was nearby.
+
+const BANDS = ['--z-veil', '--z-pods', '--z-buds', '--z-frame',
+               '--z-over', '--z-panel', '--z-said', '--z-state'];
+const bandOf = t => Number((css.match(new RegExp(`\\${t}:\\s*(\\d+)`)) || [])[1]);
+
+section('EIGHT BANDS, AND NOTHING STACKED OUTSIDE THEM');
+{
+  const loose = [];
+  for (const m of css.matchAll(/z-index:\s*([^;}]+)/g)){
+    const v = m[1].trim();
+    if (!/^var\(--z-[a-z]+\)$/.test(v)) loose.push(v);
+  }
+  eq('not one bare number', loose, []);
+  const missing = BANDS.filter(b => !Number.isFinite(bandOf(b)));
+  eq('every band is declared', missing, []);
+  const unused = BANDS.filter(b => !new RegExp(`var\\(\\${b}\\)`).test(css));
+  eq('and every band is used', unused, []);
+}
+
+section('AND THE ORDER IS THE DESIGN, NOT AN ACCIDENT');
+/* These are the sentences the screen has to keep true. Each one was a pair of
+   arbitrary numbers before, and any of them could have been inverted by
+   somebody picking a number off a neighbour. */
+{
+  const above = (a, b, what) =>
+    check(what, bandOf(a) > bandOf(b), `${a}=${bandOf(a)} vs ${b}=${bandOf(b)}`);
+  above('--z-pods', '--z-veil',
+        'the people stand above the vignette, not under it');
+  above('--z-buds', '--z-pods',
+        'and the ways to grow stand around them, above');
+  above('--z-over', '--z-frame',
+        'the welcome screen covers the toolbar');
+  above('--z-panel', '--z-over',
+        'a panel covers the welcome screen it was opened from');
+  above('--z-said', '--z-panel',
+        'what somebody else did is seen over an open panel');
+  above('--z-state', '--z-said',
+        'and what the app says about its own saving is over everything');
+}
+
+section('and the bands leave room to put something between two of them');
+{
+  const screen = ['--z-frame', '--z-over', '--z-panel', '--z-said', '--z-state'];
+  const steps = screen.slice(1).map((b, i) => bandOf(b) - bandOf(screen[i]));
+  eq('ten apart, all the way up', [...new Set(steps)], [10]);
+}
+
+section('THE VIGNETTE IS UNDER THE PEOPLE');
+/* It was not. #stage::after was z-index 2 and #pods had none at all, so a
+   decoration meant to darken the canvas was painted over every person on it —
+   a tenth of black in daylight and forty-two per cent at night, across the
+   names nearest the edge of the screen. */
+{
+  check('the vignette is on the veil band',
+        /#stage::after\{[^}]*z-index:var\(--z-veil\)/.test(css), 'the vignette moved');
+  check('and the people have a band of their own, above it',
+        /#pods\{[^}]*z-index:var\(--z-pods\)/.test(css), '#pods has no band');
+}
+
+section('LIGHT AGREES WITH STACKING');
+/* Two depths and one rule: a thing that sits ON the page casts --shadow, a
+   thing that has come OFF it casts --lift. The two banners are the highest
+   things on the screen and were casting the shallowest shadow on it. */
+{
+  const shadowOf = sel => {
+    const rule = ([...css.matchAll(new RegExp(`\\${sel}\\{[^}]*\\}`, 'g'))]
+      .map(m => m[0]).find(r => /box-shadow/.test(r))) || '';
+    return (rule.match(/box-shadow:var\((--[a-z]+)\)/) || [])[1] || null;
+  };
+  eq('a panel has come off the page', shadowOf('#form'), '--lift');
+  eq('and so has what somebody else did', shadowOf('#others'), '--lift');
+  eq('and so has the connection banner', shadowOf('#stalled'), '--lift');
+  eq('while the toolbar sits on it', shadowOf('#bar'), '--shadow');
+  /* Two depths, and a third would mean two of them doing the same job. */
+  const depths = new Set([...css.matchAll(/box-shadow:var\((--[a-z]+)\)/g)].map(m => m[1]));
+  eq('two depths and no more', [...depths].sort(), ['--lift', '--shadow']);
+}
+
 report();
