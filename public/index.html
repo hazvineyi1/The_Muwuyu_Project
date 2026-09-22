@@ -3623,7 +3623,8 @@ function derive(who, tid, byBloodOnly){
     if (cross){
       // Tete's line and Sekuru's line, and the skew that runs down them
       const motherBrother = myLink.sex === 'f' && tgLink.sex === 'm';
-      if (genDiff >= 2) return { term: them.sex === 'f' ? 'Ambuya' : 'Sekuru',
+      if (genDiff >= 2) return { term: them.sex === 'f' ? 'Ambuya'
+                                     : them.sex === 'm' ? 'Sekuru' : null,
                                  why:`${via} family, two generations above you`,
                                  shape: shapeOf('crossed-line-two-above', me.sex, them.sex),
                                  plain:'somebody two generations above you on the crossed side' };
@@ -3637,9 +3638,33 @@ function derive(who, tid, byBloodOnly){
       /* YOUR MOTHER'S BROTHER'S DAUGHTER is not handled here, deliberately —
          overlaps() already owns that fact, and a rule written in two places is
          a rule that will one day disagree with itself. His sons stay Sekuru,
-         which is what this line gives them. */
+         which is what this line gives them.
+
+         WHICH IS WHY AN UNRECORDED SEX MUST NOT FALL THROUGH TO SEKURU.
+
+         "Hollie is my brother's daughter, so therefore I am her tete. Thus my
+          son is mwanakomana to her and he calls her amainini."
+
+         Every word of that was already right in this engine — kinPath found
+         the crossing, overlaps() gave Amainini one way and Mwanakomana the
+         other, and the two agreed. It came out as SEKURU on a real family's
+         screen for one reason: nobody had recorded whether Hollie is a woman.
+         The overlap that knows she is Amainini is guarded on her being a she;
+         this line was not guarded on anything, so it handed out the man's
+         word to somebody the app had no sex for at all.
+
+         An app that guesses a word here is not being helpful. It is making a
+         claim about a person out of nothing, in the one place a family would
+         never think to check — and this project's whole position is that a
+         word nobody said is worse than no word. So where the sex decides the
+         word and the sex is not recorded, there is no word, and whyNotNamed
+         says which fact is missing and offers the one tap that supplies it. */
       return motherBrother
-        ? { term:'Sekuru', why:`descended from ${via} brother — that line stays Sekuru`,
+        ? { term: them.sex === 'm' ? 'Sekuru' : them.sex === 'f' ? 'Sekuru' : null,
+            why: them.sex
+              ? `descended from ${via} brother — that line stays Sekuru`
+              : `descended from ${via} brother — but that line is Sekuru for a ` +
+                `man and Amainini for a woman`,
             shape: shapeOf('mothers-brothers-line-below', me.sex, them.sex),
             plain:"somebody down your mother's brother's line" }
         : { term:'Muzukuru', why:`descended from ${via} sister — that line stays Muzukuru`,
@@ -9950,8 +9975,25 @@ function kinOnCard(id){
   const lines = (!k || !k.list.length)
     ? (() => {
         const gap = whyNotNamed(meId, id);
+        /* AND THE WAY TO SUPPLY WHAT IS MISSING, from here.
+         *
+         * "Hollie is my brothers daughter... he calls her amainini."
+         *
+         * The app had been saying Sekuru, because nobody had recorded that
+         * Hollie is a woman and the rule fell through to the man's word. It
+         * now says nothing rather than the wrong thing — which is only an
+         * improvement if the missing fact is one tap away. Usually it is on
+         * this very card, a few lines below. */
+        const here = gap && gap.fix === id;
         return `<p class="relline none"><b>Not named yet</b><span>${esc(rel ? rel.why : '')}` +
-          `${gap ? `<br>${esc(gap.text)}` : ''}</span></p>`;
+          `${gap ? `<br>${esc(gap.text)}` : ''}` +
+          `${here && gap.need === 'sex' ? ` <b>She or He is below.</b>` : ''}` +
+          `${here && gap.need === 'born' ? ` <b>The year is below.</b>` : ''}` +
+          `</span></p>` +
+          (gap && gap.fix && !here && state.people[gap.fix]
+            ? `<div class="row"><button type="button" class="btn ghost wide" ` +
+              `data-fix="${esc(gap.fix)}">Open ${esc(state.people[gap.fix].name)}</button></div>`
+            : '');
       })()
     /* The word itself is the button. Tapping Babamukuru on one man's card
        lights every Babamukuru you have, which is the fastest way anybody has
