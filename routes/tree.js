@@ -392,6 +392,191 @@ module.exports = function treeRoutes(pool, homeTreeId = null) {
     } catch (e) { sendError(res, e); }
   });
 
+  /* ── PUTTING YOURSELF IN THE TREE, LINKED ────────────────────────────────
+   *
+   * "Do not allow someone to start a name that is not linked. If they access
+   *  the tree and they are not yet added, they should be instructed to search
+   *  for a name they directly link to like a parent or sibling or grandparent
+   *  and link themselves appropriately."
+   *
+   * WHAT WAS THERE BEFORE. The who-are-you panel offered "Add me to the
+   * family", which asked for a name in a browser prompt() and posted a bare
+   * addPerson. One tap, and a name joined to nothing — the single biggest
+   * source of the floating names this project has just spent a week learning
+   * to find. It was the app's own front door making them.
+   *
+   * WHY THIS IS A SERVER ROUTE AND NOT A PANEL. A session that has not said
+   * who it is cannot read the tree: it is given a roster of names and nothing
+   * else, on purpose, because every word the app produces is reckoned from
+   * one person and it will not describe a family to nobody. So the page
+   * asking to be joined does not know who is married to whom and MUST NOT
+   * learn — handing it the marriages to compose the ops itself would give
+   * away the whole family graph to a session that has not yet said it is
+   * anybody. It says one sentence, "Chaitezvi is my grandfather", and the
+   * server does the joining.
+   *
+   * WHAT IT WILL NOT DO. There is no way through here that makes an unlinked
+   * person. Every relation resolves to a union, and a grandparent takes the
+   * parent in between — because a grandchild cannot hang off a grandparent,
+   * and asking for the name of the person between them is the honest way to
+   * find out, not an obstacle. Where the link cannot be made the answer says
+   * which fact is in the way, in a sentence a person can act on.
+   *
+   * THE ANSWER IS A CLAIM, like every `by` in this project. Somebody with the
+   * family's passcode saying they are Sydney's daughter is exactly as
+   * authenticated as somebody with the family's passcode saying anything
+   * else, and the record says who said it.
+   */
+  const AS_WORDS = {
+    father: 'child', mother: 'child',
+    brother: 'sibling', sister: 'sibling',
+    son: 'parent', daughter: 'parent',
+    husband: 'partner', wife: 'partner',
+    grandfather: 'grandparent', grandmother: 'grandparent'
+  };
+
+  r.post('/tree/:id/join-me', own, async (req, res) => {
+    const client = await pool.connect();
+    try {
+      const treeId = req.params.id;
+      const name = String(req.body?.name || '').trim();
+      const sex = ['m', 'f'].includes(req.body?.sex) ? req.body.sex : '';
+      const to = String(req.body?.to || '');
+      const word = String(req.body?.as || '');
+      const kind = AS_WORDS[word];
+      const via = req.body?.via || null;
+
+      if (!name) return res.status(400).json({ error:'no_name',
+        message:'Say the name the family would write down for you.' });
+      if (!kind) return res.status(400).json({ error:'no_relation',
+        message:'Say what that person is to you.' });
+
+      const { rows: anchorRows } = await client.query(
+        'SELECT id, name FROM people WHERE id = $1 AND tree_id = $2 AND aside_at IS NULL',
+        [to, treeId]);
+      if (!anchorRows.length) return res.status(404).json({ error:'no_such_person',
+        message:'That person is not in this family tree.' });
+      const anchor = anchorRows[0];
+
+      const ops = [];
+      const mine = { op:'addPerson', ref:'$me', name, sex, by:name };
+
+      // Which union a child of `who` belongs to. The one the family has
+      // recorded most about, so a newcomer joining a man with two marriages
+      // lands in the one with his children in it rather than an empty one —
+      // and the card can move them if that is the wrong marriage.
+      const bestUnionOf = async who => {
+        const { rows } = await client.query(
+          `SELECT u.id, (SELECT count(*) FROM union_children c WHERE c.union_id = u.id) AS kids
+             FROM unions u JOIN union_partners up ON up.union_id = u.id
+            WHERE up.person_id = $1 ORDER BY kids DESC, u.created_at LIMIT 1`, [who]);
+        return rows.length ? rows[0].id : null;
+      };
+      const parentUnionOf = async who => {
+        const { rows } = await client.query(
+          'SELECT union_id FROM union_children WHERE person_id = $1', [who]);
+        return rows.length ? rows[0].union_id : null;
+      };
+
+      if (kind === 'child'){
+        const u = await bestUnionOf(anchor.id);
+        ops.push(mine);
+        if (u) ops.push({ op:'addChild', unionId:u, personId:'$me' });
+        else {
+          ops.push({ op:'addUnion', ref:'$u' },
+                   { op:'addPartner', unionId:'$u', personId:anchor.id },
+                   { op:'addChild', unionId:'$u', personId:'$me' });
+        }
+      }
+      else if (kind === 'sibling'){
+        const pu = await parentUnionOf(anchor.id);
+        ops.push(mine);
+        if (pu) ops.push({ op:'addChild', unionId:pu, personId:'$me' });
+        else {
+          // No parents recorded for them either, so the two simply share
+          // whoever theirs turn out to be — which is a union with no partners
+          // in it yet, exactly as the page does it.
+          ops.push({ op:'addUnion', ref:'$u' },
+                   { op:'addChild', unionId:'$u', personId:anchor.id },
+                   { op:'addChild', unionId:'$u', personId:'$me' });
+        }
+      }
+      else if (kind === 'parent'){
+        const pu = await parentUnionOf(anchor.id);
+        if (pu){
+          const { rows } = await client.query(
+            'SELECT count(*)::int AS n FROM union_partners WHERE union_id = $1', [pu]);
+          if (rows[0].n >= 2) return res.status(409).json({ error:'both_parents_known',
+            message:`${anchor.name} already has both parents recorded. If one of ` +
+                    `them is you, find yourself on the list instead; if one of them ` +
+                    `is wrong, somebody in the family can put it right from their card.` });
+          ops.push(mine, { op:'addPartner', unionId:pu, personId:'$me' });
+        } else {
+          ops.push(mine,
+                   { op:'addUnion', ref:'$u' },
+                   { op:'addPartner', unionId:'$u', personId:'$me' },
+                   { op:'addChild', unionId:'$u', personId:anchor.id });
+        }
+      }
+      else if (kind === 'partner'){
+        const { rows } = await client.query(
+          `SELECT u.id FROM unions u JOIN union_partners up ON up.union_id = u.id
+            WHERE up.person_id = $1
+              AND (SELECT count(*) FROM union_partners x WHERE x.union_id = u.id) = 1
+            ORDER BY u.created_at LIMIT 1`, [anchor.id]);
+        ops.push(mine);
+        if (rows.length) ops.push({ op:'addPartner', unionId:rows[0].id, personId:'$me' });
+        else ops.push({ op:'addUnion', ref:'$u' },
+                      { op:'addPartner', unionId:'$u', personId:anchor.id },
+                      { op:'addPartner', unionId:'$u', personId:'$me' });
+      }
+      else if (kind === 'grandparent'){
+        /* THE ONE THAT NEEDS A THIRD PERSON. Nobody hangs off a grandparent
+           — there is a mother or a father in between, and the tree is wrong
+           without them. So the name of that person is asked for rather than
+           the link being fudged, and both go in together. */
+        const viaName = String(via?.name || '').trim();
+        if (!viaName) return res.status(400).json({ error:'need_the_one_between',
+          message:`Nobody hangs off a grandparent directly — your mother or ` +
+                  `father is between you and ${anchor.name}. Say their name and ` +
+                  `both of you go in together.` });
+        const viaSex = ['m', 'f'].includes(via?.sex) ? via.sex : '';
+        const u = await bestUnionOf(anchor.id);
+        ops.push({ op:'addPerson', ref:'$via', name:viaName, sex:viaSex, by:name });
+        if (u) ops.push({ op:'addChild', unionId:u, personId:'$via' });
+        else ops.push({ op:'addUnion', ref:'$gu' },
+                      { op:'addPartner', unionId:'$gu', personId:anchor.id },
+                      { op:'addChild', unionId:'$gu', personId:'$via' });
+        ops.push(mine,
+                 { op:'addUnion', ref:'$pu' },
+                 { op:'addPartner', unionId:'$pu', personId:'$via' },
+                 { op:'addChild', unionId:'$pu', personId:'$me' });
+      }
+
+      const result = await applyOps(pool, treeId, ops, name || actorOf(req));
+      const meIdMade = result?.refs?.['$me'] || null;
+      audit.record(pool, audit.from(req, {
+        kind: 'tree.join_me', ok: true, treeId, actor: name,
+        sessionId: req.muti?.session?.id,
+        detail: { as: word, to: anchor.id, made: meIdMade, viaMade: result?.refs?.['$via'] || null }
+      })).catch(() => {});
+
+      res.status(201).json({
+        id: meIdMade,
+        via: result?.refs?.['$via'] || null,
+        seq: result?.seq,
+        // Said back, so nobody has to guess what the app did with their answer.
+        recorded: `${name} is recorded as ${anchor.name}'s ` +
+                  (kind === 'child' ? (sex === 'f' ? 'daughter' : sex === 'm' ? 'son' : 'child')
+                 : kind === 'sibling' ? (sex === 'f' ? 'sister' : sex === 'm' ? 'brother' : 'brother or sister')
+                 : kind === 'parent' ? (sex === 'f' ? 'mother' : sex === 'm' ? 'father' : 'parent')
+                 : kind === 'partner' ? (sex === 'f' ? 'wife' : sex === 'm' ? 'husband' : 'partner')
+                 : `grandchild, through ${String(via?.name || '').trim()}`) + '.'
+      });
+    } catch (e) { sendError(res, e); }
+    finally { client.release(); }
+  });
+
   // The neighbourhood around one person, not the whole tree. This is the call
   // that has to stay fast as the tree grows — the client shows one corner of
   // the family, so it should load one corner of the family.

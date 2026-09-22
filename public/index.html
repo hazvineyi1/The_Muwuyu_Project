@@ -11922,29 +11922,183 @@ function askWhoIsViewing(roster, saying){
     };
     wire();
 
-    /* ADDING YOURSELF. The ops route is open to anybody through the gate,
-       which is right: joining a family tree is being put into it, and a
-       relative who has just been given the passcode should not need somebody
-       else awake to be able to say that they exist. */
-    $('whoNew').onclick = async () => {
-      const name = String(prompt('Your name, as the family would write it:') || '').trim();
-      if (!name) return;
-      try {
-        const r = await fetch(`/api/tree/${treeId}/ops`, {
-          method:'POST', headers:{ 'Content-Type':'application/json' },
-          body: JSON.stringify({ ops:[{ op:'addPerson', ref:'me', name, by:name }] })
-        });
-        if (!r.ok) throw new Error('the server answered ' + r.status);
-        const done = await r.json();
-        // applyOps answers with the map from the local ref to the id it minted.
-        const id = done && done.refs && done.refs.me;
-        if (!id) throw new Error('the server did not say which record was made');
-        await pick(id);
-      } catch (e) {
-        say('That could not be added — ' + e.message);
-      }
-    };
+    /* ADDING YOURSELF, LINKED TO SOMEBODY.
+
+       "Do not allow someone to start a name that is not linked. If they
+        access the tree and they are not yet added, they should be instructed
+        to search for a name they directly link to like a parent or sibling or
+        grandparent and link themselves appropriately."
+
+       This used to be one tap and a browser prompt(): a name, posted as a
+       bare addPerson, joined to nothing. The app's own front door was the
+       biggest maker of the floating names this project has spent a week
+       learning to find. */
+    $('whoNew').onclick = () => openJoinMe(roster, pick);
   });
+}
+
+/* ── PUTTING YOURSELF IN THE TREE ─────────────────────────────────────────
+ *
+ * Three questions, in the order a person can answer them: your name, who you
+ * are related to, and what they are to you. Nothing is written until all
+ * three are answered, so there is no moment at which a loose name exists.
+ *
+ * The page cannot see the tree yet — a session that has not said who it is is
+ * given names and nothing else, because the app will not describe a family to
+ * nobody. So it says one sentence and the SERVER does the joining. See
+ * /tree/:id/join-me. */
+const JOIN_WORDS = [
+  ['mother', 'my mother'], ['father', 'my father'],
+  ['sister', 'my sister'], ['brother', 'my brother'],
+  ['daughter', 'my daughter'], ['son', 'my son'],
+  ['wife', 'my wife'], ['husband', 'my husband'],
+  ['grandmother', 'my grandmother'], ['grandfather', 'my grandfather']
+];
+const NEEDS_THE_ONE_BETWEEN = new Set(['grandmother', 'grandfather']);
+
+function openJoinMe(roster, then){
+  closeForm();
+  pending = { kind:'card', anchorId:null };
+  const el = document.createElement('div');
+  el.id = 'form';
+  el.className = 'wide';
+  document.body.appendChild(el);
+
+  let said = { name:'', sex:'', to:null, as:'', via:'', viaSex:'' };
+  let q = '';
+
+  const found = () => {
+    const needle = q.trim().toLowerCase();
+    if (needle.length < 2) return [];
+    return roster.filter(p =>
+      p.name.toLowerCase().includes(needle) ||
+      (p.also || []).some(a => a.toLowerCase().includes(needle))).slice(0, 8);
+  };
+  const nameOf = id => (roster.find(p => p.id === id) || {}).name || 'them';
+
+  const draw = () => {
+    const hits = found();
+    el.innerHTML =
+      `<p class="cap">Put yourself in the tree</p>` +
+      `<p class="covnote">Everybody in this tree is joined to somebody — that ` +
+      `is what makes it a tree rather than a list. So this asks for one ` +
+      `relative you are sure of, and puts you in beside them.</p>` +
+
+      `<p class="lbl">Your name</p>` +
+      `<input id="jName" class="fld" value="${esc(said.name)}" ` +
+        `autocomplete="off" placeholder="As the family would write it">` +
+      `<div class="seg" id="jSex">` +
+        `<button type="button" data-jsex="f" aria-pressed="${said.sex === 'f'}">She</button>` +
+        `<button type="button" data-jsex="m" aria-pressed="${said.sex === 'm'}">He</button>` +
+        `<button type="button" data-jsex="" aria-pressed="${!said.sex}">—</button></div>` +
+
+      `<p class="lbl">Somebody already in the tree</p>` +
+      `<p class="covnote">A parent, a brother or sister, a grandparent — ` +
+      `anybody you can name for certain. Start typing and they will come up.</p>` +
+      `<input id="jFind" class="fld" placeholder="Their name" value="${esc(q)}" ` +
+        `autocomplete="off">` +
+      (said.to
+        ? `<p class="maybe">You are joining on beside <b>${esc(nameOf(said.to))}</b>. ` +
+          `<button type="button" class="linkbtn" id="jElse">somebody else</button></p>`
+        : `<div class="kinlist" id="jList">` +
+          (q.trim().length < 2
+            ? `<p class="browse">Two letters is enough.</p>`
+            : hits.length
+              ? hits.map(p => `<button type="button" data-jto="${esc(p.id)}">${esc(p.name)}` +
+                  ((p.also || []).length ? `<small>also ${esc(p.also[0])}</small>` : '') +
+                  `</button>`).join('')
+              : `<p class="covnote">Nobody of that name is in this family yet. Try ` +
+                `another relative — a parent, a grandparent, a brother or sister. ` +
+                `If none of them is in the tree either, ask whoever sent you the ` +
+                `link to put one of them in first, and you can join on beside them.</p>`) +
+          `</div>`) +
+
+      (said.to
+        ? `<p class="lbl">${esc(nameOf(said.to).split(' ')[0])} is…</p>` +
+          `<div class="seg col" id="jAs">` +
+            JOIN_WORDS.map(([v, w]) =>
+              `<button type="button" data-jas="${v}" aria-pressed="${said.as === v}">` +
+              `${esc(w)}</button>`).join('') +
+          `</div>` +
+          (NEEDS_THE_ONE_BETWEEN.has(said.as)
+            ? `<p class="lbl">And the one in between</p>` +
+              `<p class="covnote">Nobody hangs off a grandparent directly — your ` +
+              `mother or father is between you and ${esc(nameOf(said.to).split(' ')[0])}. ` +
+              `Name them and you both go in together.</p>` +
+              `<input id="jVia" class="fld" value="${esc(said.via)}" ` +
+                `placeholder="Your mother or father" autocomplete="off">` +
+              `<div class="seg" id="jViaSex">` +
+                `<button type="button" data-jvsex="f" aria-pressed="${said.viaSex === 'f'}">She</button>` +
+                `<button type="button" data-jvsex="m" aria-pressed="${said.viaSex === 'm'}">He</button>` +
+                `<button type="button" data-jvsex="" aria-pressed="${!said.viaSex}">—</button></div>`
+            : '')
+        : '') +
+
+      `<div class="row">` +
+        `<button class="btn" id="jGo">Put me in</button>` +
+        `<button class="btn ghost" id="jNo">Back to the list</button></div>` +
+      `<div id="jOut"></div>`;
+    placeForm(el);
+    wire();
+  };
+
+  const ready = () => said.name.trim() && said.to && said.as &&
+    (!NEEDS_THE_ONE_BETWEEN.has(said.as) || said.via.trim());
+
+  const wire = () => {
+    const nm = $('jName');
+    if (nm) nm.oninput = () => { said.name = nm.value; };
+    const fd = $('jFind');
+    if (fd) fd.oninput = () => { q = fd.value; draw(); $('jFind').focus(); };
+    const via = $('jVia');
+    if (via) via.oninput = () => { said.via = via.value; };
+    el.querySelectorAll('[data-jsex]').forEach(b => b.onclick = () => {
+      said.sex = b.dataset.jsex; draw(); });
+    el.querySelectorAll('[data-jvsex]').forEach(b => b.onclick = () => {
+      said.viaSex = b.dataset.jvsex; draw(); });
+    el.querySelectorAll('[data-jto]').forEach(b => b.onclick = () => {
+      said.to = b.dataset.jto; draw(); });
+    el.querySelectorAll('[data-jas]').forEach(b => b.onclick = () => {
+      said.as = b.dataset.jas; draw(); });
+    const other = $('jElse');
+    if (other) other.onclick = () => { said.to = null; said.as = ''; q = ''; draw(); };
+    $('jNo').onclick = () => { closeForm(); location.reload(); };
+    $('jGo').onclick = go;
+  };
+
+  const go = async () => {
+    if (!ready()){
+      $('jOut').innerHTML = `<p class="warn">Your name, one relative, and what ` +
+        `they are to you — all three, and you are in.</p>`;
+      return;
+    }
+    $('jOut').innerHTML = `<p class="browse">Putting you in…</p>`;
+    try {
+      const r = await fetch(`/api/tree/${treeId}/join-me`, {
+        method:'POST', headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify({
+          name: said.name.trim(), sex: said.sex, to: said.to, as: said.as,
+          via: NEEDS_THE_ONE_BETWEEN.has(said.as)
+            ? { name: said.via.trim(), sex: said.viaSex } : null
+        })
+      });
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok || !body.id){
+        $('jOut').innerHTML = `<p class="warn">${esc(body.message ||
+          'That could not be recorded just now. Nothing has been changed.')}</p>`;
+        return;
+      }
+      say(body.recorded || 'You are in the tree.');
+      await then(body.id);
+    } catch (e) {
+      $('jOut').innerHTML = `<p class="warn">That could not be recorded — ` +
+        `${esc(e.message)}. Nothing has been changed.</p>`;
+    }
+  };
+
+  draw();
+  setTimeout(() => { try { $('jName').focus(); } catch (e) {} }, 60);
+  el.addEventListener('keydown', e => { if (e.key === 'Escape'){ e.preventDefault(); draw(); } });
 }
 
 /* WHO IS VIEWING.
@@ -12533,6 +12687,24 @@ $('seedName').addEventListener('keydown', e => { if (e.key === 'Enter') plant();
 function plant(){
   const name = $('seedName').value.trim();
   if (!name){ $('seedName').focus(); return; }
+  /* THE ONLY NAME IN THIS APP THAT IS ALLOWED TO BE JOINED TO NOTHING, and
+     only because there is nothing for it to be joined to.
+
+     "Do not allow someone to start a name that is not linked."
+
+     The welcome screen is hidden once anybody is in the tree, so this should
+     never be reachable with people present — but it is reachable while the
+     shared tree is still arriving, and a relative who plants a name in that
+     second has started a second family inside the first. Guarded here as
+     well as in the drawing, because a rule enforced only by what is on
+     screen is not enforced. */
+  if (people().length){
+    say('There are already people in this tree. Tap one of them and grow from ' +
+        'there, so the name you add is joined to somebody.');
+    $('seedName').value = '';
+    render();
+    return;
+  }
   snapshot();
   state.rootId = sel = addPerson(name, '', '');
   $('seedName').value = '';
