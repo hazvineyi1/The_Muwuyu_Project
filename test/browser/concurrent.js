@@ -15,7 +15,7 @@
 
 const { chromium } = require('playwright');
 
-const { BASE, EXE, openApp, ready } = require('./lib');
+const { BASE, EXE, openApp, ready, sayWhoYouAre } = require('./lib');
 
 let pass = 0, fail = 0;
 const ok  = m => { pass++; console.log('  ok   ' + m); };
@@ -52,6 +52,20 @@ const settle = (page, ms = 1200) => page.waitForTimeout(ms);
     save();
     return id;
   }, TAG);
+  await settle(a.page);
+  /* AND SAYS WHO SHE IS, because the tree is no longer empty.
+     An empty family is the one case the server lets a page read without being
+     told who is looking — there is nobody to be — and planting the first name
+     ends that. Every word this app produces is reckoned from somebody, so the
+     page asks as soon as there is somebody to pick, and a person answers with
+     one tap. This suite is that person.
+
+     It used to walk straight past the question, and the page sat waiting on
+     it: Rudo's next save never left the browser and everything after this
+     failed. That was a real fault and it is fixed in the page — refresh()
+     treated the ask as a failure and stalled — but the answering belongs
+     here, because a page that never gets an answer is right to wait. */
+  await sayWhoYouAre(a.page, { timeout: 8000 });
   await settle(a.page);
   is((await mine(a.page)).length, 1, 'the first person is recorded');
   const realRoot = await a.page.evaluate(t =>

@@ -103,15 +103,33 @@ const settled = page => page.waitForFunction(
    open panel and the run fails once in five.
 
    This asks the page the only question that actually answers it: is there
-   still a difference between what is on screen and what was last synced? */
-const saved = page => page.waitForFunction(
-  () => {
-    try {
-      if (typeof store !== 'string') return false;
-      if (store !== 'shared') return true;          // local: nothing to send
-      return !sending && diffOps(synced, state).length === 0;
-    } catch (e) { return false; }
-  }, null, { timeout: 20000 });
+   still a difference between what is on screen and what was last synced?
+
+   AND IT ANSWERS THE ONE QUESTION THE SERVER INSISTS ON FIRST. A suite that
+   plants a family and saves is, at that moment, the first person in a brand
+   new family: the tree was empty when the page loaded, so nobody was asked
+   who is looking, and the first name planted ends that. The save's own read
+   comes back 428 and the page puts the question on screen and waits — which
+   is correct, and it is what a person answers with one tap. Nothing here can
+   finish until somebody does, so this is somebody. */
+const saved = async (page, { timeout = 20000 } = {}) => {
+  const until = Date.now() + timeout;
+  for (;;) {
+    if (await page.$('#whoQ')) await sayWhoYouAre(page, { timeout: 5000 });
+    const done = await page.evaluate(() => {
+      try {
+        if (typeof store !== 'string') return false;
+        if (store !== 'shared') return true;        // local: nothing to send
+        return !sending && diffOps(synced, state).length === 0;
+      } catch (e) { return false; }
+    });
+    if (done) return page;
+    if (Date.now() > until) {
+      throw new Error('saved(): the page still had unsent work after ' + timeout + 'ms');
+    }
+    await page.waitForTimeout(150);
+  }
+};
 
 module.exports = { BASE, EXE, PASSPHRASE, openApp, enter, onlyThisOrigin,
                    ready, settled, saved, sayWhoYouAre };

@@ -13987,6 +13987,15 @@ function plant(){
   pos = { x:innerWidth/2, y:innerHeight*0.6, k:1 };
   render(); save();
   say(`${name} planted. Tap them to grow the tree.`);
+  /* AND THE SAVE THIS JUST STARTED IS WHAT ASKS WHO IS LOOKING.
+   *
+   * An empty family is the one case the server lets a page read without being
+   * told who is looking — there is nobody to be. That stops being true the
+   * instant this runs, so the read at the end of this very save comes back
+   * 428 and refresh() puts the question on screen. It is not asked here,
+   * because asking means reading the tree and the tree on the server is still
+   * the empty one this name has not reached yet — an ask from here adopted
+   * that empty tree and threw the name away. */
 }
 
 /* Pasting a different family's link into the address bar changes only the
@@ -14747,14 +14756,52 @@ function rewriteHeldIds(from, to){
   }
 }
 
+/* One question, however many reads run into it at once. A poll, a save and a
+   manual refresh can all be in the air together, and three copies of the same
+   panel on top of each other is worse than the problem. */
+let askingWho = null;
+
 /* Re-read the tree, keeping where the reader is looking. */
 async function refresh({ quiet = false } = {}){
   const keepSel = sel, keepMe = meId;
   try { await pull(); } catch (e) {
-    store = 'stalled';
-    stalledWhy = 'The tree could not be re-read (' + e.message + ').';
-    showStalled();
-    return;
+    /* ── A READ REFUSED FOR WANT OF A VIEWER IS A QUESTION, NOT A FAILURE ──
+     *
+     * load() has always known this. refresh() did not, and it put the page
+     * into `stalled` — which stops every save, stops the polling, and says
+     * "the tree could not be re-read (who_are_you)" to somebody who has done
+     * nothing wrong.
+     *
+     * IT IS THE FIRST PERSON IN A NEW FAMILY WHO MEETS IT, every time. An
+     * empty family has nobody to be, so the server lets the page in without
+     * asking and the page never asks. The moment they plant the first name
+     * the tree is no longer empty — and the very next read, which is the one
+     * the save itself does, comes back 428. So the app stalled on the first
+     * name of every new family, and the second name was never saved at all.
+     * Nothing was lost, because nothing reached the server; but the page sat
+     * there looking like it was working until it was reloaded.
+     *
+     * The answer is one tap and the 428 carries the roster to answer with, so
+     * it is asked and the read is tried again. */
+    if (e.whoAreYou){
+      try {
+        askingWho = askingWho || askWhoIsViewing(e.whoAreYou, e.saying);
+        await askingWho;
+        askingWho = null;
+        await pull();
+      } catch (again) {
+        askingWho = null;
+        store = 'stalled';
+        stalledWhy = 'The tree could not be re-read (' + again.message + ').';
+        showStalled();
+        return;
+      }
+    } else {
+      store = 'stalled';
+      stalledWhy = 'The tree could not be re-read (' + e.message + ').';
+      showStalled();
+      return;
+    }
   }
   if (keepMe && state.people[keepMe]) meId = keepMe;
   if (keepSel && state.people[keepSel]) sel = keepSel;

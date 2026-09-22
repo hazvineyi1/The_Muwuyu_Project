@@ -35,7 +35,15 @@ const section = t => console.log('\n' + t);
 
   section('a man with two wives, and a child by each');
   await page.evaluate(t => {
-    const father = addPerson('Sydney ' + t, 'm', 'Mwendamberi', '1940', '2013');
+    /* JOINED TO WHATEVER IS ALREADY HERE. A name may stand alone only in an
+       empty family — see db/joined.js — and this suite shares the family with
+       whatever else the deployment holds. Whose child Sydney is does not
+       matter to anything below; what is under test is the question asked
+       about HIS children's parents. */
+    const here = people();
+    const father = here.length
+      ? grow('child', here[0].id, 'Sydney ' + t, 'm', 'Mwendamberi', { born:'1940', died:'2013' })
+      : addPerson('Sydney ' + t, 'm', 'Mwendamberi', '1940', '2013');
     state.rootId = father;
     grow('partner', father, 'Evelyn ' + t, 'f', 'Moyondizvo', { born:'1954' });
     grow('child',   father, 'Bertha ' + t, 'f', 'Mwendamberi', { born:'1975' });
@@ -166,8 +174,12 @@ const section = t => console.log('\n' + t);
   await ready(simple.page);
   const TAG2 = 'One' + Date.now().toString(36).slice(-4);
   await simple.page.evaluate(t => {
-    const f = addPerson('Farai ' + t, 'm', 'Nzou', '1930', '');
-    state.rootId = f;
+    // Joined, for the reason above. Farai and Chipo are still the only
+    // marriage among TENDAI's parents, which is the whole of what is asked.
+    const here = people();
+    const f = here.length
+      ? grow('child', here[0].id, 'Farai ' + t, 'm', 'Nzou', { born:'1930' })
+      : addPerson('Farai ' + t, 'm', 'Nzou', '1930', '');
     grow('partner', f, 'Chipo ' + t, 'f', 'Shava', { born:'1935' });
     grow('child', f, 'Tendai ' + t, 'm', 'Nzou', { born:'1960' });
     save();

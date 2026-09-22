@@ -14,7 +14,7 @@
 
 const { chromium } = require('playwright');
 
-const { BASE, EXE, enter, settled } = require('./lib');
+const { BASE, EXE, enter, settled, sayWhoYouAre } = require('./lib');
 
 let pass = 0, fail = 0;
 const ok  = m => { pass++; console.log('  ok   ' + m); };
@@ -47,6 +47,12 @@ const section = t => console.log('\n' + t);
     await enter(page, BASE);
     armed = true;
     await page.reload({ waitUntil:'domcontentloaded' });
+    /* A family with somebody in it asks who is looking before it hands the
+       tree over, and does not finish loading until it is told — a person
+       answers with one tap. Bounded short, because most of the openings below
+       are deliberately broken ones where the tree never arrives and nothing
+       is ever asked. */
+    await sayWhoYouAre(page, { timeout: 3000 });
     await settled(page);
     return { ctx, page };
   };
