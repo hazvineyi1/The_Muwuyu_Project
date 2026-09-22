@@ -49,6 +49,66 @@
   --pod:#FCFAF4; --pod-edge:#C3B49A; --pod-hi:#F2ECDE;
   --ink:#221C13; --muted:#6E6555;
   --gold:#8A5A16; --gold-soft:#B0812F; --leaf:#3F5A2E;
+  /* ── HOW BIG THE WORDS ARE ──────────────────────────────────────────────
+   *
+   * "Redesign and build this using the best structure, color schemes, layout
+   *  and architectural genius... cohesive."
+   *
+   * Colour became a system months ago, with six measured tints and a contrast
+   * audit that fails the build. Type never did. Before this there were
+   * SEVENTEEN sizes between 8px and 18px, in half-pixel steps — 10 and 10.5,
+   * 11 and 11.5, 12 and 12.5, 13 and 13.5, 14 and 14.5 — across 124
+   * declarations. Half a pixel is below the size at which anybody can tell
+   * two things apart, so those pairs were not a hierarchy; they were the
+   * record of somebody nudging a number until a line stopped wrapping.
+   *
+   * Six sizes, and each one has a job. A seventh would mean two of these do
+   * the same job, which is how the seventeen happened.
+   *
+   * The steps are 1.5px apart through the range the interface actually reads
+   * at, and jump to the heading. At nine to fifteen pixels, a fixed step
+   * reads as even where a fixed RATIO does not — 1.2 from 9px is 10.8, which
+   * nobody sees as a step at all. */
+  --t-mark: 9px;      /* uppercase, letterspaced: a mutupo, a rank, a chip  */
+  --t-note: 10.5px;   /* the small print under a thing                      */
+  --t-read: 12px;     /* sentences somebody is meant to read                */
+  --t-act:  13.5px;   /* what you press                                     */
+  --t-name: 15px;     /* a person's name                                    */
+  --t-head: 18px;     /* the kinship word — see below                       */
+
+  /* AND WHY THE LARGEST THING IN THE INTERFACE IS ONE SHONA WORD.
+   *
+   * --t-head is used exactly once, on the word at the top of a card: Baba,
+   * Ambuya, Amainini. It is bigger than anybody's name, bigger than any
+   * heading, bigger than the title of the app. That is not an accident of
+   * this scale — it is the scale agreeing with the project. The answer this
+   * app exists to give is what one person is to another, in the family's own
+   * word, and the largest type on the screen should be the answer.
+   *
+   * The welcome screen's title is larger still and is not on this scale at
+   * all: it is display type that grows with the viewport, and the one place
+   * here doing a different job from the interface. Named in the test that
+   * enforces this, rather than left to look like a value somebody missed. */
+
+  /* ── HOW MUCH ROOM IS LEFT AROUND THEM ─────────────────────────────────
+   *
+   * Every whole number from 1 to 13 was in use, plus 15, 16, 18, 22, a 6.5
+   * and an 8.5, across more than two hundred declarations. That is not a
+   * rhythm, it is two hundred separate decisions.
+   *
+   * Eight values: a two-pixel grid up to twelve, where the interface does
+   * nearly all its spacing, and then sixteen and twenty-four for the two
+   * places that hold a panel apart from the screen.
+   *
+   * WRITTEN AS NUMBERS, NOT AS var(). A shorthand is read far more often
+   * than it is changed, and `padding:9px 10px` says what it does where
+   * `padding:var(--s-4) var(--s-5)` makes somebody look two things up to
+   * learn nothing. The tokens are here to be the list; test/scales.test.js
+   * is what makes the list true, and it reads every declaration in the file
+   * whether it was written as a token or as a number. */
+  --s-1: 2px;  --s-2: 4px;  --s-3: 6px;  --s-4: 8px;
+  --s-5: 10px; --s-6: 12px; --s-7: 16px; --s-8: 24px;
+
   --shadow:0 2px 10px rgba(34,28,19,.14);
   --lift:0 10px 30px rgba(34,28,19,.24);
 }
@@ -419,9 +479,9 @@ body.carrying .pod{transition:none;}
    "this is waiting on somebody" rather than "this is wrong". */
 .pod.gap{border-style:dashed; border-color:var(--gold-soft);}
 .gapmark{
-  margin-top:3px; padding:1px 7px; border-radius:99px;
+  margin-top:4px; padding:2px 8px; border-radius:99px;
   background:var(--pod); border:1px dashed var(--gold-soft);
-  font-family:'Karla',sans-serif; font-size:8.5px; font-weight:700;
+  font-family:'Karla',sans-serif; font-size:var(--t-mark); font-weight:700;
   letter-spacing:.06em; text-transform:uppercase; color:var(--gold);
   white-space:nowrap; max-width:100%; overflow:hidden; text-overflow:ellipsis;
 }
@@ -450,22 +510,22 @@ body.carrying .pod{transition:none;}
 #litbar{
   position:fixed; left:50%; bottom:74px; transform:translateX(-50%); z-index:46;
   display:flex; flex-wrap:wrap; align-items:center; justify-content:center;
-  gap:7px; max-width:min(92vw,600px); pointer-events:none;
+  gap:8px; max-width:min(92vw,600px); pointer-events:none;
 }
 #litbar > *{pointer-events:auto;}
 /* A lit word: the word, how many it reached, and the way out. No sentence —
    the tree is already showing which people, which is the whole answer. */
 #litbar .chip{
-  display:flex; align-items:center; gap:7px;
-  padding:4px 4px 4px 13px; border-radius:99px;
+  display:flex; align-items:center; gap:8px;
+  padding:4px 4px 4px 12px; border-radius:99px;
   background:var(--pod); border:1.5px solid var(--gold); box-shadow:var(--shadow);
 }
 #litbar .chip b{
-  font-family:'Fraunces',Georgia,serif; font-size:14px; color:var(--ink);
+  font-family:'Fraunces',Georgia,serif; font-size:var(--t-act); color:var(--ink);
   white-space:nowrap;
 }
 #litbar .chip i{
-  font-style:normal; font-family:'Karla',sans-serif; font-size:10.5px;
+  font-style:normal; font-family:'Karla',sans-serif; font-size:var(--t-note);
   font-weight:700; color:var(--gold); letter-spacing:.04em;
 }
 /* The picked chip carries a sentence rather than a count, so it is allowed
@@ -476,24 +536,24 @@ body.carrying .pod{transition:none;}
   width:22px; height:22px; padding:0; border-radius:50%;
   display:flex; align-items:center; justify-content:center;
   background:var(--pod-hi); border:1px solid var(--pod-edge); color:var(--muted);
-  font-size:13px; line-height:1; cursor:pointer;
+  font-size:var(--t-act); line-height:1; cursor:pointer;
 }
 #litbar .chip button:hover{border-color:var(--gold); color:var(--ink);}
 #litbar .pill{
   display:flex; align-items:center; gap:12px;
-  padding:9px 9px 9px 16px; border-radius:99px;
+  padding:10px 10px 10px 16px; border-radius:99px;
   background:var(--pod); border:2px solid var(--gold); box-shadow:var(--lift);
-  font-family:'Karla',sans-serif; font-size:12.5px; color:var(--muted);
+  font-family:'Karla',sans-serif; font-size:var(--t-read); color:var(--muted);
 }
 #litbar b{
   flex:0 0 auto; white-space:nowrap;
-  font-family:'Fraunces',Georgia,serif; font-size:16px; color:var(--ink);
+  font-family:'Fraunces',Georgia,serif; font-size:var(--t-name); color:var(--ink);
 }
 #litbar span{flex:1 1 auto; line-height:1.4;}
 #litbar button{
-  flex:0 0 auto; padding:7px 13px; border-radius:99px; cursor:pointer;
+  flex:0 0 auto; padding:8px 12px; border-radius:99px; cursor:pointer;
   background:var(--pod-hi); border:1.5px solid var(--pod-edge); color:var(--ink);
-  font-family:'Karla',sans-serif; font-size:11.5px; font-weight:700;
+  font-family:'Karla',sans-serif; font-size:var(--t-read); font-weight:700;
 }
 #litbar button:hover{border-color:var(--gold);}
 /* The census rows. A word, how many people it reaches, and — small, because
@@ -503,71 +563,71 @@ body.carrying .pod{transition:none;}
    somebody came here with; what it turns into is said underneath in smaller
    type, so the app is never doing something unannounced. */
 #form .wayrow{
-  display:flex; align-items:baseline; gap:9px; width:100%; text-align:left;
-  padding:8px 11px; margin-bottom:4px; border-radius:12px 4px 12px 4px;
+  display:flex; align-items:baseline; gap:10px; width:100%; text-align:left;
+  padding:8px 12px; margin-bottom:4px; border-radius:12px 4px 12px 4px;
   background:var(--pod-hi); border:1.5px solid var(--pod-edge); cursor:pointer;
   font:inherit; color:var(--ink);
 }
 #form .wayrow:hover{border-color:var(--gold);}
 #form .wayrow b{
-  flex:0 0 auto; font-family:'Fraunces',Georgia,serif; font-size:14.5px;
+  flex:0 0 auto; font-family:'Fraunces',Georgia,serif; font-size:var(--t-name);
 }
-#form .wayrow em{flex:1 1 auto; font-style:normal; font-size:11px; color:var(--muted);}
+#form .wayrow em{flex:1 1 auto; font-style:normal; font-size:var(--t-note); color:var(--muted);}
 #form .wayrow small{
-  flex:0 0 auto; font-size:10px; letter-spacing:.06em; color:var(--muted); opacity:.8;
+  flex:0 0 auto; font-size:var(--t-note); letter-spacing:.06em; color:var(--muted); opacity:.8;
 }
 #form .wayrow.waiting{opacity:.5; cursor:default;}
 #form .wayrow.waiting:hover{border-color:var(--pod-edge);}
 #form .wordrow{
-  display:flex; align-items:baseline; gap:9px; width:100%; text-align:left;
-  padding:8px 11px; margin-bottom:4px; border-radius:12px 4px 12px 4px;
+  display:flex; align-items:baseline; gap:10px; width:100%; text-align:left;
+  padding:8px 12px; margin-bottom:4px; border-radius:12px 4px 12px 4px;
   background:var(--pod-hi); border:1.5px solid var(--pod-edge); cursor:pointer;
   font:inherit; color:var(--ink);
 }
 #form .wordrow:hover{border-color:var(--gold);}
-#form .wordrow b{font-family:'Fraunces',Georgia,serif; font-size:14.5px;}
+#form .wordrow b{font-family:'Fraunces',Georgia,serif; font-size:var(--t-name);}
 #form .wordrow .n{
-  flex:0 0 auto; min-width:22px; text-align:center; padding:1px 6px; border-radius:99px;
+  flex:0 0 auto; min-width:22px; text-align:center; padding:2px 6px; border-radius:99px;
   background:var(--gold); color:var(--pod);
-  font-family:'Karla',sans-serif; font-size:10.5px; font-weight:700;
+  font-family:'Karla',sans-serif; font-size:var(--t-note); font-weight:700;
 }
 #form .wordrow em{
-  flex:1 1 auto; font-style:normal; font-size:10.5px; color:var(--muted);
+  flex:1 1 auto; font-style:normal; font-size:var(--t-note); color:var(--muted);
   letter-spacing:.02em;
 }
 #form .splitrow{
-  padding:9px 11px; margin-bottom:5px; border-radius:12px;
+  padding:10px 12px; margin-bottom:6px; border-radius:12px;
   background:var(--pod-hi); border:1.5px solid var(--pod-edge);
 }
 #form .splitrow > b{
-  display:block; font-family:'Karla',sans-serif; font-size:10px;
+  display:block; font-family:'Karla',sans-serif; font-size:var(--t-note);
   letter-spacing:.14em; text-transform:uppercase; color:var(--muted);
 }
 #form .splitrow i{
-  font-style:normal; font-family:'Fraunces',Georgia,serif; font-size:14px;
+  font-style:normal; font-family:'Fraunces',Georgia,serif; font-size:var(--t-act);
   color:var(--ink);
 }
 #form .splitrow i + i:before{content:' · '; color:var(--gold); font-weight:700;}
 @keyframes pop{from{transform:translate(-50%,-50%) scale(.15); opacity:0;}}
 .pod .nm{
-  font-family:'Fraunces',Georgia,'Times New Roman',serif; font-weight:500; font-size:15px;
+  font-family:'Fraunces',Georgia,'Times New Roman',serif; font-weight:500; font-size:var(--t-name);
   line-height:1.22; text-align:center; color:var(--ink); word-break:break-word;
 }
 .pod .also{
-  font-family:'Fraunces',Georgia,serif; font-style:italic; font-size:11.5px;
-  line-height:1.2; text-align:center; color:var(--muted); margin-top:1px;
+  font-family:'Fraunces',Georgia,serif; font-style:italic; font-size:var(--t-read);
+  line-height:1.2; text-align:center; color:var(--muted); margin-top:2px;
 }
 #form .build{
   margin:12px 0 0; text-align:center;
-  font-family:'Karla',sans-serif; font-size:10px; letter-spacing:.1em;
+  font-family:'Karla',sans-serif; font-size:var(--t-note); letter-spacing:.1em;
   text-transform:uppercase; color:var(--muted); opacity:.7;
 }
 #form .cap i.alsocap{
   font-family:'Fraunces',Georgia,serif; font-style:italic; text-transform:none;
-  letter-spacing:0; font-size:12px; color:var(--muted);
+  letter-spacing:0; font-size:var(--t-read); color:var(--muted);
 }
 .pod .tot{
-  font-size:9.5px; letter-spacing:.11em; text-transform:uppercase;
+  font-size:var(--t-mark); letter-spacing:.11em; text-transform:uppercase;
   color:var(--muted); margin-top:4px;
 }
 /* WHAT TO CALL THIS PERSON. The word sits above the name because it is what
@@ -575,13 +635,13 @@ body.carrying .pod{transition:none;}
    everybody, and the name is how you find the card while the word is what you
    came for. */
 .pod .ttl{
-  font-family:'Fraunces',Georgia,serif; font-size:12.5px; font-weight:600;
+  font-family:'Fraunces',Georgia,serif; font-size:var(--t-read); font-weight:600;
   line-height:1.15; letter-spacing:.01em; color:var(--leaf);
-  margin-bottom:3px; text-align:center; max-width:100%;
+  margin-bottom:4px; text-align:center; max-width:100%;
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
 }
 .pod .ttl em{
-  font-style:normal; font-size:9px; font-weight:700; vertical-align:super;
+  font-style:normal; font-size:var(--t-mark); font-weight:700; vertical-align:super;
   margin-left:2px; opacity:.7;
 }
 /* The card everything is being reckoned FROM. Said in words rather than left
@@ -589,7 +649,7 @@ body.carrying .pod{transition:none;}
    suddenly somebody else's, the one thing that must not be guessed at is
    whose. */
 .pod .ttl.vantage{
-  color:var(--gold); font-family:inherit; font-size:9px; font-weight:700;
+  color:var(--gold); font-family:inherit; font-size:var(--t-mark); font-weight:700;
   letter-spacing:.1em; text-transform:uppercase;
   /* It is a handle as well as a label: tapping it opens the whole of that
      person's vocabulary. Underlined faintly rather than made into a button,
@@ -605,22 +665,22 @@ body.carrying .pod{transition:none;}
 .pod .ttl.vantage:focus-visible{outline:2px solid var(--gold); outline-offset:2px; border-radius:3px;}
 /* --muted, not --gold-soft. See .pod .rank below: this is text, and
    --gold-soft is an edge. */
-.pod .mk{position:absolute; left:9px; top:5px; font-size:10px; color:var(--muted);}
+.pod .mk{position:absolute; left:9px; top:5px; font-size:var(--t-note); color:var(--muted);}
 .pod .rm{
   position:absolute; right:-9px; top:-9px; width:22px; height:22px; border-radius:50%;
   display:none; align-items:center; justify-content:center;
   background:var(--pod); border:1.5px solid var(--pod-edge); color:var(--muted);
-  font-size:12px; line-height:1; cursor:pointer;
+  font-size:var(--t-read); line-height:1; cursor:pointer;
 }
 .pod.sel .rm{display:flex;}
 .pod .rm:hover{border-color:var(--gold); color:var(--gold);}
 
 /* move somebody earlier or later among their brothers and sisters */
 .pod .ord{
-  position:absolute; top:50%; margin-top:-13px; width:26px; height:26px;
+  position:absolute; top:50%; margin-top:-12px; width:26px; height:26px;
   border-radius:50%; display:none; align-items:center; justify-content:center;
   background:var(--pod); border:1.5px solid var(--pod-edge); color:var(--muted);
-  font-size:14px; line-height:1; cursor:pointer;
+  font-size:var(--t-act); line-height:1; cursor:pointer;
 }
 .pod .ord.older{left:-14px;} .pod .ord.younger{right:-14px;}
 .pod.sel .ord{display:flex;}
@@ -639,8 +699,8 @@ body.carrying .pod{transition:none;}
  * jobs. --muted IS the job — quiet text — and it already cleared the bar in
  * every palette, light and dark, without changing a single value. */
 .pod .rank{
-  font-size:9px; letter-spacing:.14em; text-transform:uppercase;
-  color:var(--muted); margin-top:3px; font-weight:700;
+  font-size:var(--t-mark); letter-spacing:.14em; text-transform:uppercase;
+  color:var(--muted); margin-top:4px; font-weight:700;
 }
 
 /* the furthest ancestor anybody can trace — the taproot of the line */
@@ -655,12 +715,12 @@ body.carrying .pod{transition:none;}
    words on it to carry: the same hue, ten per cent further from the page. */
 .pod.taproot .badge{
   position:absolute; top:-10px; left:50%; transform:translateX(-50%);
-  padding:2px 9px; border-radius:999px; white-space:nowrap;
+  padding:2px 10px; border-radius:999px; white-space:nowrap;
   background:var(--root-strong); color:var(--sky);
-  font-size:8.5px; font-weight:700; letter-spacing:.16em; text-transform:uppercase;
+  font-size:var(--t-mark); font-weight:700; letter-spacing:.16em; text-transform:uppercase;
 }
 .pod .dates{
-  font-size:9.5px; color:var(--muted); margin-top:3px;
+  font-size:var(--t-mark); color:var(--muted); margin-top:4px;
   font-variant-numeric:tabular-nums;
 }
 /* whoever is holding the phone */
@@ -672,8 +732,8 @@ body.carrying .pod{transition:none;}
                     var(--lift);}
 .pod.you .badge{
   position:absolute; top:-10px; left:50%; transform:translateX(-50%);
-  padding:2px 9px; border-radius:999px; background:var(--leaf); color:var(--sky);
-  font-size:8.5px; font-weight:700; letter-spacing:.16em; text-transform:uppercase;
+  padding:2px 10px; border-radius:999px; background:var(--leaf); color:var(--sky);
+  font-size:var(--t-mark); font-weight:700; letter-spacing:.16em; text-transform:uppercase;
 }
 
 /* ── A FAMILY THAT MARRIED IN ────────────────────────────────────────────
@@ -722,19 +782,19 @@ body.carrying .pod{transition:none;}
    than no family name at all. */
 .pod .famname{
   position:absolute; bottom:-9px; left:50%; transform:translateX(-50%);
-  padding:2px 9px; border-radius:999px; white-space:nowrap;
+  padding:2px 10px; border-radius:999px; white-space:nowrap;
   background:var(--fam); color:var(--pod);
-  font-size:8.5px; font-weight:700; letter-spacing:.14em; text-transform:uppercase;
+  font-size:var(--t-mark); font-weight:700; letter-spacing:.14em; text-transform:uppercase;
 }
 /* The door. Where the two families are joined by a marriage, and therefore
    the one place it makes sense to put them away or bring them back. */
 .pod .fold{
   position:absolute; right:-10px; top:-10px; z-index:3;
-  min-width:21px; height:21px; padding:0 5px;
+  min-width:21px; height:21px; padding:0 6px;
   display:flex; align-items:center; justify-content:center;
   border-radius:999px; border:1.5px solid var(--fam);
   background:var(--pod); color:var(--fam);
-  font-size:10px; font-weight:700; line-height:1; font-variant-numeric:tabular-nums;
+  font-size:var(--t-note); font-weight:700; line-height:1; font-variant-numeric:tabular-nums;
   cursor:pointer;
 }
 /* A FINGER IS WIDER THAN THE MARK IT IS AIMING AT. The circle stays small
@@ -767,7 +827,7 @@ body.carrying .pod{transition:none;}
 /* the families listed in the Muwuyu panel */
 #form .fams{display:flex; flex-direction:column; gap:6px; margin:2px 0 8px;}
 #form .fams .fam{
-  display:flex; align-items:center; gap:9px; width:100%;
+  display:flex; align-items:center; gap:10px; width:100%;
   padding:8px 10px; border-radius:10px; text-align:left;
   border:1.5px solid var(--pod-edge); background:var(--pod); cursor:pointer;
 }
@@ -776,10 +836,10 @@ body.carrying .pod{transition:none;}
   width:10px; height:10px; border-radius:3px; flex:none;
   background:var(--fam);
 }
-#form .fams .fam u{flex:1; text-decoration:none; display:block; font-size:12.5px;}
-#form .fams .fam u small{display:block; font-size:10px; color:var(--muted); margin-top:2px;}
+#form .fams .fam u{flex:1; text-decoration:none; display:block; font-size:var(--t-read);}
+#form .fams .fam u small{display:block; font-size:var(--t-note); color:var(--muted); margin-top:2px;}
 #form .fams .fam b{
-  font-size:9px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted);
+  font-size:var(--t-mark); letter-spacing:.12em; text-transform:uppercase; color:var(--muted);
 }
 #form .fams .fam.shut{opacity:.72;}
 #form .fams .fam.shut i{background:transparent; border:1.5px solid var(--fam);}
@@ -789,9 +849,9 @@ body.carrying .pod{transition:none;}
    was leads the line, because on a shared tree the first thing you want to
    know is who has been working. The ones since you last looked carry a mark
    down their edge; your own are set back, because you already know. */
-#form .news{display:flex; flex-direction:column; gap:1px; margin:2px 0 10px;}
+#form .news{display:flex; flex-direction:column; gap:2px; margin:2px 0 10px;}
 #form .news .ln{
-  padding:8px 11px; border-left:3px solid transparent;
+  padding:8px 12px; border-left:3px solid transparent;
   background:var(--pod); border-radius:4px;
 }
 #form .news .ln:nth-child(odd){background:var(--pod-hi);}
@@ -800,36 +860,36 @@ body.carrying .pod{transition:none;}
 #form .news .ln.mine u b{color:var(--muted);}
 #form .news u{
   display:block; text-decoration:none; font-family:'Karla',sans-serif;
-  font-size:12.5px; color:var(--ink); line-height:1.45;
+  font-size:var(--t-read); color:var(--ink); line-height:1.45;
 }
 #form .news u b{color:var(--gold); font-weight:700;}
-#form .news u i{font-style:normal; font-size:10.5px; color:var(--muted);}
-#form .news u small{display:block; font-size:10.5px; color:var(--muted); margin-top:2px;}
-#form .news .linkbtn{font-size:12.5px; font-weight:700;}
+#form .news u i{font-style:normal; font-size:var(--t-note); color:var(--muted);}
+#form .news u small{display:block; font-size:var(--t-note); color:var(--muted); margin-top:2px;}
+#form .news .linkbtn{font-size:var(--t-read); font-weight:700;}
 
 /* The rooms behind the one door. A name and a sentence each, because the
    names alone — Roots, Mitupo, Kinship, Words — mean nothing to somebody who
    has just been handed a link to their family's tree. */
-#form .rooms{display:flex; flex-direction:column; gap:5px; margin:2px 0 10px;}
+#form .rooms{display:flex; flex-direction:column; gap:6px; margin:2px 0 10px;}
 #form .room{
   display:block; width:100%; text-align:left; cursor:pointer;
-  padding:9px 11px; border-radius:12px 4px 12px 4px;
+  padding:10px 12px; border-radius:12px 4px 12px 4px;
   background:var(--pod); border:1.5px solid var(--pod-edge);
 }
 #form .room:hover{border-color:var(--gold-soft); background:var(--pod-hi);}
 #form .room u{
   display:block; text-decoration:none; font-family:'Karla',sans-serif;
-  font-size:13px; font-weight:700; color:var(--ink); line-height:1.35;
+  font-size:var(--t-act); font-weight:700; color:var(--ink); line-height:1.35;
 }
 #form .room u i{
   display:inline-flex; align-items:center; justify-content:center;
-  min-width:16px; height:16px; margin-left:7px; padding:0 4px;
+  min-width:16px; height:16px; margin-left:8px; padding:0 4px;
   border-radius:999px; background:var(--gold); color:var(--sky);
-  font-size:9.5px; font-weight:800; font-style:normal; vertical-align:1px;
+  font-size:var(--t-mark); font-weight:800; font-style:normal; vertical-align:1px;
 }
 #form .room u small{
-  display:block; font-weight:400; font-size:11px; color:var(--muted);
-  margin-top:3px; line-height:1.45;
+  display:block; font-weight:400; font-size:var(--t-note); color:var(--muted);
+  margin-top:4px; line-height:1.45;
 }
 /* Starting again is the last line of the last group, and it says so. */
 #form .room.danger u{color:var(--gold);}
@@ -848,7 +908,7 @@ body.carrying .pod{transition:none;}
   position:absolute; bottom:-9px; left:50%; transform:translateX(-50%);
   padding:2px 8px; border-radius:999px; white-space:nowrap;
   background:var(--pod); border:1.5px dashed var(--gold-soft); color:var(--gold);
-  font-size:8px; font-weight:700; letter-spacing:.14em; text-transform:uppercase;
+  font-size:var(--t-mark); font-weight:700; letter-spacing:.14em; text-transform:uppercase;
 }
 /* One mark at a time at the foot of a pod: a family name wins, because a
    person in a named family is by definition joined to something. */
@@ -860,7 +920,7 @@ body.carrying .pod{transition:none;}
   box-shadow:none; min-height:38px; width:112px;
 }
 .pod.socket .nm{
-  font-family:'Karla',sans-serif; font-size:11.5px; font-weight:600;
+  font-family:'Karla',sans-serif; font-size:var(--t-read); font-weight:600;
   letter-spacing:.09em; text-transform:uppercase; color:var(--muted);
 }
 .pod.socket:hover{border-color:var(--gold); border-style:solid;}
@@ -870,15 +930,15 @@ body.carrying .pod{transition:none;}
 .bud{
   position:absolute; transform:translate(-50%,-50%);
   display:flex; align-items:center; gap:6px;
-  padding:6px 12px 6px 9px; border-radius:999px;
+  padding:6px 12px 6px 10px; border-radius:999px;
   background:var(--pod); border:1.5px dashed var(--gold-soft); color:var(--gold);
-  font-size:11.5px; font-weight:700; letter-spacing:.05em;
+  font-size:var(--t-read); font-weight:700; letter-spacing:.05em;
   white-space:nowrap; cursor:pointer; box-shadow:var(--shadow);
   animation:bud .24s ease-out backwards;
 }
 .bud:hover{background:var(--gold); border-style:solid; border-color:var(--gold); color:var(--pod);}
 .bud:focus-visible{outline:2.5px solid var(--gold); outline-offset:3px;}
-.bud i{font-style:normal; font-size:13px; line-height:1;}
+.bud i{font-style:normal; font-size:var(--t-act); line-height:1;}
 @keyframes bud{from{opacity:0; transform:translate(-50%,-50%) scale(.4);}}
 
 /* THE RIBBON THAT USED TO BE HERE is gone, and its going is the point of
@@ -903,7 +963,7 @@ body.carrying .pod{transition:none;}
      below the two banners, which report on the connection and must stay
      readable whatever is open. */
   z-index:60;
-  width:252px; padding:15px; border-radius:22px 6px 22px 6px;
+  width:252px; padding:16px; border-radius:22px 6px 22px 6px;
   background:var(--pod); border:2px solid var(--gold);
   box-shadow:var(--lift); animation:bud .2s ease-out backwards;
   max-height:calc(100vh - 110px); overflow-y:auto;   /* short screens still reach Grow */
@@ -913,18 +973,18 @@ body.carrying .pod{transition:none;}
    the tree rather than over it. */
 #form.wide{width:min(92vw, 372px);}
 #form .cap{
-  font-size:10.5px; letter-spacing:.12em; text-transform:uppercase;
+  font-size:var(--t-note); letter-spacing:.12em; text-transform:uppercase;
   color:var(--muted); margin:0 0 10px; line-height:1.5;
 }
 #form .cap b{color:var(--gold); font-weight:700;}
 #form .relline{
-  margin:0 0 12px; padding:9px 11px; border-radius:12px 4px 12px 4px;
+  margin:0 0 12px; padding:10px 12px; border-radius:12px 4px 12px 4px;
   background:var(--leaf); color:var(--sky);
 }
 #form .relline b{
-  display:block; font-family:'Fraunces',Georgia,serif; font-size:18px; font-weight:600;
+  display:block; font-family:'Fraunces',Georgia,serif; font-size:var(--t-head); font-weight:600;
 }
-#form .relline span{display:block; font-size:11px; line-height:1.45; opacity:.88;}
+#form .relline span{display:block; font-size:var(--t-note); line-height:1.45; opacity:.88;}
 .btn.wide{width:100%; flex:none; margin-bottom:8px; text-align:center;}
 
 /* somebody by this name may already be in the tree */
@@ -933,25 +993,25 @@ body.carrying .pod{transition:none;}
   display:flex; align-items:center; gap:8px; width:100%;
   padding:8px 10px; margin-bottom:6px; border-radius:12px 4px 12px 4px;
   background:var(--pod-hi); border:1.5px solid var(--gold-soft);
-  color:var(--ink); font-family:'Karla',sans-serif; font-size:12px;
+  color:var(--ink); font-family:'Karla',sans-serif; font-size:var(--t-read);
   text-align:left; cursor:pointer;
 }
 #form .dupe:hover{border-color:var(--gold); background:var(--pod);}
 /* The offer above the browsable list. Quieter than the name-match one: it is
    an invitation, not a warning that you may be typing a duplicate. */
 #form .browse{
-  margin:0 0 6px; font-size:11px; line-height:1.45; color:var(--muted);
+  margin:0 0 6px; font-size:var(--t-note); line-height:1.45; color:var(--muted);
 }
 #form .dupe u{
   flex:1; text-decoration:none; display:block;
-  font-family:'Fraunces',Georgia,serif; font-size:14px; font-weight:500;
+  font-family:'Fraunces',Georgia,serif; font-size:var(--t-act); font-weight:500;
 }
 #form .dupe u small{
-  display:block; font-family:'Karla',sans-serif; font-size:10.5px;
-  color:var(--muted); font-weight:400; margin-top:1px;
+  display:block; font-family:'Karla',sans-serif; font-size:var(--t-note);
+  color:var(--muted); font-weight:400; margin-top:2px;
 }
 #form .dupe em{
-  font-style:normal; font-size:10.5px; font-weight:700; letter-spacing:.06em;
+  font-style:normal; font-size:var(--t-note); font-weight:700; letter-spacing:.06em;
   text-transform:uppercase; color:var(--gold); white-space:nowrap;
 }
 #form .dupe[disabled]{opacity:.6; cursor:default; border-style:dashed;}
@@ -970,23 +1030,23 @@ body.carrying .pod{transition:none;}
    actions stand apart rather than the whole row being one button. */
 #form .found{
   display:flex; align-items:center; gap:10px;
-  padding:7px 9px; border:1px solid var(--pod-edge); border-radius:10px;
-  background:var(--pod-hi); margin-bottom:5px;
+  padding:8px 10px; border:1px solid var(--pod-edge); border-radius:10px;
+  background:var(--pod-hi); margin-bottom:6px;
 }
 #form .found u{
   flex:1; text-decoration:none; display:block; min-width:0;
-  font-family:'Fraunces',Georgia,serif; font-size:14px; font-weight:500;
+  font-family:'Fraunces',Georgia,serif; font-size:var(--t-act); font-weight:500;
   color:var(--ink);
 }
 #form .found u small{
-  display:block; font-family:'Karla',sans-serif; font-size:10.5px;
-  color:var(--muted); font-weight:400; margin-top:1px;
+  display:block; font-family:'Karla',sans-serif; font-size:var(--t-note);
+  color:var(--muted); font-weight:400; margin-top:2px;
 }
-#form .found .acts{display:flex; gap:5px; flex:0 0 auto;}
+#form .found .acts{display:flex; gap:6px; flex:0 0 auto;}
 #form .found .mini{
-  padding:5px 10px; border-radius:99px; cursor:pointer;
+  padding:6px 10px; border-radius:99px; cursor:pointer;
   background:var(--pod); border:1.5px solid var(--pod-edge); color:var(--ink);
-  font-family:'Karla',sans-serif; font-size:11px; font-weight:700;
+  font-family:'Karla',sans-serif; font-size:var(--t-note); font-weight:700;
   white-space:nowrap;
 }
 #form .found .mini:hover{border-color:var(--gold); color:var(--gold);}
@@ -1000,14 +1060,14 @@ body.carrying .pod{transition:none;}
 #form .kinlist{margin:-4px 0 8px;}
 #form .kinlist button{
   display:block; width:100%; text-align:left; cursor:pointer;
-  padding:6px 9px; margin-bottom:3px; border-radius:8px;
+  padding:6px 10px; margin-bottom:4px; border-radius:8px;
   background:var(--pod-hi); border:1px solid var(--pod-edge); color:var(--ink);
-  font-family:'Fraunces',Georgia,serif; font-size:13px;
+  font-family:'Fraunces',Georgia,serif; font-size:var(--t-act);
 }
 #form .kinlist button:hover{border-color:var(--gold);}
 #form .kinlist button small{
-  display:block; font-family:'Karla',sans-serif; font-size:10px;
-  color:var(--muted); margin-top:1px;
+  display:block; font-family:'Karla',sans-serif; font-size:var(--t-note);
+  color:var(--muted); margin-top:2px;
 }
 /* The fix that sits under a gap count. Indented under its row so it reads as
    an answer to that line rather than a new section. */
@@ -1016,7 +1076,7 @@ body.carrying .pod{transition:none;}
   background:var(--pod-hi); border:1px solid var(--pod-edge); border-top:none;
 }
 #form .gapfix em{
-  display:block; margin-top:6px; font-size:10.5px; line-height:1.45;
+  display:block; margin-top:6px; font-size:var(--t-note); line-height:1.45;
   color:var(--muted); font-style:normal;
 }
 
@@ -1024,7 +1084,7 @@ body.carrying .pod{transition:none;}
    irreversible thing on this panel and should not look like the primary
    action next to "put back", which is. */
 #form .linkbtn.gone{
-  display:block; margin:-4px 0 8px auto; font-size:10.5px;
+  display:block; margin:-4px 0 8px auto; font-size:var(--t-note);
   color:var(--muted); opacity:.75;
 }
 #form .linkbtn.gone:hover{ color:var(--bad, #a33); opacity:1; }
@@ -1041,23 +1101,23 @@ body.carrying .pod{transition:none;}
 #form .relline.also{margin-top:-6px; border-radius:4px 12px 4px 12px; opacity:.92;}
 #form .relline i{font-style:normal; opacity:.8;}
 #form .overlapnote{
-  margin:-4px 0 12px; padding:8px 11px; border-radius:10px;
+  margin:-4px 0 12px; padding:8px 12px; border-radius:10px;
   background:var(--pod-hi); border:1px solid var(--pod-edge);
-  font-size:11px; line-height:1.5; color:var(--muted);
+  font-size:var(--t-note); line-height:1.5; color:var(--muted);
 }
 #form .teach{
-  margin:-4px 0 10px; padding:10px 11px; border-radius:0 0 12px 12px;
+  margin:-4px 0 10px; padding:10px 12px; border-radius:0 0 12px 12px;
   background:var(--pod-hi); border:1.5px solid var(--pod-edge); border-top:none;
 }
-#form .teach p{margin:0 0 8px; font-size:11.5px; line-height:1.5; color:var(--muted);}
+#form .teach p{margin:0 0 8px; font-size:var(--t-read); line-height:1.5; color:var(--muted);}
 #form .teach p b{color:var(--ink);}
 #form .teach .fld{margin-bottom:0;}
 #form .teach .btn{flex:0 0 92px;}
-#form .taughtnote{margin:-4px 0 10px; font-size:10.5px; color:var(--muted);}
+#form .taughtnote{margin:-4px 0 10px; font-size:var(--t-note); color:var(--muted);}
 /* The one-house note. Marked out from the totem suggestions above it, and
    deliberately not styled as a warning: nothing here is being refused. */
 #form .kinnote.housenote{
-  margin-top:5px; padding:8px 10px; line-height:1.5;
+  margin-top:6px; padding:8px 10px; line-height:1.5;
   border-left:3px solid var(--gold);
 }
 #form .kinnote.housenote b{color:var(--ink);}
@@ -1067,9 +1127,9 @@ body.carrying .pod{transition:none;}
    the summary carries the whole offer, which is why it is worded as one. */
 #form .teachfold{margin:-4px 0 10px;}
 #form .teachfold>summary{
-  list-style:none; cursor:pointer; padding:7px 11px; border-radius:0 0 12px 12px;
+  list-style:none; cursor:pointer; padding:8px 12px; border-radius:0 0 12px 12px;
   background:var(--pod-hi); border:1.5px solid var(--pod-edge); border-top:none;
-  font-family:'Karla',sans-serif; font-size:10.5px; font-weight:700;
+  font-family:'Karla',sans-serif; font-size:var(--t-note); font-weight:700;
   letter-spacing:.02em; color:var(--gold);
 }
 #form .teachfold>summary::-webkit-details-marker{display:none;}
@@ -1084,24 +1144,24 @@ body.carrying .pod{transition:none;}
    not-joined room, because it is the same kind of thing: something the app
    wants to be told, with the ways to tell it. */
 #form .grow1{
-  padding:9px 10px; margin-bottom:7px; border-radius:12px 3px 12px 3px;
+  padding:10px 10px; margin-bottom:8px; border-radius:12px 3px 12px 3px;
   background:var(--pod-hi); border:1.5px solid var(--pod-edge);
 }
-#form .grow1 u{display:block; text-decoration:none; font-size:14px; line-height:1.25;}
+#form .grow1 u{display:block; text-decoration:none; font-size:var(--t-act); line-height:1.25;}
 #form .grow1 u small{
   display:block; margin-top:2px;
-  font-family:'Karla',sans-serif; font-size:10px; font-weight:600;
+  font-family:'Karla',sans-serif; font-size:var(--t-note); font-weight:600;
   letter-spacing:.04em; color:var(--muted);
 }
-#form .grow1 .acts{display:flex; flex-wrap:wrap; gap:6px; margin-top:7px; align-items:center;}
+#form .grow1 .acts{display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; align-items:center;}
 #form .grow1 .mini{
-  padding:5px 10px; border-radius:99px; cursor:pointer;
+  padding:6px 10px; border-radius:99px; cursor:pointer;
   background:var(--pod); border:1.5px solid var(--pod-edge); color:var(--ink);
-  font-family:'Karla',sans-serif; font-size:11px; font-weight:700;
+  font-family:'Karla',sans-serif; font-size:var(--t-note); font-weight:700;
 }
 #form .grow1 .mini:hover{border-color:var(--gold); color:var(--gold);}
 #form .grow1 .mini.join{border-color:var(--gold); color:var(--gold);}
-#form .grow1 .fld.gyear{margin:0; flex:1 1 90px; min-width:80px; padding:6px 10px; font-size:12px;}
+#form .grow1 .fld.gyear{margin:0; flex:1 1 90px; min-width:80px; padding:6px 10px; font-size:var(--t-read);}
 
 /* ── THE PARTS OF A CARD THAT ARE FOLDED AWAY ────────────────────────────
    Not hidden: a summary that reads as a row you can press, in the ink of the
@@ -1112,21 +1172,21 @@ body.carrying .pod{transition:none;}
   margin:10px 0 0; border-top:1.5px solid var(--pod-edge);
 }
 #form .cardfold>summary{
-  list-style:none; cursor:pointer; padding:9px 2px 8px;
+  list-style:none; cursor:pointer; padding:10px 2px 8px;
   display:flex; align-items:center; gap:8px;
-  font-family:'Karla',sans-serif; font-size:11.5px; font-weight:700;
+  font-family:'Karla',sans-serif; font-size:var(--t-read); font-weight:700;
   letter-spacing:.02em; color:var(--ink);
 }
 #form .cardfold>summary::-webkit-details-marker{display:none;}
 #form .cardfold>summary::marker{content:'';}
 #form .cardfold>summary::before{
   content:'\203A'; display:inline-block; width:10px; color:var(--gold);
-  font-size:15px; line-height:1; transform:rotate(0deg); transition:transform .15s;
+  font-size:var(--t-name); line-height:1; transform:rotate(0deg); transition:transform .15s;
 }
 #form .cardfold[open]>summary::before{transform:rotate(90deg);}
 #form .cardfold>summary:hover{color:var(--gold);}
 #form .cardfold>summary i{
-  margin-left:auto; font-style:normal; font-size:10px; font-weight:700;
+  margin-left:auto; font-style:normal; font-size:var(--t-note); font-weight:700;
   letter-spacing:.06em; text-transform:uppercase; color:var(--gold);
 }
 #form .cardfold .foldin{padding-top:2px;}
@@ -1134,7 +1194,7 @@ body.carrying .pod{transition:none;}
 #form .whyfold{margin:-2px 0 10px;}
 #form .whyfold>summary{
   list-style:none; cursor:pointer; padding:6px 2px;
-  font-family:'Karla',sans-serif; font-size:10.5px; font-weight:700;
+  font-family:'Karla',sans-serif; font-size:var(--t-note); font-weight:700;
   letter-spacing:.02em; color:var(--gold);
 }
 #form .whyfold>summary::-webkit-details-marker{display:none;}
@@ -1144,63 +1204,63 @@ body.carrying .pod{transition:none;}
 
 .linkbtn{
   background:none; border:none; padding:0; cursor:pointer; color:var(--gold);
-  font-family:'Karla',sans-serif; font-size:10.5px; font-weight:700; text-decoration:underline;
+  font-family:'Karla',sans-serif; font-size:var(--t-note); font-weight:700; text-decoration:underline;
 }
 #form .covbar{
   height:7px; border-radius:99px; background:var(--pod-hi);
   border:1px solid var(--pod-edge); overflow:hidden; margin-bottom:6px;
 }
 #form .covbar i{display:block; height:100%; background:var(--leaf);}
-#form .covnote{margin:0 0 8px; font-size:11.5px; color:var(--muted); line-height:1.5;}
-#form .roothint{margin:-4px 0 10px; font-size:10.5px; line-height:1.5; color:var(--muted);}
+#form .covnote{margin:0 0 8px; font-size:var(--t-read); color:var(--muted); line-height:1.5;}
+#form .roothint{margin:-4px 0 10px; font-size:var(--t-note); line-height:1.5; color:var(--muted);}
 #form .covnote b{color:var(--ink);}
 #form .gaps{margin-bottom:4px;}
 #form .gaprow{
   display:flex; gap:10px; align-items:baseline; padding:6px 0;
-  border-top:1px solid var(--pod-edge); font-size:11.5px;
+  border-top:1px solid var(--pod-edge); font-size:var(--t-read);
 }
-#form .gaprow b{color:var(--gold); font-size:14px; min-width:34px; font-variant-numeric:tabular-nums;}
+#form .gaprow b{color:var(--gold); font-size:var(--t-act); min-width:34px; font-variant-numeric:tabular-nums;}
 #form .gaprow span{color:var(--ink); line-height:1.45;}
-#form .gaprow em{display:block; font-style:normal; color:var(--muted); font-size:10.5px;}
+#form .gaprow em{display:block; font-style:normal; color:var(--muted); font-size:var(--t-note);}
 #form .askrow{
   display:flex; align-items:center; gap:8px; width:100%; cursor:pointer;
-  padding:7px 10px; margin-bottom:5px; border-radius:10px;
+  padding:8px 10px; margin-bottom:6px; border-radius:10px;
   background:var(--pod-hi); border:1px solid var(--pod-edge); color:var(--ink); text-align:left;
 }
 #form .askrow:hover{border-color:var(--gold);}
-#form .askrow u{flex:1; text-decoration:none; font-family:'Fraunces',Georgia,serif; font-size:13.5px;}
-#form .askrow u small{display:block; font-family:'Karla',sans-serif; font-size:10px; color:var(--muted);}
-#form .askrow em{font-style:normal; font-size:10.5px; font-weight:700; color:var(--gold); white-space:nowrap;}
+#form .askrow u{flex:1; text-decoration:none; font-family:'Fraunces',Georgia,serif; font-size:var(--t-act);}
+#form .askrow u small{display:block; font-family:'Karla',sans-serif; font-size:var(--t-note); color:var(--muted);}
+#form .askrow em{font-style:normal; font-size:var(--t-note); font-weight:700; color:var(--gold); white-space:nowrap;}
 #form .warn{
-  margin:0 0 10px; padding:8px 11px; border-radius:10px;
+  margin:0 0 10px; padding:8px 12px; border-radius:10px;
   background:rgba(156,97,25,.1); border:1px solid var(--gold-soft);
-  color:var(--ink); font-size:11.5px; line-height:1.45;
+  color:var(--ink); font-size:var(--t-read); line-height:1.45;
 }
 
 /* the review panel */
 #form.wide{width:min(420px, calc(100vw - 32px));}
 #form .pair{
-  padding:11px; margin-bottom:9px; border-radius:14px 4px 14px 4px;
+  padding:12px; margin-bottom:10px; border-radius:14px 4px 14px 4px;
   background:var(--pod-hi); border:1.5px solid var(--pod-edge);
 }
 #form .pair .two{display:flex; gap:8px; margin-bottom:8px;}
 #form .pair .two button{
-  flex:1; padding:9px; border-radius:10px; cursor:pointer; text-align:left;
+  flex:1; padding:10px; border-radius:10px; cursor:pointer; text-align:left;
   background:var(--pod); border:1.5px solid var(--pod-edge); color:var(--ink);
-  font-family:'Fraunces',Georgia,serif; font-size:14px;
+  font-family:'Fraunces',Georgia,serif; font-size:var(--t-act);
 }
 #form .pair .two button:hover{border-color:var(--gold);}
 #form .pair .two button small{
-  display:block; font-family:'Karla',sans-serif; font-size:10px;
+  display:block; font-family:'Karla',sans-serif; font-size:var(--t-note);
   color:var(--muted); margin-top:2px;
 }
-#form .pair p{margin:0 0 8px; font-size:11px; line-height:1.45; color:var(--muted);}
+#form .pair p{margin:0 0 8px; font-size:var(--t-note); line-height:1.45; color:var(--muted);}
 #form .pair .keepnote{
-  font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--gold);
-  font-weight:700; margin-bottom:7px;
+  font-size:var(--t-note); letter-spacing:.1em; text-transform:uppercase; color:var(--gold);
+  font-weight:700; margin-bottom:8px;
 }
 #form .pair .keepnote span{
-  display:block; color:var(--muted); font-weight:600; margin-top:3px;
+  display:block; color:var(--muted); font-weight:600; margin-top:4px;
 }
 /* ── A NAME JOINED TO NOTHING, IN THE ROOM THAT PUTS IT RIGHT ─────────────
    Built from .pair's vocabulary on purpose: this is the same kind of thing
@@ -1213,46 +1273,46 @@ body.carrying .pod{transition:none;}
    in words, the three answers, and the way to take the join out altogether. */
 #form .joins{display:block; margin-bottom:10px;}
 #form .join{
-  padding:9px 10px; margin-bottom:7px; border-radius:12px 3px 12px 3px;
+  padding:10px 10px; margin-bottom:8px; border-radius:12px 3px 12px 3px;
   background:var(--pod-hi); border:1.5px solid var(--pod-edge);
 }
-#form .join u{display:block; text-decoration:none; font-size:14px; line-height:1.25;}
+#form .join u{display:block; text-decoration:none; font-size:var(--t-act); line-height:1.25;}
 #form .join u small{
   display:block; margin-top:2px;
-  font-family:'Karla',sans-serif; font-size:10px; font-weight:600;
+  font-family:'Karla',sans-serif; font-size:var(--t-note); font-weight:600;
   letter-spacing:.04em; color:var(--muted);
 }
-#form .join .seg{margin:7px 0 6px;}
+#form .join .seg{margin:8px 0 6px;}
 #form .join .mini{
-  padding:4px 9px; border-radius:99px; cursor:pointer;
+  padding:4px 10px; border-radius:99px; cursor:pointer;
   background:transparent; border:1.5px solid var(--pod-edge); color:var(--muted);
-  font-family:'Karla',sans-serif; font-size:10.5px; font-weight:700;
+  font-family:'Karla',sans-serif; font-size:var(--t-note); font-weight:700;
 }
 #form .join .mini:hover{border-color:var(--gold); color:var(--gold);}
 #form .herenow{
-  margin:0 0 10px; padding:7px 10px; border-radius:10px 3px 10px 3px;
+  margin:0 0 10px; padding:8px 10px; border-radius:10px 3px 10px 3px;
   background:var(--pod-hi); border:1.5px solid var(--pod-edge);
-  font-family:'Karla',sans-serif; font-size:11.5px; line-height:1.5;
+  font-family:'Karla',sans-serif; font-size:var(--t-read); line-height:1.5;
   color:var(--gold); font-weight:700;
 }
 #form .lost{
-  padding:11px; margin-bottom:9px; border-radius:14px 4px 14px 4px;
+  padding:12px; margin-bottom:10px; border-radius:14px 4px 14px 4px;
   background:var(--pod-hi); border:1.5px dashed var(--pod-edge);
 }
-#form .lost u{display:block; text-decoration:none; font-size:15px; line-height:1.25;}
+#form .lost u{display:block; text-decoration:none; font-size:var(--t-name); line-height:1.25;}
 #form .lost u small{
-  display:block; margin-top:3px;
-  font-family:'Karla',sans-serif; font-size:10px; font-weight:600;
+  display:block; margin-top:4px;
+  font-family:'Karla',sans-serif; font-size:var(--t-note); font-weight:600;
   letter-spacing:.04em; color:var(--muted);
 }
-#form .lost .maybe{margin:8px 0 9px; font-size:12px; line-height:1.5; color:var(--ink);}
+#form .lost .maybe{margin:8px 0 10px; font-size:var(--t-read); line-height:1.5; color:var(--ink);}
 #form .lost .maybe b{color:var(--gold);}
-#form .lost .maybe i{display:block; margin-top:3px; font-size:11px; color:var(--muted);}
+#form .lost .maybe i{display:block; margin-top:4px; font-size:var(--t-note); color:var(--muted);}
 #form .lost .acts{display:flex; flex-wrap:wrap; gap:6px;}
 #form .lost .mini{
-  padding:5px 10px; border-radius:99px; cursor:pointer;
+  padding:6px 10px; border-radius:99px; cursor:pointer;
   background:var(--pod); border:1.5px solid var(--pod-edge); color:var(--ink);
-  font-family:'Karla',sans-serif; font-size:11px; font-weight:700;
+  font-family:'Karla',sans-serif; font-size:var(--t-note); font-weight:700;
 }
 #form .lost .mini:hover{border-color:var(--gold); color:var(--gold);}
 #form .lost .mini.join{border-color:var(--gold); color:var(--gold);}
@@ -1261,48 +1321,48 @@ body.carrying .pod{transition:none;}
 #form .pair .against{color:var(--muted); font-style:italic;}
 .btn.ghost.on{background:var(--leaf); border-color:var(--leaf); color:var(--sky);}
 #form .lbl{
-  font-size:10px; letter-spacing:.13em; text-transform:uppercase;
+  font-size:var(--t-note); letter-spacing:.13em; text-transform:uppercase;
   color:var(--muted); margin:2px 0 6px;
 }
 .fld{
-  width:100%; padding:9px 11px; margin-bottom:8px;
+  width:100%; padding:10px 12px; margin-bottom:8px;
   background:var(--pod-hi); border:1.5px solid var(--pod-edge); border-radius:9px;
-  color:var(--ink); font-family:'Karla',sans-serif; font-size:15px;
+  color:var(--ink); font-family:'Karla',sans-serif; font-size:var(--t-name);
 }
 .fld:focus{outline:none; border-color:var(--gold);}
 .fld::placeholder{color:var(--muted); opacity:.8;}
-.seg{display:flex; gap:5px; margin-bottom:10px;}
+.seg{display:flex; gap:6px; margin-bottom:10px;}
 .seg button{
-  flex:1; padding:7px 0; border-radius:8px; cursor:pointer;
+  flex:1; padding:8px 0; border-radius:8px; cursor:pointer;
   background:transparent; border:1.5px solid var(--pod-edge); color:var(--muted);
-  font-family:'Karla',sans-serif; font-size:12px; font-weight:600;
+  font-family:'Karla',sans-serif; font-size:var(--t-read); font-weight:600;
 }
 .seg button[aria-pressed="true"]{background:var(--gold); border-color:var(--gold); color:var(--pod);}
 /* Whose child a new brother or sister is: the answers are phrases rather than
    one or two words ("Sydney, by another mother"), so they stack instead of
    sharing a row. */
-.teachlbl{margin:8px 0 5px; font-size:10px; letter-spacing:.14em;
+.teachlbl{margin:8px 0 6px; font-size:var(--t-note); letter-spacing:.14em;
   text-transform:uppercase; color:var(--muted);}
 .seg.col{flex-direction:column; gap:4px;}
-.seg.col button{flex:none; padding:8px 11px; text-align:left;}
+.seg.col button{flex:none; padding:8px 12px; text-align:left;}
 /* A second line inside one of those buttons: what the button does, said
    small, under the name it does it to. Used where the name alone would
    not say whether tapping it changes anything. */
 /* The Shona word leads; what it means follows it on the same line. */
 .seg.col button b.wayterm{
-  font-family:'Fraunces',Georgia,serif; font-weight:600; font-size:13.5px;
-  color:var(--ink); margin-right:5px;
+  font-family:'Fraunces',Georgia,serif; font-weight:600; font-size:var(--t-act);
+  color:var(--ink); margin-right:6px;
 }
 .seg.col button[disabled] b.wayterm{color:var(--muted);}
 .seg.col button small{
-  display:block; margin-top:1px; font-size:10px; letter-spacing:.06em;
+  display:block; margin-top:2px; font-size:var(--t-note); letter-spacing:.06em;
   text-transform:uppercase; color:var(--muted); font-weight:600;
 }
 .seg.col button:hover small{color:var(--gold);}
-.row{display:flex; gap:7px;}
+.row{display:flex; gap:8px;}
 .btn{
-  flex:1; padding:9px 0; border-radius:9px; cursor:pointer;
-  font-family:'Karla',sans-serif; font-size:13px; font-weight:700; letter-spacing:.03em;
+  flex:1; padding:10px 0; border-radius:9px; cursor:pointer;
+  font-family:'Karla',sans-serif; font-size:var(--t-act); font-weight:700; letter-spacing:.03em;
   background:var(--gold); border:1.5px solid var(--gold); color:var(--pod);
 }
 .btn.ghost{background:transparent; color:var(--muted); border-color:var(--pod-edge); flex:0 0 76px;}
@@ -1327,15 +1387,15 @@ body.carrying .pod{transition:none;}
 #seed h1 em{font-style:normal; color:var(--gold);}
 /* An empty family is exactly when somebody wants to send the link round, and
    it is also when the toolbar is hidden — so the way to it lives here too. */
-#seed #seedFamily{margin-top:16px; font-size:12.5px; color:var(--muted); line-height:1.6;}
+#seed #seedFamily{margin-top:16px; font-size:var(--t-read); color:var(--muted); line-height:1.6;}
 #seed #seedFamily button{
   padding:0; border:none; background:none; cursor:pointer;
-  color:var(--gold); font-family:'Karla',sans-serif; font-size:12.5px; font-weight:700;
+  color:var(--gold); font-family:'Karla',sans-serif; font-size:var(--t-read); font-weight:700;
   text-decoration:underline; text-underline-offset:2px;
 }
-#seed p{color:var(--muted); font-size:15px; line-height:1.6; margin:0 auto 22px; max-width:34ch;}
+#seed p{color:var(--muted); font-size:var(--t-name); line-height:1.6; margin:0 auto 24px; max-width:34ch;}
 #seed .box{
-  padding:18px; border-radius:26px 8px 26px 8px;
+  padding:16px; border-radius:26px 8px 26px 8px;
   background:var(--pod); border:1.5px solid var(--pod-edge); box-shadow:var(--lift);
   text-align:left;
 }
@@ -1348,10 +1408,10 @@ body.carrying .pod{transition:none;}
 #others{
   position:fixed; left:50%; top:14px; transform:translateX(-50%); z-index:78;
   max-width:min(520px, calc(100vw - 28px));
-  padding:9px 15px; border-radius:999px;
+  padding:10px 16px; border-radius:999px;
   background:var(--pod); border:1.5px solid var(--pod-edge);
   box-shadow:var(--shadow);
-  font-family:'Karla',sans-serif; font-size:12px; line-height:1.5;
+  font-family:'Karla',sans-serif; font-size:var(--t-read); line-height:1.5;
   color:var(--muted);
   animation:bud .25s ease-out backwards;
 }
@@ -1361,17 +1421,17 @@ body.carrying .pod{transition:none;}
 #stalled{
   position:fixed; left:50%; top:14px; transform:translateX(-50%); z-index:80;
   max-width:min(560px, calc(100vw - 28px));
-  padding:11px 15px; border-radius:12px;
+  padding:12px 16px; border-radius:12px;
   background:var(--pod); border:1.5px solid var(--gold);
   box-shadow:var(--shadow);
-  font-family:'Karla',sans-serif; font-size:12.5px; line-height:1.55;
+  font-family:'Karla',sans-serif; font-size:var(--t-read); line-height:1.55;
   color:var(--muted);
 }
 #stalled b{color:var(--ink); display:block; margin-bottom:2px;}
 #stalled button{
   margin-left:6px; padding:4px 12px; border-radius:999px; cursor:pointer;
   background:transparent; border:1.5px solid var(--pod-edge); color:var(--ink);
-  font-family:'Karla',sans-serif; font-size:12px; font-weight:600;
+  font-family:'Karla',sans-serif; font-size:var(--t-read); font-weight:600;
 }
 #stalled button:hover{border-color:var(--gold); color:var(--gold);}
 
@@ -1385,7 +1445,7 @@ body.carrying .pod{transition:none;}
   pointer-events:auto;
   padding:8px 16px; border-radius:999px;
   background:var(--pod); border:1.5px solid var(--pod-edge); box-shadow:var(--shadow);
-  font-family:'Fraunces',Georgia,serif; font-size:14px; font-weight:600;
+  font-family:'Fraunces',Georgia,serif; font-size:var(--t-act); font-weight:600;
   color:var(--ink); letter-spacing:.01em; white-space:nowrap;
 }
 #top .brand em{font-style:italic; color:var(--leaf);}
@@ -1397,9 +1457,9 @@ body.carrying .pod{transition:none;}
   max-width:min(70vw, 620px);
 }
 #top .set button{
-  padding:7px 13px; border-radius:999px; cursor:pointer;
+  padding:8px 12px; border-radius:999px; cursor:pointer;
   background:transparent; border:none; color:var(--muted);
-  font-family:'Karla',sans-serif; font-size:12.5px; font-weight:600;
+  font-family:'Karla',sans-serif; font-size:var(--t-read); font-weight:600;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:230px;
 }
 #top .set button:hover{background:var(--pod-hi); color:var(--ink);}
@@ -1419,9 +1479,9 @@ body.carrying .pod{transition:none;}
   border-radius:999px; box-shadow:var(--shadow);
 }
 #bar button{
-  padding:7px 13px; border-radius:999px; cursor:pointer;
+  padding:8px 12px; border-radius:999px; cursor:pointer;
   background:transparent; border:none; color:var(--muted);
-  font-family:'Karla',sans-serif; font-size:12.5px; font-weight:600;
+  font-family:'Karla',sans-serif; font-size:var(--t-read); font-weight:600;
 }
 #bar button:hover{background:var(--pod-hi); color:var(--ink);}
 /* GROUPED, NOT PILED. Three clusters with a hairline between them: moving
@@ -1446,13 +1506,13 @@ body.carrying .pod{transition:none;}
   display:inline-flex; align-items:center; justify-content:center;
   min-width:16px; height:16px; margin-left:6px; padding:0 4px;
   border-radius:999px; background:var(--gold); color:var(--sky);
-  font-size:9.5px; font-weight:800; font-style:normal; line-height:1;
+  font-size:var(--t-mark); font-weight:800; font-style:normal; line-height:1;
   vertical-align:1px;
 }
 /* The two zoom buttons. One character each, so they need a shape of their own
    or they read as punctuation between the words beside them. */
 #bar button.zoom{
-  min-width:32px; padding:6px 0; font-size:16px; line-height:1;
+  min-width:32px; padding:6px 0; font-size:var(--t-name); line-height:1;
   background:var(--pod-hi); color:var(--ink); margin-right:2px;
 }
 #bar button.zoom:hover{box-shadow:inset 0 0 0 1.5px var(--gold-soft);}
@@ -1467,23 +1527,23 @@ body.carrying .pod{transition:none;}
 /* The palette chooser. Each row shows the three colours that carry a
    palette's character — sky, bark, accent — in the light or dark face you
    would actually get, so the choice is visible before it is made. */
-#form .pals{display:flex; flex-direction:column; gap:5px;}
+#form .pals{display:flex; flex-direction:column; gap:6px;}
 #form .pal{
   display:flex; align-items:center; gap:10px; width:100%;
-  padding:7px 9px; border-radius:12px 4px 12px 4px; cursor:pointer;
+  padding:8px 10px; border-radius:12px 4px 12px 4px; cursor:pointer;
   background:var(--pod); border:1.5px solid var(--pod-edge); text-align:left;
 }
 #form .pal:hover{border-color:var(--gold-soft); background:var(--pod-hi);}
-#form .pal.on{border-color:var(--gold); border-width:2px; padding:6.5px 8.5px;}
+#form .pal.on{border-color:var(--gold); border-width:2px; padding:6px 8px;}
 #form .pal .chips{display:flex; flex:none; border-radius:999px; overflow:hidden;
   box-shadow:inset 0 0 0 1px rgba(128,128,128,.28);}
 #form .pal .chips i{display:block; width:15px; height:22px;}
 #form .pal u{
   display:block; text-decoration:none; font-family:'Karla',sans-serif;
-  font-size:12.5px; font-weight:700; color:var(--ink); line-height:1.35;
+  font-size:var(--t-read); font-weight:700; color:var(--ink); line-height:1.35;
 }
 #form .pal u small{
-  display:block; font-weight:400; font-size:11px; color:var(--muted); margin-top:1px;
+  display:block; font-weight:400; font-size:var(--t-note); color:var(--muted); margin-top:2px;
 }
 
 /* A person the world cannot see. Deliberately almost nothing — a dot. Most
@@ -1500,22 +1560,22 @@ body.carrying .pod{transition:none;}
 /* What a recognised totem is, shown under the box as confirmation that the
    app understood — never as a correction. */
 .kinlist .kinnote{
-  padding:7px 11px; color:var(--muted); font-size:11.5px; line-height:1.5;
+  padding:8px 12px; color:var(--muted); font-size:var(--t-read); line-height:1.5;
 }
 #form .askrow .mini{
-  flex:none; margin-left:8px; padding:5px 11px; border-radius:999px; cursor:pointer;
+  flex:none; margin-left:8px; padding:6px 12px; border-radius:999px; cursor:pointer;
   background:transparent; border:1.5px solid var(--pod-edge); color:var(--ink);
-  font-family:'Karla',sans-serif; font-size:11.5px; font-weight:600;
+  font-family:'Karla',sans-serif; font-size:var(--t-read); font-weight:600;
 }
 #form .askrow .mini:hover{border-color:var(--gold); color:var(--gold);}
 #form .askrow .mini:disabled{opacity:.5; cursor:default;}
 #bar .tally{
-  padding:0 12px 0 10px; color:var(--muted); font-size:12px;
+  padding:0 12px 0 10px; color:var(--muted); font-size:var(--t-read);
   border-left:1px solid var(--pod-edge); margin-left:4px;
 }
 #bar .tally b{color:var(--ink); font-weight:700; font-variant-numeric:tabular-nums;}
 #bar .who{
-  padding:7px 13px; border-radius:999px; border:1.5px solid var(--pod-edge);
+  padding:8px 12px; border-radius:999px; border:1.5px solid var(--pod-edge);
   color:var(--muted); font-weight:600; cursor:pointer; white-space:nowrap;
 }
 #bar #theme{min-width:56px; text-align:center;}
@@ -1528,14 +1588,14 @@ body.carrying .pod{transition:none;}
    loss of one. */
 #bar .who.fixed{cursor:default; border-style:dashed; border-color:var(--leaf);}
 #bar .dupes{
-  padding:7px 13px; border-radius:999px; cursor:pointer; white-space:nowrap;
+  padding:8px 12px; border-radius:999px; cursor:pointer; white-space:nowrap;
   background:rgba(156,97,25,.14); border:1.5px solid var(--gold-soft); color:var(--gold);
-  font-family:'Karla',sans-serif; font-size:12.5px; font-weight:700;
+  font-family:'Karla',sans-serif; font-size:var(--t-read); font-weight:700;
 }
 #bar .dupes:hover{background:var(--gold); border-color:var(--gold); color:var(--pod);}
 #hint{
   position:fixed; right:16px; bottom:18px; z-index:45; max-width:240px;
-  margin:0; text-align:right; color:var(--muted); font-size:11.5px; line-height:1.55;
+  margin:0; text-align:right; color:var(--muted); font-size:var(--t-read); line-height:1.55;
   pointer-events:none;   /* a caption should never swallow a click */
 }
 #hint b{color:var(--gold); font-weight:700;}
@@ -1550,8 +1610,8 @@ body.carrying .pod{transition:none;}
      name is on the tab and on the door they came through. */
   #top .brand{display:none;}
   #top .set{max-width:calc(100vw - 28px);}
-  #top .set button{font-size:12px; padding:7px 10px; max-width:150px;}
-  #bar button{padding:7px 10px; font-size:12px;}
+  #top .set button{font-size:var(--t-read); padding:8px 10px; max-width:150px;}
+  #bar button{padding:8px 10px; font-size:var(--t-read);}
 }
 </style>
 </head>
@@ -8905,7 +8965,7 @@ function openFamily(){
               : esc(i.note || 'no note')}` +
             `${i.created_by ? ' · by ' + esc(i.created_by) : ''}</span>` +
           (i.usable ? `<button class="btn ghost" data-revoke="${esc(i.id)}"
-             style="margin-left:auto;padding:2px 8px;font-size:11px">Withdraw</button>` : '') +
+             style="margin-left:auto;padding:2px 8px;font-size:var(--t-note)">Withdraw</button>` : '') +
         `</p>`;
       }).join('');
       box.querySelectorAll('[data-revoke]').forEach(b => {
