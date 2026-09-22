@@ -50,6 +50,29 @@ async function checkVersion(client, table, id, expect, label) {
 // Union-level edits (partners, children, order) live in side tables, so
 // touching them has to bump the union's own updated_at by hand for the version
 // check above to mean anything.
+/* Put somebody into a marriage as a partner, at the next free place.
+ *
+ * NOT `ON CONFLICT DO NOTHING`. union_partners carries a DEFERRABLE unique
+ * constraint on (union_id, position) so that a reorder can permute positions
+ * inside one transaction — and Postgres will not accept a deferrable
+ * constraint as an ON CONFLICT arbiter, so a bare DO NOTHING here is not a
+ * no-op on a clash, it is an error. The position is read rather than
+ * remembered for the same reason: the place this person held before is not
+ * necessarily free now. */
+async function joinUnionAsPartner(client, unionId, personId){
+  const { rows: already } = await client.query(
+    'SELECT person_id FROM union_partners WHERE union_id = $1 AND person_id = $2',
+    [unionId, personId]);
+  if (already.length) return false;
+  const { rows } = await client.query(
+    'SELECT COALESCE(max(position), -1) + 1 AS next FROM union_partners WHERE union_id = $1',
+    [unionId]);
+  await client.query(
+    'INSERT INTO union_partners (union_id, person_id, position) VALUES ($1, $2, $3)',
+    [unionId, personId, rows[0].next]);
+  return true;
+}
+
 const touchUnion = (client, unionId) =>
   client.query('UPDATE unions SET updated_at = clock_timestamp() WHERE id = $1', [unionId]);
 
@@ -485,6 +508,158 @@ const HANDLERS = {
     return { id };
   },
 
+  /* ── TAKING A MERGE BACK ─────────────────────────────────────────────────
+   *
+   * "When names are duplicated, merge them."
+   *
+   * What makes it safe to do that automatically is not being clever about
+   * which pairs to fold. It is that folding the wrong pair is an ordinary
+   * mistake rather than a permanent one. This is that: the folded record
+   * comes back as its own person, with the marriages and the place among its
+   * parents' children that it held before, read off what the merge wrote
+   * down. See migration 016.
+   *
+   * AND THE PAIR IS REMEMBERED AS TWO DIFFERENT PEOPLE, so that the scan
+   * that folded them does not fold them again five seconds later. That is the
+   * difference between an undo and an argument with the app.
+   *
+   * WHAT IT CANNOT PUT BACK, and says so rather than pretending: two
+   * marriages to the same person that the merge collapsed into one. Those
+   * children are now in one marriage and the app does not know which of them
+   * came from which, so it leaves them and reports what it left.
+   */
+  async splitPeople(ctx, op) {
+    const { client, treeId, actor, resolve } = ctx;
+    const id = resolve(op.id, 'splitPeople.id');
+    const person = await checkVersion(client, 'people', id, op.expect, 'person');
+    if (!person.merged_into) {
+      throw badRequest('That record was not folded into another one', { id });
+    }
+    const keepId = person.merged_into;
+    const undo = person.merged_undo || null;
+
+    // Everything the record wore of its own comes back first, so that a
+    // half-finished restore is a record present with no links rather than a
+    // record absent with its links already moved.
+    await client.query(
+      `UPDATE people SET aside_at = NULL, aside_by = '', aside_why = '',
+                         merged_into = NULL, merged_undo = NULL
+        WHERE id = $1`, [id]);
+
+    const put = { parents:false, marriages:0, blanked:[] };
+    if (undo){
+      if (undo.parentUnion){
+        /* Only where the survivor is not standing in that place. Where the
+           folded record HAD parents and the survivor did not, the merge moved
+           that membership across; putting it back means taking it off the
+           survivor, because one person has one set of parents and so does the
+           other. */
+        const { rows } = await client.query(
+          'SELECT person_id FROM union_children WHERE union_id = $1 AND person_id = $2',
+          [undo.parentUnion.unionId, keepId]);
+        if (rows.length){
+          await client.query(
+            'UPDATE union_children SET person_id = $1 WHERE union_id = $2 AND person_id = $3',
+            [id, undo.parentUnion.unionId, keepId]);
+          put.parents = true;
+        } else {
+          const { rows: mine } = await client.query(
+            'SELECT person_id FROM union_children WHERE person_id = $1', [id]);
+          if (!mine.length){
+            await client.query(
+              `INSERT INTO union_children (union_id, person_id, birth_order)
+               VALUES ($1, $2, $3) ON CONFLICT (person_id) DO NOTHING`,
+              [undo.parentUnion.unionId, id, undo.parentUnion.birthOrder ?? 0]);
+            put.parents = true;
+          }
+        }
+      }
+      /* A MARRIAGE THE MERGE FOLDED AWAY IS BUILT AGAIN, with the children
+         that came from it and no others.
+
+         Two records of one man, each recorded with an unnamed wife, leave
+         two marriages with an identical partner list once the merge has
+         moved one onto the other — so the merge folds them into one. Undoing
+         that by simply handing the surviving marriage back would hand over
+         the OTHER record's children with it, which is how taking back a fold
+         once gave one man's son to another man's record. */
+      const rebuilt = new Map();
+      for (const c of (undo.collapsed || [])){
+        const { rows: made } = await client.query(
+          'INSERT INTO unions (tree_id) VALUES ($1) RETURNING id', [treeId]);
+        const fresh = made[0].id;
+        rebuilt.set(c.dropped, fresh);
+        let at = 0;
+        for (const kid of (c.children || [])){
+          await client.query(
+            `UPDATE union_children SET union_id = $1, birth_order = $2
+              WHERE person_id = $3 AND union_id = $4`, [fresh, at++, kid, c.kept]);
+        }
+        await touchUnion(client, c.kept);
+      }
+
+      for (const m of (undo.partnerUnions || [])){
+        const standIn = rebuilt.get(m.unionId);
+        if (standIn){
+          await joinUnionAsPartner(client, standIn, id);
+          put.marriages++;
+          await touchUnion(client, standIn);
+          continue;
+        }
+        // A union that is simply gone, and was not one this merge folded:
+        // there is nothing to rejoin, and inventing one would invent a marriage.
+        const { rows: alive } = await client.query(
+          'SELECT id FROM unions WHERE id = $1 AND tree_id = $2', [m.unionId, treeId]);
+        if (!alive.length) continue;
+        const { rows: sitting } = await client.query(
+          'SELECT person_id FROM union_partners WHERE union_id = $1 AND person_id = $2',
+          [m.unionId, keepId]);
+        if (sitting.length){
+          await client.query(
+            'UPDATE union_partners SET person_id = $1 WHERE union_id = $2 AND person_id = $3',
+            [id, m.unionId, keepId]);
+        } else {
+          await joinUnionAsPartner(client, m.unionId, id);
+        }
+        put.marriages++;
+        await touchUnion(client, m.unionId);
+      }
+      /* The survivor gives back what it only ever had from this record. A
+         merge fills the survivor's BLANK fields from the one it folds; an
+         undo that left them would leave the survivor wearing the other
+         person's birth year for good. */
+      const fields = Object.keys(undo.filled || {})
+        .filter(f => ['name', 'sex', 'totem', 'born', 'died', 'added_by'].includes(f));
+      if (fields.length){
+        const { rows } = await client.query(
+          `SELECT ${fields.join(', ')} FROM people WHERE id = $1`, [keepId]);
+        const blank = fields.filter(f => rows.length && rows[0][f] === undo.filled[f]);
+        if (blank.length){
+          await client.query(
+            `UPDATE people SET ${blank.map(f => `${f} = ''`).join(', ')} WHERE id = $1`,
+            [keepId]);
+          put.blanked = blank;
+        }
+      }
+    }
+
+    // So the scan that folded them does not fold them again. An undo that
+    // has to be repeated every few seconds is an argument, not an undo.
+    let a = id, b = keepId;
+    if (a > b) [a, b] = [b, a];
+    await client.query(
+      `INSERT INTO not_duplicates (tree_id, a_id, b_id, by) VALUES ($1,$2,$3,$4)
+       ON CONFLICT DO NOTHING`, [treeId, a, b, actor || '']);
+
+    await touchPerson(client, id);
+    await touchPerson(client, keepId);
+    await logChange(client, treeId, 'person', id, 'splitPeople',
+                    { id, keepId, put, couldNotUndo: (undo && undo.collapsed) || [] }, actor);
+    return { id, keepId, put,
+             collapsedMarriages: ((undo && undo.collapsed) || []).length,
+             hadRecord: !!undo };
+  },
+
   /* Take somebody out of this tree for good.
   
      THE RULE THIS BREAKS, and why it is now written differently. Everything
@@ -657,6 +832,24 @@ const HANDLERS = {
         'Those two records have different parents — resolve that before merging',
         { keepId, keepParentUnion: keepParent, mergeId, mergeParentUnion: mergeParent });
     }
+    /* WHAT THIS MERGE IS ABOUT TO MOVE, written down before it moves.
+       See migration 016. Without it a merge can be read back but not taken
+       back, because by the end of this function nothing anywhere says where
+       the folded record's marriages and its place among its parents' children
+       came from. */
+    const undo = { parentUnion:null, partnerUnions:[], filled:{}, collapsed:[] };
+    if (mergeParent){
+      const { rows } = await client.query(
+        'SELECT union_id, birth_order FROM union_children WHERE person_id = $1', [mergeId]);
+      if (rows.length) undo.parentUnion = { unionId: rows[0].union_id,
+                                            birthOrder: rows[0].birth_order };
+    }
+    {
+      const { rows } = await client.query(
+        'SELECT union_id, position FROM union_partners WHERE person_id = $1', [mergeId]);
+      undo.partnerUnions = rows.map(r => ({ unionId: r.union_id, position: r.position }));
+    }
+
     if (!keepParent && mergeParent) {
       await client.query(
         'UPDATE union_children SET person_id = $1 WHERE person_id = $2', [keepId, mergeId]);
@@ -679,6 +872,7 @@ const HANDLERS = {
     for (const f of ['name', 'sex', 'totem', 'born', 'died', 'added_by']) {
       if (!keep[f] && merge[f]) filled[f] = merge[f];
     }
+    undo.filled = { ...filled };
     if (Object.keys(filled).length) {
       const sets = Object.keys(filled).map((f, i) => `${f} = $${i + 1}`);
       await client.query(
@@ -711,13 +905,18 @@ const HANDLERS = {
     // dates and whoever entered it, and merged_into says where its details
     // went — so a merge somebody disagrees with can be read back and undone,
     // rather than only discovered as an absence.
+    /* WHY, in the record itself, and in particular whether a person chose it
+       or the app did. A family reading back a merge they do not remember
+       making has to be able to tell those two apart. */
+    const why = op.why
+      ? String(op.why)
+      : `Folded into ${keep.name || 'another record'} as the same person.`;
     await client.query(
       `UPDATE people
           SET aside_at = clock_timestamp(), aside_by = $2,
-              aside_why = $3, merged_into = $4
+              aside_why = $3, merged_into = $4, merged_undo = $5::jsonb
         WHERE id = $1`,
-      [mergeId, actor || '',
-       `Folded into ${keep.name || 'another record'} as the same person.`, keepId]);
+      [mergeId, actor || '', why, keepId, JSON.stringify(undo)]);
 
     // Merging two records for one person can leave two unions with an
     // identical partner set — the same marriage, recorded twice. Fold them
@@ -725,6 +924,14 @@ const HANDLERS = {
     // the empty union is dropped: union_children.union_id is RESTRICT
     // precisely so that a union with children can never vanish under them.
     const collapsed = await collapseDuplicateUnions(client, treeId, keepId);
+    if (collapsed && collapsed.length){
+      // The one part an undo cannot simply reverse: two marriages to the same
+      // person, folded into one. Written down so the app can SAY so rather
+      // than quietly put half a thing back.
+      undo.collapsed = collapsed;
+      await client.query('UPDATE people SET merged_undo = $2::jsonb WHERE id = $1',
+                         [mergeId, JSON.stringify(undo)]);
+    }
 
     /* A SESSION VIEWING AS THE FOLDED RECORD FOLLOWS THE ONE THAT STAYED.
 
@@ -773,6 +980,14 @@ async function collapseDuplicateUnions(client, treeId, personId) {
 
     const keepUnion = byKey.get(key);
     const dropUnion = r.id;
+    /* WHICH CHILDREN CAME FROM THE MARRIAGE THAT IS ABOUT TO GO, read before
+       it goes. Without this an undo of the merge cannot tell them apart from
+       the children the surviving marriage already had — and the first time
+       that happened, taking back a fold handed one man's son to another
+       man's record. See ops.splitPeople and migration 016. */
+    const { rows: moving } = await client.query(
+      'SELECT person_id FROM union_children WHERE union_id = $1 ORDER BY birth_order',
+      [dropUnion]);
     const { rows: [{ n }] } = await client.query(
       'SELECT count(*)::int AS n FROM union_children WHERE union_id = $1', [keepUnion]);
     await client.query(
@@ -781,7 +996,8 @@ async function collapseDuplicateUnions(client, treeId, personId) {
       [keepUnion, n, dropUnion]);
     await client.query('DELETE FROM union_partners WHERE union_id = $1', [dropUnion]);
     await client.query('DELETE FROM unions WHERE id = $1', [dropUnion]);
-    collapsed.push({ kept: keepUnion, dropped: dropUnion });
+    collapsed.push({ kept: keepUnion, dropped: dropUnion,
+                     children: moving.map(x => x.person_id) });
   }
   return collapsed;
 }

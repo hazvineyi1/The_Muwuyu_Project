@@ -220,11 +220,31 @@ function buildGraph(rows){
  */
 function generations(g){
   const gen = {};
-  const root = g.people.find(p => p.is_root);
-  if (!root) { for (const p of g.people) gen[p.id] = 0; return gen; }
+  /* WHERE THE COUNTING STARTS, and why it is not only is_root.
+   *
+   * This used to hand generation 0 to everybody and return immediately when
+   * no record carried is_root — and is_root is the family's own claim about
+   * how far back they can trace, which most trees have never made. So on
+   * most trees the server was not counting generations at all, AND, worse,
+   * was returning before the guessed/part step below. Everything in
+   * sameness() that asks "can these two positions even be compared" then read
+   * an undefined part map as "yes, same part", and every shape penalty fired
+   * on every pair in the family.
+   *
+   * Which is exactly the bug this project already fixed on the page: two
+   * records of one man, one of them not joined on, scored 0.56 with
+   * "different children recorded" counted against them — when children split
+   * between two records is the signature of the split.
+   *
+   * A generation number means nothing on its own; only differences within
+   * one connected part are read, and those do not depend on where the walk
+   * began. So it begins wherever it can: the root if the family named one,
+   * otherwise the first person recorded — which is what the page does. */
+  const start = g.people.find(p => p.is_root) || g.people[0];
+  if (!start) return gen;
 
-  const queue = [root.id];
-  gen[root.id] = 0;
+  const queue = [start.id];
+  gen[start.id] = 0;
   const step = (other, n) => {
     if (other && gen[other] === undefined){ gen[other] = n; queue.push(other); }
   };
@@ -510,5 +530,122 @@ const publicPerson = p => ({
   born: p.born, born_year: p.born_year
 });
 
+
+/* ── THE PAIRS THAT ARE NOT A JUDGEMENT CALL ─────────────────────────────
+ *
+ * "When names are duplicated, merge them."
+ *
+ * Asked for twice, the second time after this project had argued against it,
+ * so it is being built — and the argument is worth keeping in view because it
+ * is what decides where the line goes. Three living Garikais in one family is
+ * ordinary: children are named after their grandfathers, and a tree that
+ * folds two of them together has destroyed a person rather than tidied a
+ * record. So this does not fold everything that LOOKS alike. It folds the two
+ * cases where a family, shown the two records, would not have to think:
+ *
+ *   (a) THE SHAPE SAYS SO. The two are married to the same person, or have
+ *       the same child, or have the same mother and father — and they are
+ *       alike enough by name and dates to clear the "very likely" bar, and
+ *       nothing at all counts against them. Two men married to one woman with
+ *       one set of children between them are one man.
+ *
+ *   (b) THE SIGNATURE OF ONE PERSON WRITTEN DOWN TWICE. The same name, the
+ *       same birth year, the same mutupo, and nothing counting against. This
+ *       is the case that was sent: Thomas Musoni, born 1971, entered once by
+ *       one relative and once by another, with his children split between the
+ *       two records.
+ *
+ * "Nothing counting against" is doing most of the work, and it is not a
+ * formality. A generation apart, married to different people, different
+ * children, different parents — any one of those and this refuses and leaves
+ * the pair for a person to decide. Those signals only speak where both
+ * records are in the same part of the tree, which is exactly right: it is
+ * inside one connected family that two same-named people are usually two
+ * people, and across a break that they are usually one.
+ *
+ * AND IT IS ALWAYS UNDOABLE. See migration 016 and ops.splitPeople. That, and
+ * not the cleverness of this predicate, is what makes folding automatically
+ * defensible at all.
+ */
+const SAME_YEAR_REQUIRED = true;
+
+function conclusive(a, b, m){
+  if (!m) return false;
+  if ((m.against || []).length) return false;
+
+  // (a) the shape says so
+  if (m.strong && m.score >= 0.75) return true;
+
+  // (b) one person, written down twice
+  const ta = new Set(nameTokens(a.name)), tb = new Set(nameTokens(b.name));
+  if (!ta.size || !tb.size) return false;
+  const smaller = ta.size <= tb.size ? ta : tb;
+  const bigger  = ta.size <= tb.size ? tb : ta;
+  // Every name the shorter record carries is carried by the longer one too:
+  // "Thomas Musoni" inside "Thomas Musonza Musoni". A single shared name out
+  // of two is not this — that is half a match and it stays a judgement call.
+  if (smaller.size < 2) return false;
+  for (const t of smaller) if (!bigger.has(t)) return false;
+
+  if (SAME_YEAR_REQUIRED){
+    if (a.born_year == null || b.born_year == null) return false;
+    if (Number(a.born_year) !== Number(b.born_year)) return false;
+  }
+  const ta2 = String(a.totem || '').trim().toLowerCase();
+  const tb2 = String(b.totem || '').trim().toLowerCase();
+  if (!ta2 || !tb2 || ta2 !== tb2) return false;
+  return true;
+}
+
+/* The conclusive pairs involving any of `ids`, and only those.
+ *
+ * Scoped on purpose. A whole-tree scan is a second and a half on five
+ * thousand people, which is far too much to spend on every batch of edits —
+ * and it is not what was asked for either. What was asked for is that when a
+ * name is entered that doubles one already there, the two become one. So the
+ * question asked here is about the names this batch touched, against the rest
+ * of the family, which is a handful of comparisons.
+ */
+async function conclusiveFor(pool, treeId, ids){
+  const want = new Set((ids || []).filter(Boolean));
+  if (!want.size) return [];
+  const g = await loadTree(pool, treeId);
+  const gen = generations(g);
+
+  const byKey = new Map(), byPrefix = new Map();
+  for (const p of g.people){
+    if (!p.name_key) continue;
+    if (!byKey.has(p.name_key)) byKey.set(p.name_key, []);
+    byKey.get(p.name_key).push(p);
+    const pk = p.name_key.slice(0, PREFIX_BLOCK);
+    if (!byPrefix.has(pk)) byPrefix.set(pk, []);
+    byPrefix.get(pk).push(p);
+  }
+
+  const seen = new Set(), out = [];
+  for (const p of g.people){
+    if (!want.has(p.id) || !p.name_key) continue;
+    const near = new Map();
+    for (const q of (byKey.get(p.name_key) || [])) near.set(q.id, q);
+    for (const q of (byPrefix.get(p.name_key.slice(0, PREFIX_BLOCK)) || [])) near.set(q.id, q);
+    for (const q of near.values()){
+      if (q.id === p.id) continue;
+      let a = p, b = q;
+      if (a.id > b.id) [a, b] = [b, a];
+      const key = `${a.id}|${b.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (g.dismissed.has(key)) continue;
+      const m = sameness(g, gen, a.id, b.id);
+      if (!conclusive(a, b, m)) continue;
+      out.push({ a: publicPerson(a), b: publicPerson(b),
+                 score: m.score, why: m.why, strong: !!m.strong });
+    }
+  }
+  return out;
+}
+
+module.exports.conclusive = conclusive;
+module.exports.conclusiveFor = conclusiveFor;
 module.exports.findDuplicates = findDuplicates;
 module.exports.loadTree = loadTree;

@@ -8,6 +8,7 @@ const { applyOps } = require('../db/ops');
 const { bootstrap, fullTree, publicTree, publicPerson, changesSince, search,
         setAsideList } = require('../db/reads');
 const { findDuplicates } = require('../db/duplicates');
+const duplicates = require('../db/duplicates');
 const { findRelatives, linksFor } = require('../db/crosstree');
 const { OpError } = require('../db/errors');
 const { requireOwnTree, limiter, addressOf, limitKeyOf } = require('../auth');
@@ -368,6 +369,59 @@ module.exports = function treeRoutes(pool, homeTreeId = null) {
     try {
       const ops = Array.isArray(req.body) ? req.body : req.body?.ops;
       const result = await applyOps(pool, req.params.id, ops, actorOf(req));
+
+      /* ── AND IF THAT JUST DOUBLED SOMEBODY, THE TWO BECOME ONE ───────────
+       *
+       * "When names are duplicated, merge them."
+       *
+       * Asked for twice. The argument against — three living Garikais in one
+       * family is ordinary, because children are named after their
+       * grandfathers — is not abandoned; it decides where the line goes. Only
+       * the pairs a family would not have to think about are folded: the same
+       * spouse, the same child or the same parents with nothing against, or
+       * the plain signature of one person written down twice (same name, same
+       * birth year, same mutupo, nothing against). Everything else is still
+       * offered and still decided by whoever knows. See db/duplicates.js.
+       *
+       * SCOPED TO WHAT THIS BATCH TOUCHED. A whole-tree scan is a second and
+       * a half on five thousand people and would be paid on every keystroke's
+       * worth of sync. The question here is the one that was asked: does the
+       * name just entered double one already in the family.
+       *
+       * AND IT NEVER FAILS THE WRITE. The family's edit is already saved and
+       * is not going to be rolled back because a tidy-up went wrong.
+       */
+      let merged = [];
+      try {
+        const touched = new Set();
+        for (const o of (ops || [])){
+          if (!o) continue;
+          if (o.op === 'addPerson' && o.ref && result?.refs?.[o.ref]) touched.add(result.refs[o.ref]);
+          if (o.op === 'updatePerson' && o.id) touched.add(result?.refs?.[o.id] || o.id);
+        }
+        if (touched.size){
+          const pairs = await duplicates.conclusiveFor(pool, req.params.id, [...touched]);
+          const done = new Set();
+          for (const pair of pairs){
+            /* THE OLDER RECORD STAYS. It is the one the family has been
+               working against — it is what links, sessions and anybody's open
+               screen already name — and the one just typed is the copy. Where
+               the newer record carries detail the older one lacks, the merge
+               fills it in, so nothing typed is lost by being folded. */
+            const [keep, drop] = touched.has(pair.b.id) ? [pair.a, pair.b] : [pair.b, pair.a];
+            if (done.has(keep.id) || done.has(drop.id)) continue;
+            done.add(keep.id); done.add(drop.id);
+            await applyOps(pool, req.params.id, [{
+              op:'mergePeople', keepId: keep.id, mergeId: drop.id,
+              why: `Folded into ${keep.name} automatically — ${pair.why.join('; ')}. ` +
+                   `If they are two different people, this can be undone.`
+            }], actorOf(req));
+            merged.push({ keep, dropped: drop, why: pair.why });
+          }
+          if (merged.length) access.forgetTree(req.params.id);
+        }
+      } catch (e) { /* the family's edit is saved; a tidy-up is not worth losing it */ }
+      if (merged.length) result.merged = merged;
       /* A merge can move a session's viewer onto the record that stayed (see
          mergePeople). The sessions cache holds who each session is, so it has
          to be told — otherwise the person who just folded away their own

@@ -1652,6 +1652,12 @@ const stage = $('stage'), gtree = $('gtree'), podsEl = $('pods');
 
 /* ── model ──────────────────────────────────────────────────────────── */
 const uid = p => p + (state.seq++);
+/* A PROVISIONAL ID IS THIS PAGE'S OWN, and the server has never heard of it.
+   uid() mints "p4", "u7" until a save comes back with the ids the database
+   minted. Anything that talks to the server about a person has to know the
+   difference — posting "p4" where a uuid is expected is not a slow answer,
+   it is an error. */
+const mintedYet = id => typeof id === 'string' && /^[0-9a-f-]{36}$/i.test(id);
 const people = () => Object.values(state.people).filter(p => !p.aside);
 const unions = () => Object.values(state.unions);
 
@@ -1705,6 +1711,20 @@ const partnersOf = id => unionsOf(id).flatMap(u => u.partners.filter(p => p !== 
  * the moment a date is corrected, and needing to be kept by hand on the day
  * a family is least able to. So it is DERIVED, every time, the way every
  * kinship word in this project is derived. */
+/* WHAT THE APP FOLDED ON ITS OWN, this session.
+ *
+ * "When names are duplicated, merge them."
+ *
+ * It does, on the server, the moment a name is entered that doubles one
+ * already in the family — but only for the pairs a family would not have to
+ * think about. See db/duplicates.js for where that line is drawn.
+ *
+ * The thing that makes it defensible is not the line. It is that the tree
+ * never changes quietly: every fold lands here, stays on the bar until it has
+ * been looked at, and carries the way to take it back. An automatic act
+ * nobody can see and nobody can reverse is not a feature. */
+let autoMerged = [];
+
 const BONDS = ['married', 'together', 'parted'];
 
 const bondBetween = (a, b) => {
@@ -9521,6 +9541,20 @@ function showLit(){
     }
   }
 
+  /* WHAT THE APP FOLDED ON ITS OWN. The tree changed shape without anybody
+     asking it to, which is the one kind of change that must never be quiet. */
+  if (autoMerged.length){
+    const n = autoMerged.length;
+    const one = autoMerged[0];
+    rows.push(
+      `<div class="pill"><b>${n === 1 ? 'Two records made one' : `${n} folded together`}</b>` +
+      `<span>${n === 1
+        ? `${esc(one.dropped.name)} was already here as ${esc(one.keep.name)}.`
+        : `${n} names you added were already in this tree.`} ` +
+      `Nothing was deleted.</span>` +
+      `<button type="button" id="mergedGo">See what, and undo</button></div>`);
+  }
+
   /* NAMES JOINED TO NOTHING. Not urgent and never an error, but it must not
      be possible to have five of them and never know. */
   {
@@ -9558,6 +9592,7 @@ function showLit(){
   if ($('litOff')) $('litOff').onclick = () => { lit = null; render(); };
   if ($('undelete')) $('undelete').onclick = putThemBack;
   if ($('lostGo')) $('lostGo').onclick = openAdrift;
+  if ($('mergedGo')) $('mergedGo').onclick = openMerged;
   if ($('foldOff')) $('foldOff').onclick = () => {
     for (const id of [...folded]) setLineFolded(id, false);
     render(); fit();
@@ -11625,6 +11660,85 @@ function adriftRoom(){
   }).join('');
 }
 
+/* ── WHAT THE APP FOLDED, AND THE WAY BACK ───────────────────────────────
+ *
+ * "When names are duplicated, merge them."
+ *
+ * It does. This is the other half of doing that honestly: every fold shown,
+ * with the evidence it acted on and a button that puts the two records back
+ * the way they were. Three living Garikais in one family is ordinary, and
+ * although the app refuses to fold those, the family is the authority on
+ * which is which — so the way back is never more than one tap away.
+ */
+function mergedRoom(){
+  if (!autoMerged.length) return '';
+  return autoMerged.map((m, i) => {
+    const still = !!(state.people[m.keep.id]);
+    return `<div class="lost">` +
+      `<u>${esc(m.dropped.name)} → ${esc(m.keep.name)}` +
+        `<small>one record now${m.dropped.born ? ` · b. ${esc(m.dropped.born)}` : ''}</small></u>` +
+      `<p class="maybe">Folded because <i>${esc((m.why || []).join('; '))}</i>. ` +
+      `Nothing was deleted — the other record is set aside and still readable, ` +
+      `and everybody who was under it is now under ${esc(m.keep.name.split(' ')[0])}.</p>` +
+      `<span class="acts">` +
+        (still ? `<button type="button" class="mini" data-mshow="${esc(m.keep.id)}">Show them</button>` : '') +
+        `<button type="button" class="mini join" data-msplit="${esc(m.dropped.id)}|${i}">` +
+          `They are two different people</button>` +
+      `</span></div>`;
+  }).join('');
+}
+
+function openMerged(){
+  closeForm();
+  pending = { kind:'dupes', anchorId: sel || state.rootId };
+  const el = document.createElement('div');
+  el.id = 'form';
+  el.className = 'wide';
+  document.body.appendChild(el);
+  const n = autoMerged.length;
+  el.innerHTML =
+    `<p class="cap">Names that were already here</p>` +
+    (n
+      ? `<p class="covnote">${n === 1 ? 'A name' : `${n} names`} you added ` +
+        `${n === 1 ? 'was' : 'were'} already in this family, so ${n === 1 ? 'it is' : 'they are'} ` +
+        `one record now rather than two. This only happens where there is nothing ` +
+        `at all to say they are different people — a shared marriage, a shared ` +
+        `child, or the same name, year and mutupo. Where there is any doubt the ` +
+        `app leaves it for you.</p>` + mergedRoom()
+      : `<p class="browse">Nothing has been folded together.</p>`) +
+    `<div class="row"><button class="btn" id="mergedNo">Done</button></div>`;
+  placeForm(el);
+
+  el.querySelectorAll('[data-mshow]').forEach(b => b.onclick = () => {
+    const id = b.dataset.mshow;
+    sel = id; closeForm(); render();
+    if (layout.persons[id]) focusOn(id, Math.max(pos.k, 0.78));
+    say(`${state.people[id].name} — ${positionOf(id)}.`);
+  });
+
+  /* TAKING ONE BACK. Straight to the server, because the two records and
+     everything that moved between them live there — the page holds the tree
+     as it is NOW, which is after the fold, and has nothing to reverse. */
+  el.querySelectorAll('[data-msplit]').forEach(b => b.onclick = async () => {
+    const [id, at] = b.dataset.msplit.split('|');
+    b.disabled = true;
+    try {
+      const r = await postOps([{ op:'splitPeople', id }]);
+      if (!r.ok) throw new Error('the server answered ' + r.status);
+      autoMerged.splice(Number(at), 1);
+      await refresh();
+      closeForm(); render(); fit();
+      say('Put back as two separate people. They will not be folded together again.');
+      if (autoMerged.length) openMerged();
+    } catch (e) {
+      b.disabled = false;
+      say('That could not be undone just now — ' + e.message);
+    }
+  });
+  $('mergedNo').onclick = () => { autoMerged = []; closeForm(); render(); };
+  el.addEventListener('keydown', e => { if (e.key === 'Escape'){ e.preventDefault(); closeForm(); } });
+}
+
 function openAdrift(){
   closeForm();
   pending = { kind:'dupes', anchorId: sel || state.rootId };
@@ -12129,8 +12243,14 @@ function setMe(id, opts){
   meId = id;
   pickingMe = false;
   try { id ? localStorage.setItem(ME_KEY, id) : localStorage.removeItem(ME_KEY); } catch (e) {}
-  // Tell the server, unless this IS the server's answer arriving.
-  if (store === 'shared' && !(opts && opts.fromServer)) claimViewer(id);
+  /* Tell the server, unless this IS the server's answer arriving — and not
+     while the id is still this page's own. Somebody who plants a tree and
+     marks themselves before the first save has a provisional id, and posting
+     it asked the database to read "p4" as a uuid. The claim goes when the
+     save comes back with the real one; see remapId. */
+  if (store === 'shared' && !(opts && opts.fromServer) && (!id || mintedYet(id))){
+    claimViewer(id);
+  }
   updateWho();
   render();
   if (id) say(`${state.people[id].name} is you. Tap anyone to see what they are to you.`);
@@ -12142,6 +12262,9 @@ function setMe(id, opts){
    and the answer on screen is right either way — what this decides is whether
    the NEXT device to sign in gets the same answer. A failure says so rather
    than silently leaving the two disagreeing. */
+/* A claim in flight, so a save can wait for it. See remapId. */
+let claimingMe = null;
+
 async function claimViewer(id){
   try {
     const r = await fetch('/api/me/person', {
@@ -13208,7 +13331,17 @@ async function flush(){
     try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
     return;
   }
-  if (store !== 'shared' || sending || !synced) return;
+  /* AN EDIT MADE WHILE A SAVE IS IN FLIGHT IS NOT DROPPED.
+   *
+   * This used to return here and nothing ever came back for it. The change
+   * stayed in `state`, out of `synced`, and was sent only when the NEXT edit
+   * happened to start another flush — so somebody who typed a name during the
+   * four hundred milliseconds of the previous save, and then stopped, had
+   * their work sitting unsent on their own screen looking saved. Two
+   * relatives working at once is the normal case in this project, and so is a
+   * slow connection, which is what makes the window wide. */
+  if (store !== 'shared' || !synced) return;
+  if (sending){ clearTimeout(timer); timer = setTimeout(flush, 250); return; }
 
   const ops = diffOps(synced, state);
   if (!ops.length) return;
@@ -13251,14 +13384,43 @@ async function flush(){
     headSeq = Math.max(headSeq, Number(out.seq) || 0);
     if (wasCaughtUp) markSeen(headSeq);
     synced = copyState();
+    /* Whoever is viewing must be on the session before the tree is asked
+       for, or the ask is refused. See remapId. */
+    if (claimingMe){ try { await claimingMe; } catch (e) {} claimingMe = null; }
     // Versions moved for everything we touched; the next read settles them.
     await refresh({ quiet:true });
+
+    /* ── AND IF THAT JUST DOUBLED SOMEBODY, THE SERVER HAS FOLDED THEM ─────
+     *
+     * "When names are duplicated, merge them."
+     *
+     * The tree has already changed underneath this page by the time the
+     * answer arrives, so the one thing that must not happen is it changing
+     * quietly. Somebody who typed a name and saw the tree shift has to be
+     * told what the app did with it, in the same breath, with the way to take
+     * it back. See routes/tree.js and ops.splitPeople. */
+    if (Array.isArray(out.merged) && out.merged.length){
+      autoMerged = out.merged.concat(autoMerged).slice(0, 12);
+      render();
+      const one = out.merged[0];
+      say(out.merged.length === 1
+        ? `${one.dropped.name} was already in this tree as ${one.keep.name}, so ` +
+          `they are one record now — ${one.why.join('; ')}.`
+        : `${out.merged.length} names you added were already in this tree, so ` +
+          `they are one record each now.`);
+    }
   } catch (e) {
     store = 'stalled';
     stalledWhy = 'The last change could not be saved (' + e.message + ').';
     showStalled();
   } finally {
     sending = false;
+    /* And whatever arrived while that was in the air goes now, rather than
+       waiting for somebody to type something else. */
+    if (store === 'shared' && synced && diffOps(synced, state).length){
+      clearTimeout(timer);
+      timer = setTimeout(flush, 120);
+    }
   }
 }
 
@@ -13295,7 +13457,25 @@ function remapId(from, to){
     return dismissedKey(a === from ? to : a, b === from ? to : b);
   });
   if (state.rootId === from) state.rootId = to;
-  if (meId === from){ meId = to; try { localStorage.setItem(ME_KEY, to); } catch (e) {} }
+  if (meId === from){
+    meId = to;
+    try { localStorage.setItem(ME_KEY, to); } catch (e) {}
+    /* AND THE SESSION IS TOLD, NOW THAT THERE IS SOMETHING TO TELL IT.
+     *
+     * Somebody who plants a tree and marks themselves before the first save
+     * held a provisional id, which the server cannot be given. Without this
+     * the claim was simply never made: the session stayed nobody, the next
+     * read of the tree came back "say who you are" — which is correct of the
+     * server and fatal to the page, because it arrives as a refusal in the
+     * middle of a sync and stalls it. The tree then could not be re-read at
+     * all until a reload. */
+    /* AWAITED BY THE SAVE THAT CAUSED IT, because the very next thing that
+       save does is re-read the tree — and a read by a session that has not
+       said who it is comes back "say who you are", which arrives in the
+       middle of a sync and stalls the page until a reload. Two fetches
+       racing, and the loser was the whole tree. */
+    if (store === 'shared') claimingMe = claimViewer(to);
+  }
   if (sel === from) sel = to;
   if (fresh.has(from)){ fresh.delete(from); fresh.add(to); }
 
@@ -13325,7 +13505,9 @@ const HELD_ID_ATTRS = ['share', 'parents', 'union', 'keep', 'drop', 'link',
                        'card', 'rm', 'not', 'vis',
                        // the not-joined room: three of these hold a bare id,
                        // and two hold a pair joined by a bar
-                       'lostsee', 'lostjoin', 'lostno', 'lostsame'];
+                       'lostsee', 'lostjoin', 'lostno', 'lostsame',
+                       // the folded-together room: one bare id, one id-and-index
+                       'mshow', 'msplit'];
 
 function rewriteHeldIds(from, to){
   const form = typeof document !== 'undefined' && document.getElementById
