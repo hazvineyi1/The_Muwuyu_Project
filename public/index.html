@@ -1182,6 +1182,12 @@ body.carrying .pod{transition:none;}
 #form .kinpair{display:flex; gap:10px; margin-bottom:4px;}
 #form .kinpair > div{flex:1; min-width:0;}
 #form .kinlist{margin:-4px 0 8px;}
+/* BROWSING, not guessing. A newcomer picking the relative they will join on
+   has to be able to SEE who is in the tree — somebody who knows their uncle is
+   in there but not how his name was written cannot type their way to him. Tall
+   enough for several names and short enough to leave the rest of the form on
+   screen. */
+#form .kinlist.browse{max-height:34vh; overflow:auto; padding-right:2px;}
 #form .kinlist button{
   display:block; width:100%; text-align:left; cursor:pointer;
   padding:6px 10px; margin-bottom:4px; border-radius:8px;
@@ -12865,25 +12871,50 @@ function openJoinMe(roster, then){
   el.className = 'wide';
   document.body.appendChild(el);
 
-  let said = { name:'', sex:'', to:null, as:'', via:'', viaSex:'' };
+  let said = { name:'', sex:'', to:null, as:'', via:'', viaId:null, viaSex:'' };
   let q = '';
 
+  /* WHAT THE LIST SHOWS BEFORE ANYTHING IS TYPED: everybody, to be picked
+     from. It used to show "Two letters is enough" and nothing else, which
+     asks a newcomer to guess a spelling of a name somebody else entered —
+     Chaitezvi or Chaitezwi, Musoni or Musonza Musoni — before the app will
+     admit whether that person is even there. "You have to pick someone who
+     you know to be in the tree" is a picking, and you cannot pick from a
+     list you cannot see. Typing narrows it; it does not summon it. */
+  const BROWSE = 60;
   const found = () => {
     const needle = q.trim().toLowerCase();
-    if (needle.length < 2) return [];
+    if (!needle) return roster.slice(0, BROWSE);
     return roster.filter(p =>
       p.name.toLowerCase().includes(needle) ||
-      (p.also || []).some(a => a.toLowerCase().includes(needle))).slice(0, 8);
+      (p.also || []).some(a => a.toLowerCase().includes(needle))).slice(0, 12);
   };
   const nameOf = id => (roster.find(p => p.id === id) || {}).name || 'them';
+
+  /* Who the typed in-between name could be, out of the people already here.
+     Offered rather than assumed: a family that names sons after fathers will
+     match on a first name often, and the person answering is the only one who
+     knows which man they mean. Never the anchor — a grandfather cannot be the
+     parent in between. */
+  const viaHits = () => {
+    const needle = said.via.trim().toLowerCase();
+    if (needle.length < 2) return [];
+    return roster.filter(p =>
+      p.id !== said.to &&
+      (p.name.toLowerCase().includes(needle) ||
+       (p.also || []).some(a => a.toLowerCase().includes(needle)))).slice(0, 6);
+  };
 
   const draw = () => {
     const hits = found();
     el.innerHTML =
       `<p class="cap">Put yourself in the tree</p>` +
-      `<p class="covnote">Everybody in this tree is joined to somebody — that ` +
-      `is what makes it a tree rather than a list. So this asks for one ` +
-      `relative you are sure of, and puts you in beside them.</p>` +
+      /* THE RULE, SAID FIRST AND IN PLAIN WORDS. Somebody meeting this form
+         is about to be asked for a relative and should know why before they
+         are asked, not after they wonder. */
+      `<p class="covnote">To be in this tree you have to be connected to ` +
+      `somebody in it. So pick one person you know is here, say what they are ` +
+      `to you, and you go in beside them.</p>` +
 
       `<p class="lbl">Your name</p>` +
       `<input id="jName" class="fld" value="${esc(said.name)}" ` +
@@ -12893,25 +12924,28 @@ function openJoinMe(roster, then){
         `<button type="button" data-jsex="m" aria-pressed="${said.sex === 'm'}">He</button>` +
         `<button type="button" data-jsex="" aria-pressed="${!said.sex}">—</button></div>` +
 
-      `<p class="lbl">Somebody already in the tree</p>` +
-      `<p class="covnote">A parent, a brother or sister, a grandparent — ` +
-      `anybody you can name for certain. Start typing and they will come up.</p>` +
-      `<input id="jFind" class="fld" placeholder="Their name" value="${esc(q)}" ` +
-        `autocomplete="off">` +
+      `<p class="lbl">Pick somebody already in the tree</p>` +
+      `<p class="covnote">Everybody here is joined to somebody, so you go in ` +
+      `beside one person you are sure of — a parent, a brother or sister, a ` +
+      `grandparent. ${roster.length} ${roster.length === 1 ? 'name is' : 'names are'} ` +
+      `in this family. Pick one from the list, or type to narrow it.</p>` +
+      `<input id="jFind" class="fld" placeholder="Their name, or scroll the list" ` +
+        `value="${esc(q)}" autocomplete="off">` +
       (said.to
         ? `<p class="maybe">You are joining on beside <b>${esc(nameOf(said.to))}</b>. ` +
           `<button type="button" class="linkbtn" id="jElse">somebody else</button></p>`
-        : `<div class="kinlist" id="jList">` +
-          (q.trim().length < 2
-            ? `<p class="browse">Two letters is enough.</p>`
-            : hits.length
-              ? hits.map(p => `<button type="button" data-jto="${esc(p.id)}">${esc(p.name)}` +
-                  ((p.also || []).length ? `<small>also ${esc(p.also[0])}</small>` : '') +
-                  `</button>`).join('')
-              : `<p class="covnote">Nobody of that name is in this family yet. Try ` +
-                `another relative — a parent, a grandparent, a brother or sister. ` +
-                `If none of them is in the tree either, ask whoever sent you the ` +
-                `link to put one of them in first, and you can join on beside them.</p>`) +
+        : `<div class="kinlist${q.trim() ? '' : ' browse'}" id="jList">` +
+          (hits.length
+            ? hits.map(p => `<button type="button" data-jto="${esc(p.id)}">${esc(p.name)}` +
+                ((p.also || []).length ? `<small>also ${esc(p.also[0])}</small>` : '') +
+                `</button>`).join('') +
+              (!q.trim() && roster.length > BROWSE
+                ? `<p class="covnote">and ${roster.length - BROWSE} more — type a ` +
+                  `letter or two to reach them.</p>` : '')
+            : `<p class="covnote">Nobody of that name is in this family yet. Try ` +
+              `another relative — a parent, a grandparent, a brother or sister. ` +
+              `If none of them is in the tree either, ask whoever sent you the ` +
+              `link to put one of them in first, and you can join on beside them.</p>`) +
           `</div>`) +
 
       (said.to
@@ -12925,13 +12959,30 @@ function openJoinMe(roster, then){
             ? `<p class="lbl">And the one in between</p>` +
               `<p class="covnote">Nobody hangs off a grandparent directly — your ` +
               `mother or father is between you and ${esc(nameOf(said.to).split(' ')[0])}. ` +
-              `Name them and you both go in together.</p>` +
+              `If they are already here, pick them; if not, write their name and ` +
+              `you both go in together.</p>` +
               `<input id="jVia" class="fld" value="${esc(said.via)}" ` +
                 `placeholder="Your mother or father" autocomplete="off">` +
-              `<div class="seg" id="jViaSex">` +
-                `<button type="button" data-jvsex="f" aria-pressed="${said.viaSex === 'f'}">She</button>` +
-                `<button type="button" data-jvsex="m" aria-pressed="${said.viaSex === 'm'}">He</button>` +
-                `<button type="button" data-jvsex="" aria-pressed="${!said.viaSex}">—</button></div>`
+              /* PICKED IF THEY ARE HERE. The same rule as the field above, and
+                 for the same reason: this used to write down a new person
+                 every time, so somebody whose father was already in the tree
+                 put him in twice on the way to saying who they were. */
+              (said.viaId
+                ? `<p class="maybe">That is <b>${esc(nameOf(said.viaId))}</b>, ` +
+                  `already in the tree. ` +
+                  `<button type="button" class="linkbtn" id="jViaElse">somebody else</button></p>`
+                : viaHits().length
+                  ? `<div class="kinlist" id="jViaList">` +
+                    `<p class="teachlbl">Already in the tree — pick them rather ` +
+                    `than writing them down twice:</p>` +
+                    viaHits().map(p => `<button type="button" data-jvia="${esc(p.id)}">` +
+                      `${esc(p.name)}</button>`).join('') + `</div>`
+                  : '') +
+              (said.viaId ? '' :
+                `<div class="seg" id="jViaSex">` +
+                  `<button type="button" data-jvsex="f" aria-pressed="${said.viaSex === 'f'}">She</button>` +
+                  `<button type="button" data-jvsex="m" aria-pressed="${said.viaSex === 'm'}">He</button>` +
+                  `<button type="button" data-jvsex="" aria-pressed="${!said.viaSex}">—</button></div>`)
             : '')
         : '') +
 
@@ -12944,7 +12995,7 @@ function openJoinMe(roster, then){
   };
 
   const ready = () => said.name.trim() && said.to && said.as &&
-    (!NEEDS_THE_ONE_BETWEEN.has(said.as) || said.via.trim());
+    (!NEEDS_THE_ONE_BETWEEN.has(said.as) || said.viaId || said.via.trim());
 
   const wire = () => {
     const nm = $('jName');
@@ -12952,7 +13003,15 @@ function openJoinMe(roster, then){
     const fd = $('jFind');
     if (fd) fd.oninput = () => { q = fd.value; draw(); $('jFind').focus(); };
     const via = $('jVia');
-    if (via) via.oninput = () => { said.via = via.value; };
+    if (via) via.oninput = () => {
+      said.via = via.value;
+      said.viaId = null;
+      /* Redrawn so the list of people it could be keeps up with the typing,
+         and the caret put back where it was — this field is being typed into. */
+      const at = via.selectionStart;
+      draw();
+      try { $('jVia').focus(); $('jVia').setSelectionRange(at, at); } catch (e) {}
+    };
     el.querySelectorAll('[data-jsex]').forEach(b => b.onclick = () => {
       said.sex = b.dataset.jsex; draw(); });
     el.querySelectorAll('[data-jvsex]').forEach(b => b.onclick = () => {
@@ -12961,6 +13020,13 @@ function openJoinMe(roster, then){
       said.to = b.dataset.jto; draw(); });
     el.querySelectorAll('[data-jas]').forEach(b => b.onclick = () => {
       said.as = b.dataset.jas; draw(); });
+    el.querySelectorAll('[data-jvia]').forEach(b => b.onclick = () => {
+      said.viaId = b.dataset.jvia;
+      said.via = nameOf(said.viaId);
+      draw();
+    });
+    const viaElse = $('jViaElse');
+    if (viaElse) viaElse.onclick = () => { said.viaId = null; said.via = ''; draw(); };
     const other = $('jElse');
     if (other) other.onclick = () => { said.to = null; said.as = ''; q = ''; draw(); };
     $('jNo').onclick = () => { closeForm(); location.reload(); };
@@ -12980,7 +13046,9 @@ function openJoinMe(roster, then){
         body: JSON.stringify({
           name: said.name.trim(), sex: said.sex, to: said.to, as: said.as,
           via: NEEDS_THE_ONE_BETWEEN.has(said.as)
-            ? { name: said.via.trim(), sex: said.viaSex } : null
+            ? (said.viaId ? { id: said.viaId }
+                          : { name: said.via.trim(), sex: said.viaSex })
+            : null
         })
       });
       const body = await r.json().catch(() => ({}));
@@ -14269,6 +14337,32 @@ async function flush(){
           'saved. The tree has been refreshed — please make it again.');
       showClash(who);
       return;
+    }
+    /* ── A NAME WITH NOBODY ON THE OTHER END OF IT ────────────────────────
+     *
+     * "To be added to the tree you need to be connected to somebody. You have
+     *  to pick someone who you know to be in the tree and connect from them."
+     *
+     * The rule is kept at the write door now, not only in this page, so this
+     * is the answer when a page has somehow composed a name joined to nothing
+     * — a tab left open since before that rule existed, a half-applied sync,
+     * or something this project has not thought of. It is NOT a stall: the
+     * app is working and one batch was refused. The batch is all-or-nothing,
+     * so nothing in it was recorded, and the only honest screen is the tree
+     * the server actually holds. Roll back to it and say so in the same
+     * breath, including that the change was undone here too — a refusal that
+     * quietly drops somebody's typing is worse than the loose name it
+     * prevented. */
+    if (r.status === 422){
+      let why = '';
+      try { const d = await r.json(); if (d.error === 'not_joined') why = d.message || ''; } catch (e) {}
+      if (why){
+        state = JSON.parse(JSON.stringify(synced));
+        if (!state.people[sel]) sel = null;
+        closeForm(); render();
+        say(why + ' That change has been undone here too.', 'atonce');
+        return;
+      }
     }
     if (!r.ok) throw new Error('the server answered ' + r.status);
 

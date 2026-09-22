@@ -55,27 +55,43 @@ function buildOps(n, tag) {
     ops.push({ op:'addPerson', ref, name: `${NAMES[i % NAMES.length]}${i} ${tag}`,
                sex: i % 2 ? 'f' : 'm', totem: 'Nzou', born: String(1900 + (i % 90)) });
   }
-  // Couples and their children, so the tree has real shape to walk rather
-  // than being a list — the union walking is half of what made it slow.
-  let u = 0;
+  /* Couples and their children, so the tree has real shape to walk rather
+     than being a list — the union walking is half of what made it slow.
+
+     ONE FAMILY, not four hundred strangers who happen to share a tree. Each
+     couple's first name is a child of the couple before, so every union hangs
+     off the one above it and the whole four hundred are reachable from the
+     first. That is what a family looks like, and since "nobody goes in on
+     their own" it is also the only shape the write door will take. */
+  const unions = [];
   for (let i = 0; i + 1 < n; i += 2) {
-    const uref = '$u' + (u++);
+    const uref = '$u' + unions.length;
     ops.push({ op:'addUnion', ref: uref });
     ops.push({ op:'addPartner', unionId: uref, personId: ids[i] });
     ops.push({ op:'addPartner', unionId: uref, personId: ids[i + 1] });
-    const kid = i + 2 + (i % 6);
-    if (kid < n) ops.push({ op:'addChild', unionId: uref, personId: ids[kid] });
+    // Each couple's first name is a child of a couple one generation up, two
+    // children to a marriage. Generations of two rather than a single line:
+    // eight deep and branching, which is the shape of a family and the shape
+    // the drawing is measured against.
+    if (unions.length) {
+      ops.push({ op:'addChild',
+                 unionId: unions[Math.floor((unions.length - 1) / 2)],
+                 personId: ids[i] });
+    }
+    unions.push(uref);
   }
   return ops;
 }
 
 function plantedDuplicates(tag) {
   // Two records of one woman: the same name, one of them with the title her
-  // grandchildren would use, and both married to the same man.
+  // grandchildren would use, and both married to the same man — who is a son
+  // of the family's first couple, because nobody goes in on their own.
   return [
     { op:'addPerson', ref:'$dupA', name:`Ambuya Chiedza ${tag}`, sex:'f', totem:'Shava', born:'1931' },
     { op:'addPerson', ref:'$dupB', name:`Chiedza ${tag}`,        sex:'f', totem:'Shava', born:'1931' },
     { op:'addPerson', ref:'$hus',  name:`Mudhara Zvikomborero ${tag}`, sex:'m', totem:'Nzou', born:'1928' },
+    { op:'addChild', unionId:'$u0', personId:'$hus' },
     { op:'addUnion', ref:'$du1' },
     { op:'addPartner', unionId:'$du1', personId:'$hus' },
     { op:'addPartner', unionId:'$du1', personId:'$dupA' },

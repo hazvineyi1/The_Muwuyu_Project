@@ -11,8 +11,9 @@
 // the same rows, and two people editing the SAME person is detected and
 // reported rather than resolved by whoever happened to save last.
 
-const { ConflictError, badRequest, notFound, cycle } = require('./errors');
+const { ConflictError, badRequest, notFound, cycle, adrift } = require('./errors');
 const graph = require('./graph');
+const joined = require('./joined');
 
 // Namespace for this app's advisory locks, so a tree lock can never collide
 // with the migration lock in db/migrate.js.
@@ -825,12 +826,40 @@ const HANDLERS = {
     // Parent unions: if both have one and they differ, this is not a merge we
     // can decide. Two different sets of parents is a genuine disagreement
     // about who somebody is, and guessing would destroy one branch.
+    //
+    // UNLESS THE PARENTS ARE THE SAME PEOPLE. Two unions naming exactly the
+    // same partners are one marriage written down twice — which is what the
+    // commonest real duplicate looks like from below. Two relatives each
+    // record Chaitezvi's son Thomas; neither sees the other's union; the
+    // family ends up with one father, two marriages of one, and two Thomases.
+    //
+    // The duplicate finder already reads that correctly and says so in its own
+    // words — "the same parents" — and calls the pair conclusive, so the app
+    // folds it without asking. This refusal then threw, inside the auto-merge
+    // block that deliberately never fails a write, so the throw was swallowed
+    // and the fold the app had just promised did not happen and did not say
+    // it had not happened. The two halves have to agree, and the finder is
+    // the half that is right: the same two people are the same two parents,
+    // however many rows the marriage is spread across.
+    //
+    // The duplicate union is left standing, holding whatever else the family
+    // put in it. Emptying it here would be a second merge nobody asked for,
+    // and splitPeople needs it to put this record back.
     const keepParent = await graph.parentUnionOf(client, keepId);
     const mergeParent = await graph.parentUnionOf(client, mergeId);
     if (keepParent && mergeParent && keepParent !== mergeParent) {
-      throw cycle(
-        'Those two records have different parents — resolve that before merging',
-        { keepId, keepParentUnion: keepParent, mergeId, mergeParentUnion: mergeParent });
+      const partnersOf = async u => {
+        const { rows } = await client.query(
+          'SELECT person_id FROM union_partners WHERE union_id = $1 ORDER BY person_id', [u]);
+        return rows.map(r => r.person_id).join(',');
+      };
+      const mine = await partnersOf(keepParent);
+      const theirs = await partnersOf(mergeParent);
+      if (!mine || mine !== theirs) {
+        throw cycle(
+          'Those two records have different parents — resolve that before merging',
+          { keepId, keepParentUnion: keepParent, mergeId, mergeParentUnion: mergeParent });
+      }
     }
     /* WHAT THIS MERGE IS ABOUT TO MOVE, written down before it moves.
        See migration 016. Without it a merge can be read back but not taken
@@ -1004,7 +1033,13 @@ async function collapseDuplicateUnions(client, treeId, personId) {
 
 // ---------------------------------------------------------------------------
 
-async function applyOps(pool, treeId, ops, actor = '') {
+/* opts.everyoneJoined — refuse the whole batch if it would leave a new name
+ * connected to nobody. OFF by default, and that is not an oversight: this
+ * module is the primitive, and the migration importer, the tests that exercise
+ * the adrift finder, and anything else that needs to build a tree in pieces
+ * all legitimately want the primitive. The rule belongs at the door people
+ * come through, which turns it on. See db/joined.js. */
+async function applyOps(pool, treeId, ops, actor = '', opts = {}) {
   if (!Array.isArray(ops)) throw badRequest('ops must be an array');
   if (!ops.length) throw badRequest('ops is empty');
 
@@ -1049,6 +1084,37 @@ async function applyOps(pool, treeId, ops, actor = '') {
       } catch (e) {
         if (e.status) { e.details = { ...e.details, opIndex: i, op: op.op }; }
         throw e;
+      }
+    }
+
+    /* NOBODY GOES IN ON THEIR OWN.
+     *
+     * Checked here, after every op has applied and before anything is
+     * committed, because that is the only moment the question can be answered
+     * honestly: a person is added by one op and joined by another, and asking
+     * in between would refuse every well-formed batch in the app. Refusing
+     * here rolls back the whole batch, so a family never lands half in. */
+    if (opts.everyoneJoined) {
+      const made = [];
+      for (const [i, op] of ops.entries()) {
+        if (op?.op !== 'addPerson') continue;
+        const id = op.ref ? refs.get(op.ref) : results[i]?.id;
+        if (id) made.push(id);
+      }
+      const loose = await joined.looseAfter(client, treeId, made);
+      if (loose.length) {
+        const { rows: names } = await client.query(
+          'SELECT name FROM people WHERE id = ANY($1::uuid[]) ORDER BY name', [loose]);
+        const said = names.map(r => r.name).filter(Boolean);
+        throw adrift(
+          'Everybody in this tree is joined to somebody. ' +
+          (said.length === 1
+            ? `${said[0]} has nobody on the other end — pick the relative ` +
+              `they belong to and add them from there.`
+            : `${said.join(', ')} have nobody on the other end — pick the ` +
+              `relatives they belong to and add them from there.`) +
+          ' Nothing has been changed.',
+          { people: loose, names: said });
       }
     }
 

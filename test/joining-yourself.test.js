@@ -136,6 +136,48 @@ const http = require('http');
           await joinedUp(body.id) && await joinedUp(body.via));
   }
 
+  section('AND IF THE ONE IN BETWEEN IS ALREADY HERE, THEY ARE PICKED, NOT RETYPED');
+  /* "You have to pick someone who you know to be in the tree and connect from
+      them" applies twice in this branch and used to apply once. The in-between
+     name was always written down as a NEW person, so a grandson whose father
+     was already in the tree put his father in a second time on his way to
+     saying who he was — the front door making a duplicate out of a man it was
+     already looking at. */
+  {
+    const before = await pool.query(
+      `SELECT count(*)::int AS n FROM people WHERE tree_id = $1 AND name = 'Sydney Musoni'`,
+      [treeId]);
+    const { status, body } = await join({ name:'Tapiwa Musoni', sex:'m',
+                                          to:id('gf'), as:'grandfather',
+                                          via:{ id: id('dad') } });
+    eq('recorded', status, 201);
+    eq('nobody new was invented in between', body.via, null);
+    const after = await pool.query(
+      `SELECT count(*)::int AS n FROM people WHERE tree_id = $1 AND name = 'Sydney Musoni'`,
+      [treeId]);
+    eq('and there is still one Sydney', after.rows[0].n, before.rows[0].n);
+    eq('the newcomer is a child of the man who was already here',
+       await parentsOf(body.id), ['Evelyn Mandaba', 'Sydney Musoni']);
+    check('joined to somebody', await joinedUp(body.id));
+  }
+
+  section('and the one in between cannot be the grandparent themselves');
+  {
+    const { status, body } = await join({ name:'Nobody At All', sex:'m',
+                                          to:id('gf'), as:'grandfather',
+                                          via:{ id: id('gf') } });
+    eq('refused', status, 400);
+    check('and says why', /cannot be the one in between/.test(body.message), body.message);
+  }
+
+  section('nor somebody who is not in this family');
+  {
+    const { status } = await join({ name:'Nobody At All', sex:'m',
+                                    to:id('gf'), as:'grandfather',
+                                    via:{ id:'11111111-1111-1111-1111-111111111111' } });
+    eq('refused', status, 404);
+  }
+
   section('"BERTHA IS MY DAUGHTER" IS REFUSED, BECAUSE SHE HAS BOTH PARENTS');
   /* The one-set-of-parents rule is structural in this database, so the answer
      has to be a sentence somebody can act on rather than a constraint error. */

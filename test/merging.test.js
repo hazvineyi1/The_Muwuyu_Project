@@ -79,11 +79,17 @@ const http = require('http');
     ], 'the first relative');
     first = seed.refs['$t'];
 
-    // Somebody else, from a funeral programme, enters the same man and a child.
+    /* Somebody else, from a funeral programme, enters the same man and a
+       child — growing him off Chaitezvi, because that is the only way the app
+       lets anybody in. Nobody goes in on their own, so the copy arrives
+       joined and the fold has to happen anyway. See db/joined.js. */
     const { status, body } = await post(treeId, [
       { op:'addPerson', ref:'$t2', name:'Thomas Musonza Musoni', sex:'m',
         totem:'Mwendamberi', born:'1971' },
       { op:'addPerson', ref:'$k', name:'Musekiwa Mupfunde', sex:'m', totem:'Mwendamberi', born:'2001' },
+      { op:'addUnion', ref:'$gu2' },
+      { op:'addPartner', unionId:'$gu2', personId: seed.refs['$gf'] },
+      { op:'addChild', unionId:'$gu2', personId:'$t2' },
       { op:'addUnion', ref:'$u2' },
       { op:'addPartner', unionId:'$u2', personId:'$t2' },
       { op:'addChild', unionId:'$u2', personId:'$k' }
@@ -144,12 +150,25 @@ const http = require('http');
   {
     const t3 = await newTree(pool, 'the Chikwanha family');
     session.treeId = t3;
-    await applyOps(pool, t3, [
-      { op:'addPerson', ref:'$a', name:'Tendai Chikwanha', sex:'f', totem:'Shumba', born:'1960' }
+    /* Everybody who comes in comes in joined to somebody, so the second
+       Tendai arrives married to the first one's brother — a connection that
+       is evidence neither way. What decides this pair is the years. */
+    const seed3 = await applyOps(pool, t3, [
+      { op:'addPerson', ref:'$dad', name:'Nyasha Chikwanha', sex:'m', totem:'Shumba', born:'1930' },
+      { op:'addPerson', ref:'$a', name:'Tendai Chikwanha', sex:'f', totem:'Shumba', born:'1960' },
+      { op:'addPerson', ref:'$bro', name:'Farai Chikwanha', sex:'m', totem:'Shumba', born:'1958' },
+      { op:'addUnion', ref:'$u' },
+      { op:'addPartner', unionId:'$u', personId:'$dad' },
+      { op:'addChild', unionId:'$u', personId:'$bro' },
+      { op:'addChild', unionId:'$u', personId:'$a' }
     ], 'seed');
-    const { body } = await post(t3, [
-      { op:'addPerson', ref:'$b', name:'Tendai Chikwanha', sex:'f', totem:'Shumba', born:'1988' }
+    const { status: s3, body } = await post(t3, [
+      { op:'addPerson', ref:'$b', name:'Tendai Chikwanha', sex:'f', totem:'Shumba', born:'1988' },
+      { op:'addUnion', ref:'$u2' },
+      { op:'addPartner', unionId:'$u2', personId: seed3.refs['$bro'] },
+      { op:'addPartner', unionId:'$u2', personId:'$b' }
     ]);
+    eq('the write went through', s3, 200);
     eq('no fold', (body.merged || []).length, 0);
   }
 
@@ -159,12 +178,22 @@ const http = require('http');
   {
     const t4 = await newTree(pool, 'the Nyamhunga family');
     session.treeId = t4;
-    await applyOps(pool, t4, [
-      { op:'addPerson', ref:'$a', name:'Rudo Nyamhunga', sex:'f', totem:'Nzou' }
+    const seed4 = await applyOps(pool, t4, [
+      { op:'addPerson', ref:'$dad', name:'Tapiwa Nyamhunga', sex:'m', totem:'Nzou' },
+      { op:'addPerson', ref:'$a', name:'Rudo Nyamhunga', sex:'f', totem:'Nzou' },
+      { op:'addPerson', ref:'$bro', name:'Simba Nyamhunga', sex:'m', totem:'Nzou' },
+      { op:'addUnion', ref:'$u' },
+      { op:'addPartner', unionId:'$u', personId:'$dad' },
+      { op:'addChild', unionId:'$u', personId:'$bro' },
+      { op:'addChild', unionId:'$u', personId:'$a' }
     ], 'seed');
-    const { body } = await post(t4, [
-      { op:'addPerson', ref:'$b', name:'Rudo Nyamhunga', sex:'f', totem:'Nzou' }
+    const { status: s4, body } = await post(t4, [
+      { op:'addPerson', ref:'$b', name:'Rudo Nyamhunga', sex:'f', totem:'Nzou' },
+      { op:'addUnion', ref:'$u2' },
+      { op:'addPartner', unionId:'$u2', personId: seed4.refs['$bro'] },
+      { op:'addPartner', unionId:'$u2', personId:'$b' }
     ]);
+    eq('the write went through', s4, 200);
     eq('no fold', (body.merged || []).length, 0);
   }
 
@@ -172,12 +201,23 @@ const http = require('http');
   {
     const t5 = await newTree(pool, 'the Mupfunde family');
     session.treeId = t5;
-    await applyOps(pool, t5, [
-      { op:'addPerson', ref:'$a', name:'Tendai Mupfunde', sex:'m', totem:'Nzou', born:'1970' }
+    const seed5 = await applyOps(pool, t5, [
+      { op:'addPerson', ref:'$dad', name:'Garikai Mupfunde', sex:'m', totem:'Nzou', born:'1940' },
+      { op:'addPerson', ref:'$a', name:'Tendai Mupfunde', sex:'m', totem:'Nzou', born:'1970' },
+      { op:'addPerson', ref:'$sis', name:'Rudo Mupfunde', sex:'f', totem:'Nzou', born:'1972' },
+      { op:'addUnion', ref:'$u' },
+      { op:'addPartner', unionId:'$u', personId:'$dad' },
+      { op:'addChild', unionId:'$u', personId:'$a' },
+      { op:'addChild', unionId:'$u', personId:'$sis' }
     ], 'seed');
-    const { body } = await post(t5, [
-      { op:'addPerson', ref:'$b', name:'Tendai Musoni', sex:'m', totem:'Nzou', born:'1970' }
+    // Rudo's husband, who happens to share his brother-in-law's first name.
+    const { status: s5, body } = await post(t5, [
+      { op:'addPerson', ref:'$b', name:'Tendai Musoni', sex:'m', totem:'Nzou', born:'1970' },
+      { op:'addUnion', ref:'$u2' },
+      { op:'addPartner', unionId:'$u2', personId: seed5.refs['$sis'] },
+      { op:'addPartner', unionId:'$u2', personId:'$b' }
     ]);
+    eq('the write went through', s5, 200);
     eq('no fold', (body.merged || []).length, 0);
   }
 
@@ -186,12 +226,18 @@ const http = require('http');
     const t6 = await newTree(pool, 'the Mandaba family');
     session.treeId = t6;
     const seed = await applyOps(pool, t6, [
-      { op:'addPerson', ref:'$a', name:'Evelyn Mandaba', sex:'f', totem:'Moyondizvo', born:'1954' }
+      { op:'addPerson', ref:'$dad', name:'Nhamo Mandaba', sex:'m', totem:'Moyondizvo', born:'1925' },
+      { op:'addPerson', ref:'$a', name:'Evelyn Mandaba', sex:'f', totem:'Moyondizvo', born:'1954' },
+      { op:'addUnion', ref:'$u' },
+      { op:'addPartner', unionId:'$u', personId:'$dad' },
+      { op:'addChild', unionId:'$u', personId:'$a' }
     ], 'seed');
-    // Entered a second time, through the door that folds — and then the
-    // family says no, these are two women.
+    /* Written into her father's children a second time, by somebody who did
+       not scroll far enough — which is what this looks like in a real family
+       — and then the family says no, these are two women. */
     const made = await post(t6, [
-      { op:'addPerson', ref:'$b', name:'Evelyn Mandaba', sex:'f', totem:'Moyondizvo', born:'1954' }
+      { op:'addPerson', ref:'$b', name:'Evelyn Mandaba', sex:'f', totem:'Moyondizvo', born:'1954' },
+      { op:'addChild', unionId: seed.refs['$u'], personId:'$b' }
     ]);
     eq('folded on the way in', (made.body.merged || []).length, 1);
     await applyOps(pool, t6, [{ op:'splitPeople', id: made.body.refs['$b'] }], 'a relative');

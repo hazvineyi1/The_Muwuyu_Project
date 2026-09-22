@@ -368,7 +368,21 @@ module.exports = function treeRoutes(pool, homeTreeId = null) {
   r.post('/tree/:id/ops', own, async (req, res) => {
     try {
       const ops = Array.isArray(req.body) ? req.body : req.body?.ops;
-      const result = await applyOps(pool, req.params.id, ops, actorOf(req));
+
+      /* NOBODY GOES IN ON THEIR OWN.
+       *
+       * "To be added to the tree you need to be connected to somebody. You
+       *  have to pick someone who you know to be in the tree and connect from
+       *  them."
+       *
+       * The page already refuses this in three places — the welcome field
+       * takes one name and only while the tree is empty, every bud grows off
+       * somebody, and the front door asks a newcomer for a relative before it
+       * writes anything. All three are in a browser, and a rule kept only in
+       * a browser is a rule kept only while the browser is the one this
+       * project shipped. This is the door every write comes through. */
+      const result = await applyOps(pool, req.params.id, ops, actorOf(req),
+                                    { everyoneJoined: true });
 
       /* ── AND IF THAT JUST DOUBLED SOMEBODY, THE TWO BECOME ONE ───────────
        *
@@ -589,25 +603,74 @@ module.exports = function treeRoutes(pool, homeTreeId = null) {
            — there is a mother or a father in between, and the tree is wrong
            without them. So the name of that person is asked for rather than
            the link being fudged, and both go in together. */
+        /* AND IF THAT PERSON IS ALREADY HERE, PICKED RATHER THAN RETYPED.
+         *
+         * "You have to pick someone who you know to be in the tree and
+         *  connect from them."
+         *
+         * The same sentence applies twice in this branch, and it used to
+         * apply only once. Somebody joining on beside their grandfather was
+         * asked for the parent in between as free text, and that text was
+         * always written down as a NEW person — so a grandson whose father is
+         * already in the tree put his father in a second time, on his way to
+         * saying who he was. The app's own front door made a duplicate out of
+         * a man it was already looking at.
+         *
+         * So the page offers the roster here too, and hands back an id when
+         * somebody picks off it. A typed name still makes a new record,
+         * because sometimes the parent genuinely is not here yet. */
+        const viaId = String(via?.id || '').trim();
+        let viaRef = '$via';
+        if (viaId){
+          const { rows } = await client.query(
+            'SELECT id FROM people WHERE id = $1 AND tree_id = $2 AND aside_at IS NULL',
+            [viaId, treeId]);
+          if (!rows.length) return res.status(404).json({ error:'no_such_person',
+            message:'The one in between is not in this family tree.' });
+          if (rows[0].id === anchor.id) return res.status(400).json({ error:'need_the_one_between',
+            message:`${anchor.name} cannot be the one in between as well. Name your ` +
+                    `mother or father, who is between you and them.` });
+          viaRef = rows[0].id;
+        }
         const viaName = String(via?.name || '').trim();
-        if (!viaName) return res.status(400).json({ error:'need_the_one_between',
+        if (!viaId && !viaName) return res.status(400).json({ error:'need_the_one_between',
           message:`Nobody hangs off a grandparent directly — your mother or ` +
                   `father is between you and ${anchor.name}. Say their name and ` +
                   `both of you go in together.` });
         const viaSex = ['m', 'f'].includes(via?.sex) ? via.sex : '';
-        const u = await bestUnionOf(anchor.id);
-        ops.push({ op:'addPerson', ref:'$via', name:viaName, sex:viaSex, by:name });
-        if (u) ops.push({ op:'addChild', unionId:u, personId:'$via' });
-        else ops.push({ op:'addUnion', ref:'$gu' },
-                      { op:'addPartner', unionId:'$gu', personId:anchor.id },
-                      { op:'addChild', unionId:'$gu', personId:'$via' });
-        ops.push(mine,
-                 { op:'addUnion', ref:'$pu' },
-                 { op:'addPartner', unionId:'$pu', personId:'$via' },
-                 { op:'addChild', unionId:'$pu', personId:'$me' });
+
+        if (!viaId){
+          const u = await bestUnionOf(anchor.id);
+          ops.push({ op:'addPerson', ref:'$via', name:viaName, sex:viaSex, by:name });
+          if (u) ops.push({ op:'addChild', unionId:u, personId:'$via' });
+          else ops.push({ op:'addUnion', ref:'$gu' },
+                        { op:'addPartner', unionId:'$gu', personId:anchor.id },
+                        { op:'addChild', unionId:'$gu', personId:'$via' });
+        }
+        /* A parent already in the tree keeps whatever parents the family gave
+           them. Re-hanging them under the anchor here would overwrite that,
+           and the anchor being their parent is what the person answering just
+           said, not something to re-record on top of what is already there. */
+
+        /* And into their marriage if they already have one with room in it,
+           rather than inventing a second. A newcomer joining beside their
+           grandfather should land among their brothers and sisters. */
+        let intoUnion = null;
+        if (viaId) intoUnion = await bestUnionOf(viaRef);
+        ops.push(mine);
+        if (intoUnion) ops.push({ op:'addChild', unionId:intoUnion, personId:'$me' });
+        else ops.push({ op:'addUnion', ref:'$pu' },
+                      { op:'addPartner', unionId:'$pu', personId:viaRef },
+                      { op:'addChild', unionId:'$pu', personId:'$me' });
       }
 
-      const result = await applyOps(pool, treeId, ops, name || actorOf(req));
+      /* The same rule, on the door a newcomer comes through. This route
+         composes its own ops and every branch above joins somebody to the
+         anchor, so this should never fire — which is exactly why it is here.
+         The one door in this app whose whole job is "do not let a name in on
+         its own" should be the one that proves it. */
+      const result = await applyOps(pool, treeId, ops, name || actorOf(req),
+                                    { everyoneJoined: true });
       const meIdMade = result?.refs?.['$me'] || null;
       audit.record(pool, audit.from(req, {
         kind: 'tree.join_me', ok: true, treeId, actor: name,
