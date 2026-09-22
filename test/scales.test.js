@@ -434,4 +434,84 @@ section('AND THE MOST CONSEQUENTIAL MARK HAS A TARGET SOMEBODY CAN HIT');
         !/border-radius/.test(rule), rule);
 }
 
+// ── and how loud it is ────────────────────────────────────────────────────
+//
+// This app makes no sound. There is no audio anywhere in it and there should
+// not be: a family tree that chimes is a family tree nobody opens twice. But
+// it does SPEAK — into #live, which a screen reader reads aloud — and that is
+// the one channel here that arrives in somebody's ear.
+//
+// Eighty-two places call say(), and every one of them was the same loudness,
+// including the ones that report that the thing somebody just asked for did
+// not happen. A refusal that waits its turn is a refusal somebody carries on
+// past, typing into a tree that is not recording them.
+//
+// AND THE SAME WORDS TWICE WERE HEARD ONCE. A live region speaks when its text
+// CHANGES, and say() set textContent — so two identical refusals in a row were
+// announced once, and the second tap on a control that keeps refusing said
+// nothing at all.
+
+section('THE APP MAKES NO SOUND, AND THAT IS THE DESIGN');
+{
+  check('no audio anywhere', !/new Audio|AudioContext|<audio|\.mp3|\.wav|\.ogg/i.test(html));
+  check('and it does not buzz either', !/navigator\.vibrate/.test(html));
+  check('what it has instead is one region a screen reader reads',
+        /id="live"[^>]*aria-live/.test(html), 'no live region');
+}
+
+section('TWO LOUDNESSES, AND THE SECOND IS FOR WHAT DID NOT HAPPEN');
+{
+  const js = html.split('</style>')[1] || '';
+  const body = (js.match(/function say\(m, how\)\{[\s\S]*?\n\}/) || [''])[0];
+  check('say takes a loudness', /function say\(m, how\)/.test(js), 'say has not changed');
+  check('quiet is the default', /how === 'atonce' \? 'assertive' : 'polite'/.test(body), body);
+  const loud = (js.match(/'atonce'/g) || []).length - 1;   // one is the test in say itself
+  check('and a handful of places are loud, not most of them',
+        loud >= 4 && loud <= 15, String(loud));
+}
+
+section('and nothing that failed is announced politely');
+/* The list is generated from the source rather than written out, so a refusal
+   added later and left quiet fails this. */
+{
+  const js = html.split('</style>')[1] || '';
+  const quiet = [];
+  for (const m of js.matchAll(/say\(([\s\S]{0,190}?)\);/g)){
+    const t = m[1].replace(/\s+/g, ' ').trim();
+    if (/atonce/.test(t)) continue;
+    /* "will not be asked again" and its kin are confirmations of something
+       that DID happen, and belong at the quiet loudness. */
+    if (/will not be|no longer be/.test(t)) continue;
+    if (/could not|cannot be|did not accept|was not saved/i.test(t)) quiet.push(t.slice(0, 70));
+  }
+  eq('every refusal interrupts', quiet, []);
+}
+
+section('THE SAME WORDS TWICE ARE HEARD TWICE');
+{
+  const js = html.split('</style>')[1] || '';
+  const body = (js.match(/function say\(m, how\)\{[\s\S]*?\n\}/) || [''])[0];
+  check('it is cleared before it is set',
+        /textContent = '';/.test(body), body);
+  check('and set again on a later tick, which is what makes it a change',
+        /setTimeout\(\(\) => \{ el\.textContent = m; \}/.test(body), body);
+  check('and a message in flight is replaced, not queued behind',
+        /clearTimeout\(sayTimer\)/.test(body), body);
+}
+
+section('AND A REGION REDRAWN ON EVERY PAINT DOES NOT READ ITSELF OUT');
+/* #litbar is role="status", and showLit runs on every render — every tap,
+   every fold, every save. Assigning identical innerHTML is still a mutation. */
+{
+  check('the bar is written only when it changed',
+        /if \(el\.innerHTML !== ink\) el\.innerHTML = ink;/.test(html),
+        'the bar is rewritten unconditionally');
+  const live = [...html.matchAll(/role="(status|alert)"/g)].map(m => m[1]);
+  check('there are status regions to be careful of', live.includes('status'), live.join(','));
+  check('and exactly one thing shouts by markup — the connection',
+        live.filter(r => r === 'alert').length === 1, live.join(','));
+  check('and it is the stalled banner',
+        /id="stalled"[^>]*role="alert"/.test(html), 'the alert moved');
+}
+
 report();

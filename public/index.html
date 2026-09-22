@@ -9100,7 +9100,7 @@ function openFamily(){
             if (!r.ok) throw new Error('answered ' + r.status);
             say('That invitation will not work now.');
             loadInvites();
-          } catch (e) { b.disabled = false; say('That could not be withdrawn just now.'); }
+          } catch (e) { b.disabled = false; say('That could not be withdrawn just now.', 'atonce'); }
         };
       });
     } catch (e) {
@@ -9156,7 +9156,7 @@ function openFamily(){
       });
       if (!r.ok) throw new Error('answered ' + r.status);
       showInvite(await r.json());
-    } catch (e) { say('That invitation could not be made just now.'); }
+    } catch (e) { say('That invitation could not be made just now.', 'atonce'); }
     $('famInvite').disabled = false;
   };
 
@@ -9194,7 +9194,7 @@ function openFamily(){
       location.reload();
     } catch (e) {
       $('famGo').disabled = false;
-      say('That family could not be started just now.');
+      say('That family could not be started just now.', 'atonce');
     }
   };
 
@@ -9211,7 +9211,7 @@ function openFamily(){
       if (!r.ok) throw new Error('answered ' + r.status);
       $('famAppealOut').innerHTML =
         `<p class="covnote">Sent. The keeper will see it.</p>`;
-    } catch (e) { say('That could not be sent just now.'); }
+    } catch (e) { say('That could not be sent just now.', 'atonce'); }
   };
 
   $('famOut').onclick = async () => {
@@ -10183,7 +10183,13 @@ function showLit(){
       `<button type="button" id="litOff" aria-label="Show everyone again">✕</button></div>`);
   }
 
-  el.innerHTML = rows.join('');
+  /* WRITTEN ONLY WHEN IT CHANGED. This is a role="status" region, so a screen
+     reader reads it when its contents change — and this ran on every render,
+     rewriting the same markup every time anybody was tapped, folded a branch
+     or saved. Identical innerHTML assigned again is still a mutation, so the
+     bar was liable to read itself out on every paint. */
+  const ink = rows.join('');
+  if (el.innerHTML !== ink) el.innerHTML = ink;
   el.hidden = !rows.length;
   if ($('litOff')) $('litOff').onclick = () => { lit = null; render(); };
   if ($('selOff')) $('selOff').onclick = () => { sel = null; closeForm(); render(); };
@@ -10893,7 +10899,7 @@ function openCard(id){
     /* The same one tap the ✕ does, and the same way back. It asked for the
        name to be typed until a family said plainly that it should not. */
     const wereLoose = adrift().length;
-    if (!deleteInOneTap(id)){ say('That could not be deleted.'); return; }
+    if (!deleteInOneTap(id)){ say('That could not be deleted.', 'atonce'); return; }
     say(`${name} deleted — put them back from the bar.` + setLoose(wereLoose));
   };
   $('cNo').onclick = closeForm;
@@ -11599,7 +11605,38 @@ function closeForm(){
   pending = null;
   submitForm.confirmed = false;
 }
-const say = m => { $('live').textContent = m; };
+/* ── HOW LOUD THE APP IS, AND WHEN ────────────────────────────────────────
+ *
+ * This app makes no sound. There is no audio anywhere in it and there should
+ * not be: a family tree that chimes is a family tree nobody opens twice. But
+ * it does speak — into #live, which a screen reader reads aloud — and that is
+ * the one channel here that arrives in somebody's ear. Eighty-two places call
+ * say(), and every one of them was the same loudness.
+ *
+ * TWO, AND THE SECOND IS RARE ON PURPOSE:
+ *
+ *   quiet     what just happened. Waits for whatever is being read to finish,
+ *             which is right for almost everything: somebody has just done a
+ *             thing and the app is confirming it.
+ *   at once   the app could NOT do what was asked, or has stopped being able
+ *             to save. Interrupts, because a refusal that waits its turn is a
+ *             refusal somebody acts as though never happened — they carry on
+ *             typing into a tree that is not recording them.
+ *
+ * AND THE SAME WORDS TWICE ARE HEARD TWICE. A live region speaks when its
+ * text CHANGES, so setting it to what it already says is silence: two
+ * identical refusals in a row were announced once, and the second tap on a
+ * control that keeps refusing said nothing at all. It is cleared and set
+ * again on the next tick, which is what makes the change a change. */
+let sayTimer = null;
+function say(m, how){
+  const el = $('live');
+  if (!el) return;
+  clearTimeout(sayTimer);
+  el.setAttribute('aria-live', how === 'atonce' ? 'assertive' : 'polite');
+  el.textContent = '';
+  sayTimer = setTimeout(() => { el.textContent = m; }, 50);
+}
 
 /* ── the kinship calculator ─────────────────────────────────────────────
    Two jobs. It names what any two people are to each other, in both
@@ -12482,7 +12519,7 @@ function openMerged(){
       if (autoMerged.length) openMerged();
     } catch (e) {
       b.disabled = false;
-      say('That could not be undone just now — ' + e.message);
+      say('That could not be undone just now — ' + e.message, 'atonce');
     }
   });
   $('mergedNo').onclick = () => { autoMerged = []; closeForm(); render(); };
@@ -13028,9 +13065,9 @@ async function claimViewer(id){
     }
     const body = await r.json().catch(() => ({}));
     say(body.message || 'The server did not accept that. It is remembered on ' +
-        'this device only.');
+        'this device only.', 'atonce');
   } catch (e) {
-    say('That is remembered on this device, but the server could not be told.');
+    say('That is remembered on this device, but the server could not be told.', 'atonce');
   }
   return false;
 }
