@@ -1784,7 +1784,13 @@ body.carrying .pod{transition:none;}
   <div id="buds"></div>
 </div>
 
-<div id="seed">
+<!-- HIDDEN UNTIL THE PAGE KNOWS THERE IS NOBODY. It used to be visible in the
+     markup and hidden by the first render, which means every page showed it
+     for the moment before the tree arrived — and a page that never gets the
+     tree, because it has not said who is looking or because the read failed,
+     went on showing it. Somebody following a link to a family of two hundred
+     was met with a box to type a name into and a button that says plant. -->
+<div id="seed" hidden>
   <h1>The <em>Muwuyu</em> Project</h1>
   <p>A baobab is mostly roots. Plant one person — anyone at all — and grow the family outward from them.</p>
   <div class="box">
@@ -7550,7 +7556,31 @@ function draw(){
   const emptied = !people().length && asidePeople().length > 0;
   const seedFam = $('seedFamily');
   if (seedFam) seedFam.hidden = store !== 'shared';
-  $('seed').hidden = !!people().length || emptied;
+
+  /* ── AND ONLY WHERE THERE IS GENUINELY NOBODY ──────────────────────────
+   *
+   * "Plant the first person is not an option because the tree has already
+   *  begun and it leads to isolated people."
+   *
+   * This asked one question — is `state.people` empty — and an empty
+   * `state.people` means two completely different things. It means a family
+   * with nobody in it yet, which is what this screen is for. It also means a
+   * page that HAS NOT GOT the tree: one that has not yet said who is looking,
+   * so the server is holding the family back until it does, or one whose read
+   * failed. Those pages are looking at a tree of two hundred people and were
+   * being invited to plant the first one.
+   *
+   * What came of that is the thing being complained about. Somebody follows a
+   * link to a family that has been going for a year, is asked who they are,
+   * does not see themselves, closes the question — and the most obvious thing
+   * on the screen is a box to type a name into and a button that says plant.
+   * They plant themselves. Now there is an isolated person, and the app made
+   * it the easy thing to do.
+   *
+   * So the screen waits until the page is actually holding the family. Until
+   * then there is nothing to be the first person of. */
+  const holdingTheTree = store === 'shared' || store === 'local';
+  $('seed').hidden = !!people().length || emptied || !holdingTheTree;
   $('hint').hidden = (!people().length && !emptied) || people().length > 4;
   if (emptied){
     $('hint').innerHTML =
@@ -13355,7 +13385,16 @@ function askWhoIsViewing(roster, saying){
        bare addPerson, joined to nothing. The app's own front door was the
        biggest maker of the floating names this project has spent a week
        learning to find. */
-    $('whoNew').onclick = () => openJoinMe(roster, pick);
+    /* PUTTING YOURSELF IN IS THE SAME QUESTION, ASKED FURTHER ON — not the
+       question being closed. openJoinMe takes the screen, which means this
+       panel leaves it, and the watcher below reads a panel leaving as "asked
+       and not answered". It is not: `pick` is handed to the form and resolves
+       this the moment they are in. Said here so the watcher stays quiet. */
+    $('whoNew').onclick = () => {
+      answered = true;
+      watch.disconnect();
+      openJoinMe(roster, pick);
+    };
   });
 }
 
@@ -13424,26 +13463,38 @@ function openJoinMe(roster, then){
     const hits = found();
     el.innerHTML =
       `<p class="cap">Put yourself in the tree</p>` +
-      /* THE RULE, SAID FIRST AND IN PLAIN WORDS. Somebody meeting this form
-         is about to be asked for a relative and should know why before they
-         are asked, not after they wonder. */
-      `<p class="covnote">To be in this tree you have to be connected to ` +
-      `somebody in it. So pick one person you know is here, say what they are ` +
-      `to you, and you go in beside them.</p>` +
+      /* ── THE RELATIVE FIRST, AND THE NAME LAST ─────────────────────────
+       *
+       * "The instructions should advise them to look for someone who might be
+       *  on the tree they can attach to. Options are made available and they
+       *  can add themselves based on someone on the tree, not a random name
+       *  add."
+       *
+       * The rule was already kept — nothing written here has ever gone in
+       * unattached — but the form asked in the wrong order and so it read
+       * like the wrong thing. The first field was an empty box headed "Your
+       * name", which is what every form that adds a stranger to a list looks
+       * like. Somebody typed their name into it and only then found out they
+       * were going to be asked how they belong.
+       *
+       * Asked this way round it is the same three answers and a different
+       * act: find the one you know, say what they are to you, and THEN put
+       * your name to it. Nobody is typing a name into a family tree; they are
+       * joining on beside their uncle, and the last thing they do is sign it.
+       *
+       * The steps are numbered for the same reason: three is a short, knowable
+       * number of things to be asked, and seeing all three at the start is
+       * what stops the first one feeling like the whole of it. */
+      `<p class="covnote">Everybody in this tree is joined to somebody — that ` +
+      `is what makes it a tree. So you go in beside one person you are sure ` +
+      `of, in three steps.</p>` +
 
-      `<p class="lbl">Your name</p>` +
-      `<input id="jName" class="fld" value="${esc(said.name)}" ` +
-        `autocomplete="off" placeholder="As the family would write it">` +
-      `<div class="seg" id="jSex">` +
-        `<button type="button" data-jsex="f" aria-pressed="${said.sex === 'f'}">She</button>` +
-        `<button type="button" data-jsex="m" aria-pressed="${said.sex === 'm'}">He</button>` +
-        `<button type="button" data-jsex="" aria-pressed="${!said.sex}">—</button></div>` +
-
-      `<p class="lbl">Pick somebody already in the tree</p>` +
-      `<p class="covnote">Everybody here is joined to somebody, so you go in ` +
-      `beside one person you are sure of — a parent, a brother or sister, a ` +
-      `grandparent. ${roster.length} ${roster.length === 1 ? 'name is' : 'names are'} ` +
-      `in this family. Pick one from the list, or type to narrow it.</p>` +
+      `<p class="lbl">1 · Somebody you know is already here</p>` +
+      `<p class="covnote">A parent, a brother or sister, a grandparent, an ` +
+      `uncle — anybody you can name for certain. ` +
+      `${roster.length} ${roster.length === 1 ? 'name is' : 'names are'} in ` +
+      `this family: pick one from the list, or type to narrow it. You do not ` +
+      `have to know how it is spelled — a piece of the name is enough.</p>` +
       `<input id="jFind" class="fld" placeholder="Their name, or scroll the list" ` +
         `value="${esc(q)}" autocomplete="off">` +
       (said.to
@@ -13464,7 +13515,7 @@ function openJoinMe(roster, then){
           `</div>`) +
 
       (said.to
-        ? `<p class="lbl">${esc(nameOf(said.to).split(' ')[0])} is…</p>` +
+        ? `<p class="lbl">2 · ${esc(nameOf(said.to).split(' ')[0])} is…</p>` +
           `<div class="seg col" id="jAs">` +
             JOIN_WORDS.map(([v, w]) =>
               `<button type="button" data-jas="${v}" aria-pressed="${said.as === v}">` +
@@ -13501,9 +13552,29 @@ function openJoinMe(roster, then){
             : '')
         : '') +
 
+      /* AND LAST, THE NAME. It only appears once there is somewhere for it to
+         go: until a relative is picked and a word is chosen there is nothing
+         for a name to be the name OF, and an empty box headed "Your name"
+         sitting above all that is the whole reason this read like adding a
+         stranger to a list. */
+      (said.to && said.as
+        ? `<p class="lbl">3 · And your own name</p>` +
+          `<p class="covnote">As the family would write it. One name is enough ` +
+          `if that is what you are called.</p>` +
+          `<input id="jName" class="fld" value="${esc(said.name)}" ` +
+            `autocomplete="off" placeholder="Your name">` +
+          `<div class="seg" id="jSex">` +
+            `<button type="button" data-jsex="f" aria-pressed="${said.sex === 'f'}">She</button>` +
+            `<button type="button" data-jsex="m" aria-pressed="${said.sex === 'm'}">He</button>` +
+            `<button type="button" data-jsex="" aria-pressed="${!said.sex}">—</button></div>`
+        : '') +
+
       `<div class="row">` +
-        `<button class="btn" id="jGo">Put me in</button>` +
-        `<button class="btn ghost" id="jNo">Back to the list</button></div>` +
+        (said.to && said.as
+          ? `<button class="btn" id="jGo">Put me in</button>`
+          : '') +
+        `<button class="btn ghost${said.to && said.as ? '' : ' wide'}" id="jNo">` +
+          `Back to the list</button></div>` +
       `<div id="jOut"></div>`;
     placeForm(el);
     wire();
@@ -13515,6 +13586,9 @@ function openJoinMe(roster, then){
   const wire = () => {
     const nm = $('jName');
     if (nm) nm.oninput = () => { said.name = nm.value; };
+    // Only there once the first two are answered — see the markup above.
+    const goBtn = $('jGo');
+    if (goBtn) goBtn.onclick = go;
     const fd = $('jFind');
     if (fd) fd.oninput = () => { q = fd.value; draw(); $('jFind').focus(); };
     const via = $('jVia');
@@ -13545,7 +13619,6 @@ function openJoinMe(roster, then){
     const other = $('jElse');
     if (other) other.onclick = () => { said.to = null; said.as = ''; q = ''; draw(); };
     $('jNo').onclick = () => { closeForm(); location.reload(); };
-    $('jGo').onclick = go;
   };
 
   const go = async () => {
@@ -13581,7 +13654,8 @@ function openJoinMe(roster, then){
   };
 
   draw();
-  setTimeout(() => { try { $('jName').focus(); } catch (e) {} }, 60);
+  // The first thing asked is the first thing the cursor is in.
+  setTimeout(() => { try { $('jFind').focus(); } catch (e) {} }, 60);
   el.addEventListener('keydown', e => { if (e.key === 'Escape'){ e.preventDefault(); draw(); } });
 }
 

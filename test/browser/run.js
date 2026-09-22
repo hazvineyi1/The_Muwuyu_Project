@@ -41,6 +41,7 @@ const SUITES = [
   { name: 'families',     kind: 'api' },
   { name: 'halfsiblings', kind: 'api' },
   { name: 'multifamily',  kind: 'api' },
+  { name: 'newcomer',     kind: 'api' },
   { name: 'persistence',  kind: 'api' },
   { name: 'scale',        kind: 'api' },
   { name: 'viewer',       kind: 'api' },

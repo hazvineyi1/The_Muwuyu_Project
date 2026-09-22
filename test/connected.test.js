@@ -265,17 +265,33 @@ const http = require('http');
     const html = fs.readFileSync(
       path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
     const form = html.slice(html.indexOf('function openJoinMe'),
-                            html.indexOf('function openJoinMe') + 6000);
+                            html.indexOf('function openJoinMe') + 9000);
 
-    /* Stitched, because the sentence is written across two source lines the
-       way every long string in this page is. */
+    /* Stitched, because the sentences are written across several source lines
+       the way every long string in this page is. */
     const words = form.replace(/`\s*\+\s*\n\s*`/g, '');
-    check('the rule is stated in plain words',
-          /connected to somebody in it/i.test(words), words.slice(0, 600));
-    check('and it says to pick one',
-          /pick one person you know is here/i.test(form));
-    check('the heading asks for a pick, not a search',
-          /Pick somebody already in the tree/.test(form));
+    check('the rule is stated before anything is asked',
+          /joined to somebody — that is what makes it a tree/i.test(words),
+          words.slice(0, 900));
+    check('and that you go in beside one of them',
+          /go in beside one person you are sure of/i.test(words), words.slice(0, 900));
+
+    /* THE RELATIVE IS ASKED FOR FIRST, and the name last. An empty box headed
+       "Your name" at the top is what every form that adds a stranger to a
+       list looks like, and it is what made this read as a name being typed
+       into a family tree rather than somebody joining on beside their uncle.
+       Read by position, because the order is the whole of the point. */
+    const step1 = words.indexOf('1 · Somebody you know is already here');
+    const step2 = words.indexOf('2 · ');
+    const step3 = words.indexOf('3 · And your own name');
+    check('the first thing asked is who they know here', step1 > -1, String(step1));
+    check('the second is what that person is to them', step2 > step1,
+          `${step1} then ${step2}`);
+    check('and their own name is last of the three', step3 > step2,
+          `${step2} then ${step3}`);
+    check('the name field is not even drawn until the first two are answered',
+          /said\.to && said\.as[\s\S]{0,200}3 · And your own name/.test(words),
+          words.slice(Math.max(0, step3 - 300), step3 + 80));
 
     /* BROWSABLE. Somebody who knows their uncle is in the tree but not how
        his name was written cannot type their way to him. */
