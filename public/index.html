@@ -413,6 +413,18 @@ body.carrying .pod{transition:none;}
 /* A tapped pod is never set back, whatever else the screen is doing. Being
    dimmed and picked at the same time is the app disagreeing with itself. */
 .pod.sel.dim, .pod.sel.aside{opacity:1; filter:none;}
+/* ── A GROWING POINT, ON THE TREE ITSELF ─────────────────────────────────
+   Only while the growing view is open. Dashed and gold-soft, the same
+   vocabulary as a name joined to nothing, because both are the app saying
+   "this is waiting on somebody" rather than "this is wrong". */
+.pod.gap{border-style:dashed; border-color:var(--gold-soft);}
+.gapmark{
+  margin-top:3px; padding:1px 7px; border-radius:99px;
+  background:var(--pod); border:1px dashed var(--gold-soft);
+  font-family:'Karla',sans-serif; font-size:8.5px; font-weight:700;
+  letter-spacing:.06em; text-transform:uppercase; color:var(--gold);
+  white-space:nowrap; max-width:100%; overflow:hidden; text-overflow:ellipsis;
+}
 .pod.sprout{animation:pop .45s cubic-bezier(.2,1.5,.4,1) backwards;}
 /* WHEN ONE WORD IS BEING SHOWN. Everybody the word reaches is lifted and the
    rest are set back — not hidden, because the answer to "who are my Baba" is
@@ -1068,6 +1080,29 @@ body.carrying .pod{transition:none;}
    answer is "because this is correct, and here is the rule", and a card that
    opened with a paragraph of layout reasoning would be answering a question
    most people are not asking. One line, and the reason behind it. */
+/* One growing point, in the view that lists them. The same shape as the
+   not-joined room, because it is the same kind of thing: something the app
+   wants to be told, with the ways to tell it. */
+#form .grow1{
+  padding:9px 10px; margin-bottom:7px; border-radius:12px 3px 12px 3px;
+  background:var(--pod-hi); border:1.5px solid var(--pod-edge);
+}
+#form .grow1 u{display:block; text-decoration:none; font-size:14px; line-height:1.25;}
+#form .grow1 u small{
+  display:block; margin-top:2px;
+  font-family:'Karla',sans-serif; font-size:10px; font-weight:600;
+  letter-spacing:.04em; color:var(--muted);
+}
+#form .grow1 .acts{display:flex; flex-wrap:wrap; gap:6px; margin-top:7px; align-items:center;}
+#form .grow1 .mini{
+  padding:5px 10px; border-radius:99px; cursor:pointer;
+  background:var(--pod); border:1.5px solid var(--pod-edge); color:var(--ink);
+  font-family:'Karla',sans-serif; font-size:11px; font-weight:700;
+}
+#form .grow1 .mini:hover{border-color:var(--gold); color:var(--gold);}
+#form .grow1 .mini.join{border-color:var(--gold); color:var(--gold);}
+#form .grow1 .fld.gyear{margin:0; flex:1 1 90px; min-width:80px; padding:6px 10px; font-size:12px;}
+
 /* ── THE PARTS OF A CARD THAT ARE FOLDED AWAY ────────────────────────────
    Not hidden: a summary that reads as a row you can press, in the ink of the
    card rather than the gold of a link, so it sits with the sections above it
@@ -1922,6 +1957,105 @@ function descendantsOf(id){
   };
   walk(id, 0);
   return { people: seen, count: seen.size, depth };
+}
+
+/* ── WHERE THE TREE CAN GROW ──────────────────────────────────────────────
+ *
+ * "Think of a better way to see where and how to add more."
+ *
+ * WHAT THIS IS NOT. It is not a completeness score and it is not a list of
+ * what is missing from people's lives. A man with no children recorded is not
+ * a gap; a woman with no marriage recorded is not a gap. Those are lives, and
+ * an app that marks them as unfinished is telling a family that their
+ * relatives are incomplete records. This project is not going to do that.
+ *
+ * WHAT IT IS. The four facts the app needs to do its own job, and cannot do
+ * without — so every one of these is the APP saying what it cannot yet say,
+ * not the family being told what they have not yet done:
+ *
+ *   HE OR SHE       without it the app cannot name them at all. Every Shona
+ *                   word turns on it, and the day this was written a real
+ *                   family's Hollie was being called Sekuru because nobody
+ *                   had said she was a woman. This is first for that reason.
+ *
+ *   WHO CAME BEFORE the line stops at somebody with no parents recorded, and
+ *                   nobody has said whether that is the end of it or simply
+ *                   as far as anyone got. Both answers are one tap, and the
+ *                   difference between them is the whole point of the
+ *                   project: a line marked as traced tells the next person
+ *                   where the work ended rather than leaving them to guess.
+ *
+ *   THE YEAR        only where they have brothers or sisters. Mukoma and
+ *                   Munin'ina are read off the row, and without a year the
+ *                   row is whatever order somebody happened to type.
+ *
+ *   THE MUTUPO      only where somebody else in the tree has one, so a family
+ *                   that does not record mitupo is never asked for them.
+ *
+ * Each one carries how it is answered, because "see where" without "how" is
+ * just a longer list. */
+/* WHETHER THE TREE IS SHOWING ITS GROWING POINTS.
+ *
+ * A mode, not a permanent mark. A tree that always wore its gaps would be a
+ * tree wearing a list of chores, and this family has said twice that things
+ * appearing over their relatives are intrusive. It is turned on deliberately,
+ * it says so on the bar for as long as it is on, and it goes when they let
+ * go. Session-only: a mode left on for a fortnight is noise again. */
+let growing = false;
+
+const GROWTH_NEEDS = ['sex', 'line', 'year', 'mutupo'];
+
+const siblingsOf = id => {
+  const pu = parentUnionOf(id);
+  return pu ? pu.children.filter(x => x !== id && present(x)) : [];
+};
+
+function growthGaps(){
+  const anyTotem = people().some(q => (q.totem || '').trim());
+  const out = [];
+  for (const p of people()){
+    if (!p.sex){
+      out.push({ id:p.id, name:p.name, need:'sex',
+                 what:'he or she?',
+                 why:'Every word this tree uses turns on it, so until somebody ' +
+                     'says, the app cannot name them at all.' });
+    }
+    if (!p.root && isOpenEnd(p.id)){
+      out.push({ id:p.id, name:p.name, need:'line',
+                 // Worn by a pod 132px wide; the panel's heading carries the
+                 // whole question. "Who came before?" was cut off at "who
+                 // came befo…", which is a mark that has stopped saying
+                 // anything.
+                 what:'parents?',
+                 why:'The line stops here. Either somebody knows who their ' +
+                     'parents were, or this is as far back as the family can ' +
+                     'trace — and saying which tells the next person where the ' +
+                     'work ended.' });
+    }
+    if (!(p.born || '').trim() && siblingsOf(p.id).length){
+      out.push({ id:p.id, name:p.name, need:'year',
+                 what:'what year?',
+                 why:`Mukoma and Munin'ina are read off the row of brothers and ` +
+                     'sisters, and without a year that row is whatever order ' +
+                     'somebody happened to type it in.' });
+    }
+    if (anyTotem && !(p.totem || '').trim()){
+      out.push({ id:p.id, name:p.name, need:'mutupo',
+                 what:'mutupo?',
+                 why:'Everybody else here carries one, and the house somebody ' +
+                     'is of is how two people of the same name are told apart.' });
+    }
+  }
+  // In the order the app is most helpless without them.
+  out.sort((a, b) => GROWTH_NEEDS.indexOf(a.need) - GROWTH_NEEDS.indexOf(b.need));
+  return out;
+}
+
+/* What one person is missing, for the mark on their pod — the first and
+   worst of it, because a pod has room for one line and not four. */
+function growthFor(id){
+  const all = growthGaps().filter(g => g.id === id);
+  return all.length ? all[0] : null;
 }
 
 /* Where the tree can still be deepened. Roots first — those are the ends
@@ -7044,6 +7178,12 @@ function draw(){
      exactly like a name with wood running to it off the side of the screen,
      so nobody could tell the difference and nothing said there was one. */
   const lost = new Set(adrift());
+  /* AND WHERE IT COULD GROW, worked out once for the whole draw and only
+     while the growing view is on — growthGaps walks everybody, and paying for
+     that on every pan of a tree nobody has asked the question of would be a
+     cost with no answer attached. */
+  const gaps = new Map();
+  if (growing) for (const g of growthGaps()) if (!gaps.has(g.id)) gaps.set(g.id, g);
   /* WHICH FAMILY EACH POD BELONGS TO, worked out once for the whole draw.
      Your own line takes no tint at all — it is not a family that married in,
      it is the tree — so the canvas carries as many colours as there are
@@ -7136,6 +7276,7 @@ function draw(){
       `<div class="pod${sel === p.id ? ' sel' : ''}${fresh.has(p.id) ? ' sprout' : ''}` +
       `${p.root ? ' taproot' : ''}${meId === p.id ? ' you' : ''}` +
       `${lost.has(p.id) ? ' adrift' : ''}` +
+      `${growing && gaps.has(p.id) ? ' gap' : ''}` +
       `${lit ? (lit.ids.has(p.id) || p.id === lit.from ? ' lit' : ' dim') : ''}` +
       `${!lit && focused ? (focused.has(p.id) ? '' : ' aside') : ''}"` +
       ` data-id="${p.id}" tabindex="0" role="button"` +
@@ -7147,6 +7288,13 @@ function draw(){
       (lost.has(p.id)
         ? `<span class="loose" title="Not joined to anybody yet. Tap to say ` +
           `where they belong — nothing is wrong with the record.">not joined</span>`
+        : '') +
+      /* WHAT THE TREE CANNOT SAY ABOUT THEM YET, while the growing view is
+         on and never otherwise. One line, because a pod has room for one —
+         the panel carries the rest. */
+      ((growing && gaps.has(p.id))
+        ? `<span class="gapmark" title="${esc(gaps.get(p.id).why)}">` +
+          `${esc(gaps.get(p.id).what)}</span>`
         : '') +
       (titled.has(p.id) ? titleFor(anchor, p.id) : '') +
       (mark ? `<span class="mk">${mark}</span>` : '') +
@@ -9189,69 +9337,196 @@ function openSetAside(id){
   });
 }
 
-/* Where the tree ends, and where it could still grow.
- 
-   The point of this project is that everybody records their own family and the
-   lines keep going down until two of them meet in the same ancestor. So the
-   most important thing this app can show is not what has been recorded — it is
-   where the recording stops, and which of those stops somebody could still
-   push past. */
-function openRoots(){
+/* ── THE GROWING VIEW ────────────────────────────────────────────────────
+ *
+ * "Think of a better way to see where and how to add more."
+ *
+ * The list already existed and was only half of it — "Where the tree stops"
+ * named the ends of the lines and then put you back on the tree to find them.
+ * This is the other half: the tree ITSELF marks where it can grow, and every
+ * row here is answered where it stands rather than sending somebody off to a
+ * card to answer it.
+ *
+ * ANSWERED IN PLACE, and that is the whole of "how". He or she is two
+ * buttons. A year is a box and a tick. Who came before is either the form
+ * for their parents or one tap to say this is as far as the family can
+ * trace. Only the mutupo opens a card, because the card knows which mitupo
+ * this family already carries and offers them.
+ */
+function growthRoom(){
+  const gaps = growthGaps();
+  if (!gaps.length) return '';
+  const heads = {
+    sex:    ['Nobody has said he or she',
+             'Until somebody does, the app has no word for them at all.'],
+    line:   ['The line stops here',
+             'No parents recorded, and nobody has said whether that is the end.'],
+    year:   ['No year, and brothers or sisters to be ranked against',
+             'The row they stand in is whatever order somebody typed it.'],
+    mutupo: ['No mutupo recorded',
+             'Everybody else here carries one.']
+  };
+  let out = '';
+  for (const need of GROWTH_NEEDS){
+    const mine = gaps.filter(g => g.need === need);
+    if (!mine.length) continue;
+    out += `<p class="lbl" style="margin-top:12px">${esc(heads[need][0])} · ${mine.length}</p>` +
+           `<p class="covnote">${esc(heads[need][1])}</p>`;
+    out += mine.slice(0, 12).map(g => {
+      const p = state.people[g.id] || {};
+      const act =
+        need === 'sex'
+          ? `<button type="button" class="mini" data-gsex="${esc(g.id)}|f">She</button>` +
+            `<button type="button" class="mini" data-gsex="${esc(g.id)}|m">He</button>`
+        : need === 'line'
+          ? `<button type="button" class="mini join" data-gparent="${esc(g.id)}">Their parents…</button>` +
+            `<button type="button" class="mini" data-groot="${esc(g.id)}">This is as far back</button>`
+        : need === 'year'
+          ? `<input class="fld gyear" data-gyear="${esc(g.id)}" placeholder="Year born" ` +
+            `autocomplete="off" inputmode="numeric">` +
+            `<button type="button" class="mini join" data-gyeargo="${esc(g.id)}">Save</button>`
+          : `<button type="button" class="mini join" data-gcard="${esc(g.id)}">Open their card</button>`;
+      return `<div class="grow1">` +
+        `<u>${esc(p.name || g.name)}<small>${esc(positionOf(g.id))}</small></u>` +
+        `<span class="acts">` + act +
+          `<button type="button" class="mini" data-gsee="${esc(g.id)}">Show them</button>` +
+        `</span></div>`;
+    }).join('');
+    if (mine.length > 12){
+      out += `<p class="covnote">and ${mine.length - 12} more, marked on the tree.</p>`;
+    }
+  }
+  return out;
+}
+
+function openGrowth(){
   closeForm();
-  const f = frontier();
+  growing = true;
   pending = { kind:'dupes', anchorId: sel || state.rootId };
-
-  const row = (e, kind) =>
-    `<button type="button" class="askrow" data-goto="${e.id}">` +
-      `<u>${esc(e.name)}${e.born ? ` <small style="display:inline">b. ${esc(e.born)}</small>` : ''}` +
-        `<small>${e.below
-          ? `${e.below} ${e.below === 1 ? 'person' : 'people'} below, ` +
-            `${e.depth} generation${e.depth === 1 ? '' : 's'} deep`
-          : 'nobody recorded below them yet'}</small></u>` +
-      `<em>${kind === 'root' ? 'deepen' : 'trace back'}</em>` +
-    `</button>`;
-
   const el = document.createElement('div');
   el.id = 'form';
   el.className = 'wide';
-  el.innerHTML =
-    `<p class="cap">Where the tree stops</p>` +
-
-    (f.roots.length
-      ? `<p class="lbl">Rooted — as far back as anyone has traced</p>` +
-        `<p class="covnote">Somebody has vouched for these. If you know who came ` +
-        `before, open one and deepen it.</p>` +
-        f.roots.map(e => row(e, 'root')).join('')
-      : `<p class="warn">No line has been marked as traced-back yet. When you reach ` +
-        `an ancestor nobody can go past, open their card and mark them ` +
-        `<b>Furthest we can trace</b> — it tells the next person where the work ended ` +
-        `rather than leaving them to guess.</p>`) +
-
-    (f.open.length
-      ? `<p class="lbl" style="margin-top:14px;">Open ends — nobody has said yet</p>` +
-        `<p class="covnote">These have no parents recorded and no one has marked them ` +
-        `as the end. Each is a question somebody in the family may be able to answer.</p>` +
-        f.open.map(e => row(e, 'open')).join('')
-      : '') +
-
-    `<p class="covnote" style="margin-top:14px;">` +
-      `<b>${f.roots.length}</b> rooted · <b>${f.open.length}</b> open · ` +
-      `<b>${people().length}</b> in the tree</p>` +
-    `<div class="row"><button class="btn" id="rNo">Done</button></div>`;
   document.body.appendChild(el);
-  placeForm(el);
 
-  el.querySelectorAll('[data-goto]').forEach(b => b.onclick = () => {
-    const id = b.dataset.goto;
-    closeForm();
-    sel = id;
-    render();
-    bringIntoView(id);
-    revealBuds();
-  });
-  $('rNo').onclick = closeForm;
-  el.addEventListener('keydown', e => { if (e.key === 'Escape'){ e.preventDefault(); closeForm(); } });
+  const paint = () => {
+    const gaps = growthGaps();
+    const f = frontier();
+    el.innerHTML =
+      `<p class="cap">Where it can grow</p>` +
+      (gaps.length
+        ? `<p class="covnote">${gaps.length} ${gaps.length === 1 ? 'thing' : 'things'} ` +
+          `this tree cannot say yet, and every one of them can be answered from ` +
+          `here. They are marked on the tree for as long as this is open.</p>` +
+          /* NOT A LIST OF WHAT IS MISSING FROM PEOPLE'S LIVES. Said out loud
+             because it is the difference between a family tree and a form:
+             a man with no children recorded is not a gap, and this view will
+             not say he is. */
+          `<p class="roothint">Only what the app itself needs. Nobody is asked ` +
+          `for a marriage or for children — those are lives, not gaps. Close ` +
+          `this and the marks stay on the tree; the bar lets go of them.</p>` +
+          growthRoom()
+        : `<p class="browse">There is nothing the app is waiting to be told. ` +
+          `Every name has a he or she, every line either goes back further or ` +
+          `is marked as traced, and every row can be put in order.</p>`) +
+
+      /* AND HOW FAR BACK IT GOES, which is the other half of growing and was
+         what this door used to be on its own. */
+      (f.roots.length
+        ? `<p class="lbl" style="margin-top:14px">As far back as anyone has traced · ${f.roots.length}</p>` +
+          `<p class="covnote">Somebody has vouched for these. Open one and deepen ` +
+          `it if you know who came before.</p>` +
+          f.roots.slice(0, 8).map(e =>
+            `<div class="grow1"><u>${esc(e.name)}<small>${e.below
+              ? `${e.below} ${e.below === 1 ? 'person' : 'people'} below, ` +
+                `${e.depth} generation${e.depth === 1 ? '' : 's'} deep`
+              : 'nobody recorded below them yet'}</small></u>` +
+            `<span class="acts">` +
+              `<button type="button" class="mini join" data-gparent="${esc(e.id)}">Go further back…</button>` +
+              `<button type="button" class="mini" data-gsee="${esc(e.id)}">Show them</button>` +
+            `</span></div>`).join('')
+        : '') +
+
+      `<div class="row"><button class="btn" id="growNo">Close the list</button>` +
+      `<button class="btn ghost" id="growStop">Stop marking</button></div>`;
+    placeForm(el);
+    wire();
+  };
+
+  const again = () => { save(); render(); paint(); };
+
+  const wire = () => {
+    el.querySelectorAll('[data-gsex]').forEach(b => b.onclick = () => {
+      const [id, sex] = b.dataset.gsex.split('|');
+      if (!state.people[id]) return;
+      snapshot();
+      state.people[id].sex = sex;
+      again();
+      say(`${state.people[id].name} is recorded as ${sex === 'f' ? 'a she' : 'a he'}. ` +
+          `The words follow.`);
+    });
+    el.querySelectorAll('[data-groot]').forEach(b => b.onclick = () => {
+      const id = b.dataset.groot;
+      if (!state.people[id] || state.people[id].root) return;
+      toggleRoot(id);
+      again();
+      say(`${state.people[id].name} is marked as the furthest this line can be ` +
+          `traced. Anybody who can go further can lift it.`);
+    });
+    el.querySelectorAll('[data-gyeargo]').forEach(b => b.onclick = () => {
+      const id = b.dataset.gyeargo;
+      const box = el.querySelector(`[data-gyear="${id}"]`);
+      const said = box ? box.value.trim() : '';
+      if (!said || !state.people[id]) return;
+      snapshot();
+      state.people[id].born = said;
+      /* THE ROW FOLLOWS THE YEAR. A birth year that does not move somebody
+         into their place among their brothers and sisters has answered the
+         question on the card and not the one that was asked here. */
+      const pu = parentUnionOf(id);
+      if (pu){
+        pu.children = pu.children.filter(x => x !== id);
+        insertByAge(pu.children, id);
+      }
+      again();
+      say(`${state.people[id].name}, born ${esc(said)} — and put where that ` +
+          `belongs among their brothers and sisters.`);
+    });
+    el.querySelectorAll('[data-gparent]').forEach(b => b.onclick = () => {
+      const id = b.dataset.gparent;
+      closeForm(); sel = id; render(); bringIntoView(id);
+      openForm('parent', id);
+    });
+    el.querySelectorAll('[data-gcard]').forEach(b => b.onclick = () => {
+      const id = b.dataset.gcard;
+      closeForm(); sel = id; render(); bringIntoView(id);
+      openCard(id);
+    });
+    el.querySelectorAll('[data-gsee]').forEach(b => b.onclick = () => {
+      const id = b.dataset.gsee;
+      if (!state.people[id]) return;
+      sel = id; render(); bringIntoView(id);
+      say(`${state.people[id].name} — ${positionOf(id)}.`);
+    });
+    /* CLOSING THE LIST LEAVES THE MARKS ON THE TREE, because seeing where it
+       can grow is half of what was asked for and the list covers the tree it
+       is describing. The bar carries the way to let go of them. */
+    if ($('growNo')) $('growNo').onclick = closeForm;
+    if ($('growStop')) $('growStop').onclick = () => { closeForm(); stopGrowing(); };
+    el.addEventListener('keydown', e => { if (e.key === 'Escape'){ e.preventDefault();
+      closeForm(); } });
+  };
+
+  paint();
+  render();
 }
+
+function stopGrowing(){ growing = false; render(); }
+
+/* "Where the tree stops" used to live here: a list of the rooted lines and
+   the open ends, which put you back on the tree to find them. It is now part
+   of openGrowth, which marks them on the tree and answers them in place — one
+   rule in one function rather than two that will one day disagree. */
+
 
 /* The calculator panel. */
 let kinA = null, kinB = null;
@@ -9677,6 +9952,18 @@ function showLit(){
       `<button type="button" id="undelete">Put them back</button></div>`);
   }
 
+  /* AND WHETHER THE TREE IS SHOWING ITS GROWING POINTS. A mode changes what
+     every pod on the screen says, so it must never be a mode somebody is in
+     without knowing — and the way out is on the same chip as the fact. */
+  if (growing){
+    const n = growthGaps().length;
+    rows.push(
+      `<div class="chip picked"><b>Where it can grow</b>` +
+      `<i>${n ? `${n} marked on the tree` : 'nothing left to ask'}</i>` +
+      `<button type="button" id="growOff" aria-label="Stop showing where the tree ` +
+        `can grow">&times;</button></div>`);
+  }
+
   /* WHO IS PICKED, BY NAME.
    *
    * "It needs to be clearer when clicking on the person and highlighting
@@ -9716,6 +10003,7 @@ function showLit(){
   el.hidden = !rows.length;
   if ($('litOff')) $('litOff').onclick = () => { lit = null; render(); };
   if ($('selOff')) $('selOff').onclick = () => { sel = null; closeForm(); render(); };
+  if ($('growOff')) $('growOff').onclick = () => { closeForm(); stopGrowing(); };
   if ($('undelete')) $('undelete').onclick = putThemBack;
   if ($('lostGo')) $('lostGo').onclick = openAdrift;
   if ($('mergedGo')) $('mergedGo').onclick = openMerged;
@@ -11656,8 +11944,17 @@ function hubRooms(){
         name:`What the others have done${newsCount() ? ' · ' + (newsCount() > 99 ? '99+' : newsCount()) : ''}`,
         go:openNews, mark:newsCount(),
         why:'Every change anybody has made, who made it, and when.' } : null,
-      { id:'roots', name:'Roots', go:openRoots,
-        why:'How far back this family has been traced, and who is at the end of each line.' },
+      /* WAS "Roots", which named the ends of the lines and then put you back
+         on the tree to find them. It is now the whole of growing: what the
+         app cannot say yet, answered where it stands, and marked on the tree
+         while the view is open. */
+      (() => {
+        const n = growthGaps().length;
+        return { id:'grow', name:`Where it can grow${n ? ' · ' + n : ''}`, go:openGrowth,
+          mark:0,
+          why:'What this tree cannot say yet, how far back each line has been ' +
+              'traced, and every one of them answered from one place.' };
+      })(),
       { id:'kin', name:'Kinship', go:openKinship,
         why:'What any two people are to each other, in your family’s own words.' },
       { id:'words', name:'Words', go:openWords,

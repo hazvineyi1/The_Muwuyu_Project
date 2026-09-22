@@ -145,6 +145,8 @@ function loadFrontend(){
       nameHelp, setLoose, hereWords,
       BONDS, bondBetween, setBond, bondLine, widowedIn, marriageBlock,
       mergedRoom, setAutoMerged(list){ autoMerged = list; }, lightWord,
+      growthGaps, growthFor, growthRoom, frontier, isOpenEnd,
+      setGrowing(on){ growing = !!on; }, growingNow(){ return growing; },
       pick(id){ sel = id; },
       budsHtml(id){ sel = id; computeLayout(); placeBuds(); return budsHtml(); },
       seenTo(n){ seenSeq = n; }, headTo(n){ headSeq = n; },
