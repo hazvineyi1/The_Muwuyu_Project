@@ -15,6 +15,11 @@
 // It also checks the feature still WORKS, which is the half a speed test
 // forgets: a scan that finds nothing is very fast.
 //
+// AND WHAT THE ROOM IS FOR HAS NARROWED SINCE THIS WAS WRITTEN. The write door
+// now folds conclusive duplicates by itself, so what reaches the room is
+// everything the app declines to decide — which is what the planted pair is
+// built to be. See plantedDuplicates.
+//
 // Not part of `npm test` — needs Chromium and a live server. Run:
 //
 //   DATABASE_URL=... PORT=3940 node server.js &
@@ -22,7 +27,7 @@
 //     NODE_PATH=$(npm root -g) node test/browser/scale.js
 
 const { chromium } = require('playwright');
-const { BASE, EXE, openApp, ready, settled } = require('./lib');
+const { BASE, EXE, openApp, ready, settled, saved } = require('./lib');
 
 // Big enough that the old render path took seconds, small enough to build in
 // a test. The cliff is steep: doubling this roughly quintuples the old cost.
@@ -32,6 +37,11 @@ const PEOPLE = 400;
 // is a frame's worth of room, not a page load's. Generous against the machine
 // this runs on, and still two orders of magnitude under what it was.
 const RENDER_BUDGET_MS = 400;
+
+// The planted duplicate and everybody it needs around it: the two records of
+// one woman, the husband they share, and the son recorded under each. See
+// plantedDuplicates.
+const PLANTED = 5;
 
 let pass = 0, fail = 0;
 const ok  = m => { pass++; console.log('  ok   ' + m); };
@@ -83,21 +93,46 @@ function buildOps(n, tag) {
   return ops;
 }
 
+/* Two records of one woman: the same name, one of them carrying the title her
+ * grandchildren would use, and both married to the same man — who is a son of
+ * the family's first couple, because nobody goes in on their own.
+ *
+ * AND THEY HAVE A CHILD EACH, WHICH IS THE POINT. They used to have none, and
+ * that made this pair CONCLUSIVE — the same name, the same year, the same
+ * mutupo and nothing at all against. Since the write door started folding
+ * conclusive pairs by itself, the app merged the planted duplicate on the way
+ * in and this suite went looking for it in a room it was no longer in. So the
+ * half of the test that checks the feature still works had been failing, and
+ * for the most misleading reason there is: the app doing the job better than
+ * the test expected.
+ *
+ * A son recorded under each copy is how this duplicate actually arises. Two
+ * relatives write the same woman down, each knowing one of her children, and
+ * neither sees the other's copy. It is also exactly the line between the two
+ * behaviours: "different children recorded" counts AGAINST, and anything with
+ * something against is never folded automatically, however strong the rest of
+ * it looks. The pair stays very likely one person — the two are married to the
+ * same man — so the room offers it and whoever knows decides, which is what
+ * merging them would fix: her two sons would become brothers.
+ *
+ * That is now what this suite measures: the pairs the app declines to fold are
+ * the pairs a family is asked about. */
 function plantedDuplicates(tag) {
-  // Two records of one woman: the same name, one of them with the title her
-  // grandchildren would use, and both married to the same man — who is a son
-  // of the family's first couple, because nobody goes in on their own.
   return [
     { op:'addPerson', ref:'$dupA', name:`Ambuya Chiedza ${tag}`, sex:'f', totem:'Shava', born:'1931' },
     { op:'addPerson', ref:'$dupB', name:`Chiedza ${tag}`,        sex:'f', totem:'Shava', born:'1931' },
     { op:'addPerson', ref:'$hus',  name:`Mudhara Zvikomborero ${tag}`, sex:'m', totem:'Nzou', born:'1928' },
     { op:'addChild', unionId:'$u0', personId:'$hus' },
+    { op:'addPerson', ref:'$son1', name:`Tafara ${tag}`, sex:'m', totem:'Nzou', born:'1955' },
+    { op:'addPerson', ref:'$son2', name:`Nyasha ${tag}`, sex:'m', totem:'Nzou', born:'1958' },
     { op:'addUnion', ref:'$du1' },
     { op:'addPartner', unionId:'$du1', personId:'$hus' },
     { op:'addPartner', unionId:'$du1', personId:'$dupA' },
+    { op:'addChild', unionId:'$du1', personId:'$son1' },
     { op:'addUnion', ref:'$du2' },
     { op:'addPartner', unionId:'$du2', personId:'$hus' },
-    { op:'addPartner', unionId:'$du2', personId:'$dupB' }
+    { op:'addPartner', unionId:'$du2', personId:'$dupB' },
+    { op:'addChild', unionId:'$du2', personId:'$son2' }
   ];
 }
 
@@ -109,7 +144,7 @@ function plantedDuplicates(tag) {
 
   const TAG = 'Big' + Date.now().toString(36).slice(-5);
 
-  section(`building a family of ${PEOPLE + 3}`);
+  section(`building a family of ${PEOPLE + PLANTED}`);
   // Its own family, so the numbers mean something and nobody else's tree gets
   // four hundred strangers in it.
   const made = await page.evaluate(async name => {
@@ -139,7 +174,7 @@ function plantedDuplicates(tag) {
   await ready(page);
   await settled(page);
   const count = await page.evaluate(() => people().length);
-  is(count, PEOPLE + 3, `${count} people on the page`);
+  is(count, PEOPLE + PLANTED, `${count} people on the page`);
 
   section('A REDRAW IS QUICK');
   // Several, and the median: the first one after a load pays for layout that
@@ -177,10 +212,20 @@ function plantedDuplicates(tag) {
   is(await page.evaluate(() => dupes.from), 'server', 'the answer came from the server');
   const likely = await page.evaluate(() => dupes.likely.length);
   is(likely >= 1, true, `${likely} likely duplicate(s) found`);
-  is(await page.isVisible('#dupes'), true, 'and the chip says so');
+
+  /* THE DOOR CARRIES THE MARK. The duplicates used to be a chip of their own
+     on the canvas; they are a room behind the hub now, and the count rides on
+     the hub's mark with everything else waiting to be looked at. Opening the
+     hub is how somebody reaches them, so it is how this reaches them. */
+  is(await page.isVisible('#hubMark'), true, 'and the door is marked');
+  await page.click('#hub');
+  await page.waitForSelector('[data-room="dupes"]', { timeout: 10000 });
+  is(/Possible duplicates · \d/.test(
+       await page.textContent('[data-room="dupes"]')), true,
+     'with the room behind it saying how many');
 
   section('the planted pair is the one it found');
-  await page.click('#dupes');
+  await page.click('[data-room="dupes"]');
   await page.waitForSelector('#form .pair', { timeout: 10000 });
   const panel = await page.textContent('#form');
   is(/Chiedza/.test(panel), true, 'the woman entered twice is named');
@@ -201,7 +246,21 @@ function plantedDuplicates(tag) {
 
   section('an edit makes the answer stale, and it is asked again');
   await page.evaluate(() => { dupes = { pairs:[], likely:[], from:'stale', scanning:false, tooBig:false }; });
-  await page.evaluate(t => { addPerson('Someone Else ' + t, 'm', 'Nzou', '1970', ''); save(); }, TAG);
+  /* GROWN OFF SOMEBODY, not planted on its own. This used to call addPerson()
+     and save() — a name joined to nothing, which the write door refuses now,
+     so the page rolled it straight back and the edit never reached the server
+     at all. The assertion below still passed, because a refresh moves the
+     scan's answer to 'server' whether or not anything was written: a test
+     proving nothing while reporting a pass. */
+  const before = await page.evaluate(() => people().length);
+  await page.evaluate(t => {
+    const dad = people().find(p => p.name.startsWith('Mudhara Zvikomborero'));
+    grow('child', dad.id, 'Someone Else ' + t, 'm', 'Nzou', { born:'1970' });
+    save();
+  }, TAG);
+  await saved(page);
+  is(await page.evaluate(() => people().length), before + 1,
+     'the edit was actually recorded');
   await page.waitForFunction(() => dupes.from === 'server', { timeout: 20000 });
   is(await page.evaluate(() => dupes.from), 'server', 'the scan ran again after the edit');
   is(await page.evaluate(() => dupes.likely.length) >= 1, true,
