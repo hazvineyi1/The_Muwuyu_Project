@@ -380,7 +380,39 @@ body.carrying .pod{transition:none;}
 }
 .pod:hover{border-color:var(--gold-soft); box-shadow:var(--lift);}
 .pod:focus-visible{outline:2.5px solid var(--gold); outline-offset:3px;}
-.pod.sel{border-color:var(--gold); border-width:2px; box-shadow:var(--lift);}
+/* ── THE ONE THAT WAS TAPPED ─────────────────────────────────────────────
+ *
+ * "It needs to be clearer when clicking on the person and highlighting them,
+ *  who is being highlighted."
+ *
+ * It was a two-pixel gold border and nothing else, on a canvas where a
+ * married-in family's tint is a filled chip in full colour. On a real screen
+ * the woman standing next to the picked man drew the eye harder than the
+ * picked man did — so the answer to "who did I just tap" was the quietest
+ * thing on the page.
+ *
+ * Three marks, because one is not enough against everything else going on:
+ * a ring that sits OUTSIDE the pod where nothing else is drawn, a halo that
+ * separates it from whatever it stands beside, and height — it comes forward
+ * and lifts off the canvas. The name goes up in weight with it, so the pod
+ * reads as the subject of the screen rather than as one of ten.
+ *
+ * And it is said in words as well, on the bar, because a mark can only ever
+ * say "this one" — it cannot say a name. See showLit(). */
+.pod.sel{
+  border-color:var(--gold); border-width:2px;
+  box-shadow:0 0 0 4px var(--pod), 0 0 0 6px var(--gold), var(--lift);
+  transform:translate(-50%,-50%) scale(1.045);
+  z-index:3;
+}
+.pod.sel .nm{font-weight:600;}
+/* The vantage line is the one piece of the pod that says WHY it is picked.
+   Gold rather than leaf-green here, so that it belongs to the ring around it
+   rather than to the kinship words on every other card. */
+.pod.sel .ttl.vantage{color:var(--gold); font-weight:700;}
+/* A tapped pod is never set back, whatever else the screen is doing. Being
+   dimmed and picked at the same time is the app disagreeing with itself. */
+.pod.sel.dim, .pod.sel.aside{opacity:1; filter:none;}
 .pod.sprout{animation:pop .45s cubic-bezier(.2,1.5,.4,1) backwards;}
 /* WHEN ONE WORD IS BEING SHOWN. Everybody the word reaches is lifted and the
    rest are set back — not hidden, because the answer to "who are my Baba" is
@@ -424,6 +456,10 @@ body.carrying .pod{transition:none;}
   font-style:normal; font-family:'Karla',sans-serif; font-size:10.5px;
   font-weight:700; color:var(--gold); letter-spacing:.04em;
 }
+/* The picked chip carries a sentence rather than a count, so it is allowed
+   to be wider than a word and its tail is quieter than the name. */
+#litbar .chip.picked{max-width:min(88vw,460px);}
+#litbar .chip.picked i{color:var(--muted); font-weight:600; letter-spacing:.02em;}
 #litbar .chip button{
   width:22px; height:22px; padding:0; border-radius:50%;
   display:flex; align-items:center; justify-content:center;
@@ -9603,6 +9639,32 @@ function showLit(){
       `<button type="button" id="undelete">Put them back</button></div>`);
   }
 
+  /* WHO IS PICKED, BY NAME.
+   *
+   * "It needs to be clearer when clicking on the person and highlighting
+   *  them, who is being highlighted."
+   *
+   * A ring can say "this one" and cannot say a name, and on a tree of two
+   * hundred people at a zoom where the names are small, "this one" is not
+   * much of an answer. So the bar says it in words for as long as somebody
+   * is picked, and stops the moment they are let go — which tapping bare
+   * canvas already does, and the ✕ here does too.
+   *
+   * It says what being picked MEANS, as well, because that is the other half
+   * of the question: every word on the tree is reckoned from this person, so
+   * picking somebody is how you ask what the family looks like from where
+   * they stand. */
+  if (sel && present(sel) && !lit){
+    const them = state.people[sel];
+    const mine = sel === meId;
+    rows.push(
+      `<div class="chip picked"><b>${esc(them.name || 'Somebody')}</b>` +
+      `<i>${mine ? 'you — every word is from here'
+                 : 'picked — every word is from here'}</i>` +
+      `<button type="button" id="selOff" aria-label="Let go of ` +
+        `${esc(them.name || 'this person')}">&times;</button></div>`);
+  }
+
   /* A lit word, as a chip the size of the word. The lighting itself is the
      message; this is only the way out of it, and tapping bare canvas is the
      other way. */
@@ -9615,6 +9677,7 @@ function showLit(){
   el.innerHTML = rows.join('');
   el.hidden = !rows.length;
   if ($('litOff')) $('litOff').onclick = () => { lit = null; render(); };
+  if ($('selOff')) $('selOff').onclick = () => { sel = null; closeForm(); render(); };
   if ($('undelete')) $('undelete').onclick = putThemBack;
   if ($('lostGo')) $('lostGo').onclick = openAdrift;
   if ($('mergedGo')) $('mergedGo').onclick = openMerged;
