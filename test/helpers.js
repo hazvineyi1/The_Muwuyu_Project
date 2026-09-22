@@ -143,6 +143,7 @@ function loadFrontend(){
       budWords, PLAIN_BUDS, waysToAdd,
       focusIds, setFocusLifts, loadFocus, adrift, mayAlreadyBe, adriftRoom,
       nameHelp, setLoose, hereWords,
+      BONDS, bondBetween, setBond, bondLine, widowedIn, marriageBlock,
       pick(id){ sel = id; },
       budsHtml(id){ sel = id; computeLayout(); placeBuds(); return budsHtml(); },
       seenTo(n){ seenSeq = n; }, headTo(n){ headSeq = n; },

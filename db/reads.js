@@ -99,7 +99,7 @@ async function bootstrap(pool, treeId, { focus = null, depth = 3 } = {}) {
     // order. Children are eldest-first: that order is the birth order the
     // seniority terms read, so it must survive the trip.
     pool.query(`
-      SELECT u.id, u.updated_at,
+      SELECT u.id, u.updated_at, u.bond,
              COALESCE((SELECT array_agg(up.person_id ORDER BY up.position)
                          FROM union_partners up WHERE up.union_id = u.id), '{}') AS partners,
              COALESCE((SELECT array_agg(uc.person_id ORDER BY uc.birth_order)
@@ -327,7 +327,7 @@ async function fullTree(pool, treeId) {
     pool.query(`SELECT ${PERSON_COLS} FROM people
                  WHERE tree_id = $1 ORDER BY created_at`, [treeId]),
     pool.query(`
-      SELECT u.id, u.updated_at,
+      SELECT u.id, u.updated_at, u.bond,
              COALESCE((SELECT array_agg(up.person_id ORDER BY up.position)
                          FROM union_partners up WHERE up.union_id = u.id), '{}') AS partners,
              COALESCE((SELECT array_agg(uc.person_id ORDER BY uc.birth_order)
@@ -347,6 +347,8 @@ async function fullTree(pool, treeId) {
   const unions = unionsR.rows.map(u => ({
     id: u.id,
     updated_at: u.updated_at,
+    // '' where nobody has said. See migration 015 — silence is not 'married'.
+    bond: u.bond || '',
     partners: u.partners.slice(),
     children: u.children.slice()
   }));
@@ -389,7 +391,7 @@ async function publicTree(pool, treeId) {
 
   const here = new Set(people.map(p => p.id));
   const { rows: unionRows } = await pool.query(`
-    SELECT u.id,
+    SELECT u.id, u.bond,
            COALESCE((SELECT array_agg(up.person_id ORDER BY up.position)
                        FROM union_partners up WHERE up.union_id = u.id), '{}') AS partners,
            COALESCE((SELECT array_agg(uc.person_id ORDER BY uc.birth_order)
@@ -398,6 +400,7 @@ async function publicTree(pool, treeId) {
 
   const unions = unionRows
     .map(u => ({ id: u.id,
+                 bond: u.bond || '',
                  partners: u.partners.filter(x => here.has(x)),
                  children: u.children.filter(x => here.has(x)) }))
     .filter(u => u.partners.length || u.children.length);

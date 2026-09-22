@@ -243,6 +243,27 @@ const HANDLERS = {
     return { unionId, personId };
   },
 
+  /* HOW THE TWO ARE JOINED. See migration 015.
+
+     A closed set, checked here as well as by the constraint, so that a bad
+     value is a refused op with a name on it rather than a database error
+     surfacing as "something went wrong". '' clears it back to not-said,
+     which somebody who marked the wrong union has to be able to do. */
+  async setBond(ctx, op) {
+    const { client, treeId, actor, resolve } = ctx;
+    const unionId = resolve(op.unionId, 'setBond.unionId');
+    const bond = String(op.bond ?? '');
+    if (!['', 'married', 'together', 'parted'].includes(bond)) {
+      throw badRequest(`setBond: ${JSON.stringify(op.bond)} is not one of married, ` +
+        `together, parted, or empty for not said`, { op: 'setBond', bond: op.bond });
+    }
+    await checkVersion(client, 'unions', unionId, op.expect, 'union');
+    await client.query('UPDATE unions SET bond = $2 WHERE id = $1', [unionId, bond]);
+    await touchUnion(client, unionId);
+    await logChange(client, treeId, 'union', unionId, 'setBond', op, actor);
+    return { unionId, bond };
+  },
+
   async addChild(ctx, op) {
     const { client, treeId, actor, resolve } = ctx;
     const unionId = resolve(op.unionId, 'addChild.unionId');

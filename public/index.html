@@ -351,6 +351,16 @@ body.carrying .pod{transition:none;}
 .bond{stroke:var(--bark-thin); stroke-width:3; stroke-linecap:butt;
       stroke-linejoin:miter; fill:none;}
 .bond.reach{stroke-dasharray:none; opacity:.7;}   /* a partner further along the row */
+/* ── HOW THEY ARE JOINED, IN THE WOOD ────────────────────────────────────
+   A marriage is whole wood. A couple who did not marry is wood all the same,
+   drawn lighter — they are joined and their children hang from it, and
+   nothing here is a judgement on them. A marriage that ended is broken wood:
+   it was there, the children of it are still there, and it is not there now.
+   Said in the drawing so nobody has to open a card to see it. */
+.bond.is-married{stroke:var(--bark-thin);}
+.bond.is-together{stroke:var(--bark-thin); stroke-width:2.5; opacity:.72;}
+.bond.is-parted{stroke:var(--bark-thin); stroke-width:2.5; opacity:.6;
+                stroke-dasharray:7 6; stroke-linecap:round;}
 /* The tap target over a line. Invisible, and the only thing in the tree layer
    that takes a pointer at all — everything else there is drawing. */
 .hit{fill:none; stroke:transparent; stroke-linecap:round; pointer-events:stroke;
@@ -1100,6 +1110,26 @@ body.carrying .pod{transition:none;}
    it is an error; gold, because it is waiting on somebody. */
 /* Who else has the tree open. A quiet line, gold because it is a person and
    not a warning, and never bigger than the record underneath it. */
+/* HOW TWO PEOPLE ARE JOINED, on the card. One row per join: who, what it is
+   in words, the three answers, and the way to take the join out altogether. */
+#form .joins{display:block; margin-bottom:10px;}
+#form .join{
+  padding:9px 10px; margin-bottom:7px; border-radius:12px 3px 12px 3px;
+  background:var(--pod-hi); border:1.5px solid var(--pod-edge);
+}
+#form .join u{display:block; text-decoration:none; font-size:14px; line-height:1.25;}
+#form .join u small{
+  display:block; margin-top:2px;
+  font-family:'Karla',sans-serif; font-size:10px; font-weight:600;
+  letter-spacing:.04em; color:var(--muted);
+}
+#form .join .seg{margin:7px 0 6px;}
+#form .join .mini{
+  padding:4px 9px; border-radius:99px; cursor:pointer;
+  background:transparent; border:1.5px solid var(--pod-edge); color:var(--muted);
+  font-family:'Karla',sans-serif; font-size:10.5px; font-weight:700;
+}
+#form .join .mini:hover{border-color:var(--gold); color:var(--gold);}
 #form .herenow{
   margin:0 0 10px; padding:7px 10px; border-radius:10px 3px 10px 3px;
   background:var(--pod-hi); border:1.5px solid var(--pod-edge);
@@ -1651,6 +1681,82 @@ const parentUnionOf = id => unions().find(u => u.children.includes(id)) || null;
 const unionsOf = id => unions().filter(u => u.partners.includes(id));
 const partnersOf = id => unionsOf(id).flatMap(u => u.partners.filter(p => p !== id && present(p)));
 
+/* ── HOW TWO PEOPLE ARE JOINED ────────────────────────────────────────────
+ *
+ * "Some people have children with partners but were never married, others
+ *  are married and others are divorced and others are deceased."
+ *
+ * Every union in this app has meant one thing, and the word "married" was on
+ * the pod, in the kinship term and in the sentence the app said when one was
+ * made. That is wrong in both directions for a great many families: a couple
+ * who never married were recorded as husband and wife, and a couple who
+ * parted twenty years ago were recorded as though they had not.
+ *
+ * FOUR VALUES AND NO MORE. '' is not-said, and it is what every union
+ * already recorded means, because nobody HAS said — they were entered when
+ * the app could only hear one answer. Divorce and separation are one value
+ * on purpose: a customary marriage that ended is not a decree absolute, and
+ * an app that made a family choose would be asking them to file their own
+ * lives under somebody else's law.
+ *
+ * AND DEATH IS NOT ONE OF THEM. Whether somebody has died is already
+ * recorded, on the person, in `died`. Storing "widowed" on the marriage as
+ * well would be a second copy that can disagree with the first, going stale
+ * the moment a date is corrected, and needing to be kept by hand on the day
+ * a family is least able to. So it is DERIVED, every time, the way every
+ * kinship word in this project is derived. */
+const BONDS = ['married', 'together', 'parted'];
+
+const bondBetween = (a, b) => {
+  const u = unionsOf(a).find(x => x.partners.includes(b));
+  return u ? (u.bond || '') : '';
+};
+
+function setBond(unionId, bond){
+  const u = state.unions[unionId];
+  if (!u) return false;
+  const want = BONDS.includes(bond) ? bond : '';
+  if ((u.bond || '') === want) return false;
+  snapshot();
+  u.bond = want;
+  return true;
+}
+
+/* What to call it, from `who`'s side, in as few words as a family would use.
+   Widowhood is read off the people here and nowhere else. */
+function bondLine(u, who){
+  if (!u) return '';
+  const bond = u.bond || '';
+  const other = u.partners.find(x => x !== who && state.people[x]);
+  const them = other ? state.people[other] : null;
+  const gone = them && (them.died || '').trim();
+  const firstName = x => ((state.people[x] || {}).name || '').split(' ')[0];
+
+  if (bond === 'together'){
+    // A parting is a thing that happens to a marriage; two people who never
+    // married and are no longer together simply are not partners any more,
+    // and the way to say that is to take the join out.
+    return 'Together, never married';
+  }
+  if (bond === 'parted') return 'Married, then parted';
+  if (bond === 'married'){
+    return gone ? `Married, until ${firstName(other)} died in ${gone}` : 'Married';
+  }
+  // Nothing said. Which is not nothing to say: it is the one state the family
+  // can still answer, and the answer changes what everybody is called.
+  return '';
+}
+
+/* Somebody widowed, said as the family would say it — derived, never stored,
+   and true of a marriage that was never called a marriage too. */
+function widowedIn(u, who){
+  if (!u) return '';
+  const other = u.partners.find(x => x !== who && state.people[x]);
+  const them = other ? state.people[other] : null;
+  return (them && (them.died || '').trim()) || '';
+}
+
+
 // Everyone still in the tree, and everyone taken out of it.
 const asidePeople = () => Object.values(state.people).filter(p => p.aside);
 // Who is looking. Self-claimed — you tap your own name — and kept as plain
@@ -1752,9 +1858,13 @@ function toggleRoot(id){
   snapshot();
   p.root = !p.root;
 }
-function addUnion(partners, children){
+function addUnion(partners, children, bond){
   const id = uid('u');
-  state.unions[id] = { id, partners:partners.slice(), children:children.slice() };
+  /* bond: '' until somebody says. A join made by adding a child to two people
+     is not a statement that they married, and the app must not make one for
+     them. See migration 015. */
+  state.unions[id] = { id, partners:partners.slice(), children:children.slice(),
+                       bond: bond || '' };
   // A new marriage is a new path up the tree for everybody under it.
   ancestryCache.clear();
   return state.unions[id];
@@ -3307,10 +3417,56 @@ function derive(who, tid, byBloodOnly){
 
   const me = state.people[who], them = state.people[tid];
 
-  // married to each other
+  /* ── JOINED TO EACH OTHER, AND HOW ──────────────────────────────────────
+   *
+   * "Some people have children with partners but were never married, others
+   *  are married and others are divorced."
+   *
+   * This used to say Mukadzi or Murume for any two people recorded together,
+   * full stop — so a woman whose family never paid roora for her was called
+   * somebody's wife by the app, and a man divorced in 1994 was still called
+   * his ex-wife's husband thirty years later.
+   *
+   * WHERE NOBODY HAS SAID, nothing changes. Every union already recorded is
+   * in that state, and the app must go on saying what it has always said
+   * about them rather than quietly demoting a family's marriages because a
+   * column was added underneath them.
+   *
+   * TOGETHER KEEPS THE WORD and changes the reason. "Mukadzi wangu" is what
+   * a very great many people say about a partner they did not marry, and an
+   * app from outside the language is in no position to tell a family they
+   * are speaking it wrong. What it can do is stop CLAIMING the marriage: the
+   * word stands, the sentence under it says the truth, and the shape is its
+   * own so a family who uses a different word can teach it.
+   *
+   * PARTED DOES NOT KEEP IT. "Your wife" about a woman somebody divorced is
+   * wrong in any language, and there is no one Shona word for it that every
+   * family would accept — so the app says the plain fact and offers the
+   * shape to be taught. Silence here is better than a wrong word, and this
+   * project has always held that a term nobody said is worse than no term. */
   if (partnersOf(who).includes(tid)){
-    return { term: them.sex === 'f' ? 'Mukadzi' : them.sex === 'm' ? 'Murume' : null,
-             why:'your husband or wife',
+    const bond = bondBetween(who, tid);
+    const word = them.sex === 'f' ? 'Mukadzi' : them.sex === 'm' ? 'Murume' : null;
+    /* Read off `died`, never stored. A late husband is still a husband in
+       every family this project has met, so the word stands and the sentence
+       carries the fact. */
+    const gone = (them.died || '').trim();
+    const since = gone ? `, who died in ${gone}` : '';
+
+    if (bond === 'parted'){
+      return { term:null,
+               why:`you were married, and parted`,
+               shape:`bond:parted:${sexKey(me.sex)}-looking:${sexKey(them.sex)}`,
+               plain:'somebody you were married to' };
+    }
+    if (bond === 'together'){
+      return { term: word,
+               why:`your partner${since} — you have not said you married`,
+               shape:`bond:together:${sexKey(me.sex)}-looking:${sexKey(them.sex)}`,
+               plain:'your partner, not married' };
+    }
+    return { term: word,
+             why:`your husband or wife${since}`,
              shape: shapeOf('spouse', me.sex, them.sex),
              plain:'your husband or wife' };
   }
@@ -5223,6 +5379,9 @@ function computeLayout(){
      have to hang off the partner who is left. */
   const us = unions().map(u => ({
     id: u.id,
+    // How they are joined travels with the union into the layout, so the wood
+    // drawn between two people can say it. See migration 015.
+    bond: u.bond || '',
     partners: u.partners.filter(shown),
     children: u.children.filter(shown)
   }));
@@ -6315,7 +6474,10 @@ function computeLayout(){
         // The two people it ties, so a tap on the line can say what they are
         // to each other.
         links.push({ kind:'bond', x1:Math.min(...xs), x2:Math.max(...xs), y:b.y,
-                     reach:gap > 1, pair:[u.partners[0], u.partners[1]] });
+                     reach:gap > 1, pair:[u.partners[0], u.partners[1]],
+                     // How they are joined, so the wood between them can say it
+                     // without anybody having to open a card.
+                     bond:u.bond || '' });
       }
     }
   }
@@ -6685,7 +6847,8 @@ function draw(){
       const d = l.reach
         ? `M${l.x1} ${l.y}L${l.x1} ${drop}L${l.x2} ${drop}L${l.x2} ${l.y}`
         : `M${l.x1} ${l.y}L${l.x2} ${l.y}`;
-      svg.push(`<path class="bond${l.reach ? ' reach' : ''}" d="${d}"></path>`);
+      svg.push(`<path class="bond${l.reach ? ' reach' : ''}` +
+               `${l.bond ? ' is-' + l.bond : ''}" d="${d}"></path>`);
       if (l.pair) bondHits.push(hitPath(d, 3, l.pair[0], [l.pair[1]]));
       continue;
     }
@@ -7855,28 +8018,63 @@ function marriageBlock(id){
   const us = unionsOf(id).filter(u => u.partners.includes(id));
   if (!us.length) return '';
   const first = x => (state.people[x] || {}).name || 'somebody';
-  return `<p class="lbl">Married</p><div class="seg col" id="cMarriages">` +
+  /* ── AND HOW THEY ARE JOINED, WHICH THE APP USED TO ASSERT ──────────────
+   *
+   * "Some people have children with partners but were never married, others
+   *  are married and others are divorced and others are deceased."
+   *
+   * The heading said "Married" and that was the whole of it. Every couple in
+   * every tree was a marriage because there was no way to be anything else,
+   * so the app was making a claim about a great many families that nobody in
+   * them had made.
+   *
+   * Three buttons, and a fourth state that is simply none of them pressed:
+   * nobody has said. That is where every couple already recorded starts, and
+   * it is honest — they were entered when the app could only hear one answer.
+   *
+   * DEATH IS NOT ONE OF THE BUTTONS. It is already recorded on the person,
+   * in the year they died, and the line under the name reads it from there.
+   * A widow does not have to tell this app twice. */
+  return `<p class="lbl">Joined to</p><div class="joins" id="cMarriages">` +
     us.map(u => {
       const other = u.partners.filter(x => x !== id && state.people[x]);
       const who = other.length ? other.map(first).join(' and ')
                                : 'nobody recorded yet';
       const n = u.children.filter(present).length;
-      /* WHICH OF THE TWO STEPS OUT, and it is the one named on the button —
-         not the person whose card this is. You are standing on Sydney's card
-         saying the marriage to Evelyn is wrong, so Evelyn is what goes.
-         Taking Sydney out of his own marriage instead would leave the
-         children of it hanging off Evelyn alone, and he would lose his own
-         son by correcting a claim about his wife. Where nobody is recorded on
-         the other side there is only one person in it to take out. */
-      return `<button type="button" data-unmarry="${esc(u.id)}" ` +
-        `data-drop="${esc(other[0] || id)}" ` +
-        `title="Take this marriage out. Nobody leaves the tree` +
-        `${n ? `, and the ${n} ${n === 1 ? 'child' : 'children'} of it stay ` +
-               `with ${esc(first(id))}` : ''}.">` +
-        `${esc(who)}<small>not married after all</small></button>`;
+      const line = bondLine(u, id);
+      const bond = u.bond || '';
+      return `<div class="join">` +
+        `<u>${esc(who)}<small>` +
+          (line ? esc(line) : 'Nobody has said how') +
+          (n ? ` · ${n} ${n === 1 ? 'child' : 'children'}` : '') +
+        `</small></u>` +
+        `<div class="seg" data-bondfor="${esc(u.id)}">` +
+          [['married', 'Married'],
+           ['together', 'Together'],
+           ['parted', 'Parted']].map(([v, w]) =>
+            `<button type="button" data-bond="${esc(u.id)}|${v}" ` +
+            `aria-pressed="${bond === v}">${w}</button>`).join('') +
+        `</div>` +
+        /* WHICH OF THE TWO STEPS OUT, and it is the one named on the button —
+           not the person whose card this is. You are standing on Sydney's card
+           saying the marriage to Evelyn is wrong, so Evelyn is what goes.
+           Taking Sydney out of his own marriage instead would leave the
+           children of it hanging off Evelyn alone, and he would lose his own
+           son by correcting a claim about his wife. Where nobody is recorded on
+           the other side there is only one person in it to take out. */
+        `<button type="button" class="mini" data-unmarry="${esc(u.id)}" ` +
+          `data-drop="${esc(other[0] || id)}" ` +
+          `title="Take this join out altogether. Nobody leaves the tree` +
+          `${n ? `, and the ${n} ${n === 1 ? 'child' : 'children'} of it stay ` +
+                 `with ${esc(first(id))}` : ''}.">` +
+          `Not joined at all</button>` +
+      `</div>`;
     }).join('') + `</div>` +
-    `<p class="roothint">Only the marriage goes. Everybody keeps their name, ` +
-    `their years and their own children — and Undo puts it back.</p>`;
+    `<p class="roothint">Only the join goes. Everybody keeps their name, ` +
+    `their years and their own children — and Undo puts it back. ` +
+    `<b>Together</b> is for a couple with children who did not marry; ` +
+    `<b>Parted</b> is for a marriage that ended. Somebody who has died keeps ` +
+    `whichever they were — the year they died says the rest.</p>`;
 }
 
 /* Whether this person is in the public record.
@@ -9882,6 +10080,25 @@ function openCard(id){
     b.addEventListener('keydown', e => {
       if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); e.stopPropagation(); go(); }
     });
+  });
+  /* HOW THEY ARE JOINED. Pressing the one already pressed clears it back to
+     not-said, because somebody who marked the wrong union has to be able to
+     unmark it and "not said" is a real answer rather than a missing one. */
+  el.querySelectorAll('[data-bond]').forEach(b => b.onclick = () => {
+    commit();
+    const [unionId, want] = b.dataset.bond.split('|');
+    const u = state.unions[unionId];
+    if (!u) return;
+    const now = (u.bond || '') === want ? '' : want;
+    if (!setBond(unionId, now)){ closeForm(); return; }
+    save(); render();
+    openCard(id);
+    const other = u.partners.find(x => x !== id && state.people[x]);
+    const them = other ? (state.people[other].name || '').split(' ')[0] : 'them';
+    say(now === 'married'  ? `${p.name} and ${them} are recorded as married.`
+      : now === 'together' ? `${p.name} and ${them} are recorded as together, not married.`
+      : now === 'parted'   ? `${p.name} and ${them} were married, and parted. Both stay in the tree.`
+      : `Nobody has said how ${p.name} and ${them} are joined.`);
   });
   el.querySelectorAll('[data-unmarry]').forEach(b => b.onclick = () => {
     commit();
@@ -12588,7 +12805,9 @@ function adopt(tree){
   }
   for (const u of tree.unions){
     next.unions[u.id] = { id:u.id, partners:u.partners.slice(),
-                          children:u.children.slice(), v:u.updated_at };
+                          children:u.children.slice(),
+                          // '' where nobody has said; see migration 015.
+                          bond:u.bond || '', v:u.updated_at };
   }
   for (const [a, b] of (tree.notDuplicates || [])) next.notDuplicates.push(dismissedKey(a, b));
   state = next;
@@ -12716,9 +12935,13 @@ function diffOps(was, now){
       const r = '$' + uid;
       refOf[uid] = r;
       ops.push({ op:'addUnion', ref:r });
+      if (u.bond) ops.push({ op:'setBond', unionId:r, bond:u.bond });
       u.partners.forEach(x => ops.push({ op:'addPartner', unionId:r, personId:ref(x) }));
       u.children.forEach(x => childAdds.push({ op:'addChild', unionId:r, personId:ref(x) }));
       continue;
+    }
+    if ((u.bond || '') !== (b.bond || '')){
+      ops.push({ op:'setBond', unionId:uid, bond:u.bond || '' });
     }
     for (const x of u.partners){
       if (!b.partners.includes(x)) ops.push({ op:'addPartner', unionId:uid, personId:ref(x) });
