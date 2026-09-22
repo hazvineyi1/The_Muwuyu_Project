@@ -1939,6 +1939,11 @@ let pos = { x:0, y:0, k:1 };
 let layout = { persons:{}, blocks:[], links:[] };
 let fresh = new Set();
 let budSig = '';                    // which buds are currently on screen
+/* How wide each one actually came out, read off the page once per set of buds
+   and kept for the pans that follow. The columns are aligned from these, so a
+   guess is enough to lay out with and not enough to line up with. */
+let budSize = {};
+let budHeight = 30;                 // and how tall, which is the same for all
 let meId = null;                    // who is looking — this device only
 let pickingMe = false;
 
@@ -7663,64 +7668,51 @@ function placeBuds(){
     t:sy(q) - 22 * pos.k, b:sy(q) + 22 * pos.k
   })));
 
+  /* ── WHERE THE BUDS GO ────────────────────────────────────────────────
+   *
+   * "These don't show up in a very orderly manner, they need to be more
+   *  orderly."
+   *
+   * They did not, and the reason was that every bud found its own place.
+   * Each one was given a list of preferred angles and walked a ring around
+   * the pod at four different radii until it found a gap — so six buds landed
+   * at six unrelated angles and distances, no two edges lined up, and a bud
+   * that could not find a gap swept the whole screen for the nearest free
+   * spot, which is how Child ended up under its own person and Sibling ended
+   * up beside somebody else's.
+   *
+   * THE SLOTS ARE FIXED NOW, and what decides them is meaning rather than
+   * what happens to be free:
+   *
+   *        ┌───────────────┐
+   *        │     Child     │      above  — the generation below, where the
+   *        └───────────────┘               tree grows down from the taproot
+   *   ┌─────────┐   ●   ┌─────────┐
+   *   │ Sibling │  pod  │ Partner │   beside — their own generation
+   *   ├─────────┤       ├─────────┤
+   *   │  Here   │       │  Words  │   and the two doors, under their own side
+   *   └─────────┘       └─────────┘
+   *        ┌───────────────┐
+   *        │    Parent     │      below — the generation above
+   *        └───────────────┘
+   *
+   * Every bud in a column is given the width of the widest one in it, so the
+   * edges facing the pod line up and the edges facing away line up. The rows
+   * are centred on the pod. Nothing is placed by search, so the same person
+   * tapped twice gets the same picture twice.
+   *
+   * AND WHEN A COLUMN WOULD LAND ON SOMEBODY, IT MOVES AS A COLUMN — straight
+   * out along its own axis, keeping its shape, rather than one bud breaking
+   * ranks. A tidy arrangement slightly further from the pod reads as
+   * deliberate; the same buds scattered do not. */
   const placed = [];
-
-  const RX = halfW + 96, RY = halfH + 60;
-  const BW = 84, BH = 20;                     // half-extents of a bud
   const PAD = 10, BAR = innerHeight - 70;     // stay on screen, clear of the toolbar
   const TOP = PAD + TOPBAR;                   // and out from under the banner
-  const boxOf = (x, y) => ({ l:x - BW, r:x + BW, t:y - BH, b:y + BH });
-  const onScreen = (x, y) =>
-    x - BW >= PAD && x + BW <= innerWidth - PAD && y - BH >= TOP && y + BH <= BAR;
-  const overlaps = (k, list) => list.some(q => k.l < q.r && q.l < k.r && k.t < q.b && q.t < k.b);
-  const RING = [0, -40, 40, -75, 75, -110, 110, -145, 145, 180, -90, 90];
-
-  const place = pref => {
-    const angles = pref.concat(RING.filter(a => !pref.includes(a)));
-    let fallback = null, fewest = Infinity;
-    for (const grow of [1, 1.3, 1.6, 2]){
-      for (const a of angles){
-        const r = a * Math.PI / 180;
-        const x = cx + Math.cos(r) * RX * grow, y = cy + Math.sin(r) * RY * grow;
-        if (!onScreen(x, y)) continue;
-        const k = boxOf(x, y);
-        if (overlaps(k, placed)) continue;              // never sit on another bud
-        const n = pods.filter(q => k.l < q.r && q.l < k.r && k.t < q.b && q.t < k.b).length;
-        if (n === 0){ placed.push(k); return [x, y]; }
-        if (n < fewest){ fewest = n; fallback = [x, y]; }
-      }
-    }
-    // Nothing on the ring was completely clear. Sitting over a name is
-    // survivable — the bud is drawn above the tree and still takes the tap.
-    // Sitting over another bud is not, so if the ring failed entirely, sweep
-    // the screen for the nearest free spot rather than stacking.
-    const spot = fallback || sweep();
-    placed.push(boxOf(spot[0], spot[1]));
-    return spot;
-  };
-
-  // Nearest point on a coarse grid that no other bud has taken.
-  const sweep = () => {
-    let best = null, nearest = Infinity;
-    for (let y = TOP + BH; y <= BAR - BH; y += 34){
-      for (let x = PAD + BW; x <= innerWidth - PAD - BW; x += 44){
-        if (overlaps(boxOf(x, y), placed)) continue;
-        const d = (x - cx) ** 2 + (y - cy) ** 2;
-        if (d < nearest){ nearest = d; best = [x, y]; }
-      }
-    }
-    return best || [Math.min(Math.max(cx, PAD + BW), innerWidth - PAD - BW),
-                    Math.min(Math.max(cy - RY, TOP + BH), BAR - BH)];
-  };
 
   const pu = parentUnionOf(id);
   const isRoot = !!(state.people[id] && state.people[id].root);
   const canParent = !isRoot && (!pu || pu.partners.length < 2);
   const mates = partnersOf(id).map(m => layout.persons[m]).filter(Boolean);
-  // stand the sibling bud on whichever side isn't already crowded by a spouse
-  const leftBusy = mates.some(q => q.x < at.x), rightBusy = mates.some(q => q.x > at.x);
-  const sibFirst = leftBusy && !rightBusy ? [0, -40, 40, 180] : [180, -140, 140, 0];
-  const parFirst = leftBusy && !rightBusy ? [180, -140, 140, 0] : [0, -40, 40, 180];
 
   /* THE WORD FIRST. Parent, sibling, partner and child are positions in a
      diagram; Tete and Sekuru are what the family actually says, and somebody
@@ -7729,14 +7721,13 @@ function placeBuds(){
    *
    * "What does this mean? Some things are not very clear."
    *
-   * It used to say "By what you call them" under a four-pointed star.
-   * Two faults in one
-   * small button. The four buds beside it are THINGS you can add — Child,
-   * Sibling, Partner, Parent — and this one was a description of a METHOD,
-   * which is a different kind of phrase doing a different job in the same
-   * row, so it read as decoration rather than as an offer. And a four-
-   * pointed sparkle in this decade means one thing to most people, which is
-   * a machine guessing at something; there is no guessing here at all.
+   * It used to say "By what you call them" under a four-pointed star. Two
+   * faults in one small button. The four buds beside it are THINGS you can
+   * add — Child, Sibling, Partner, Parent — and this one was a description of
+   * a METHOD, which is a different kind of phrase doing a different job in
+   * the same row, so it read as decoration rather than as an offer. And a
+   * four-pointed sparkle in this decade means one thing to most people, which
+   * is a machine guessing at something; there is no guessing here at all.
    *
    * So it says the words. Not a description of them — the actual two the
    * panel behind it will offer for this person, out of their own family:
@@ -7744,18 +7735,17 @@ function placeBuds(){
   const words = budWords(id);
   const out = [
     { kind:'ways', icon:'“',
-      label: words.length ? words.join(', ') + '\u2026' : 'The word you use',
+      label: words.length ? words.join(', ') + '…' : 'The word you use',
       title: words.length
         ? `Add somebody by the word your family uses for them — ${words.join(', ')} and the rest. ` +
           `The app works out where they go.`
-        : 'Add somebody by the word your family uses for them, rather than by where they sit.',
-      at:place([-140, -180, -100, 140, 180]) },
-    { kind:'child',   label:'Child',   icon:'↑', at:place([-90, -60, -120, -35, -145]) },
-    { kind:'sibling', label:'Sibling', icon:'↔', at:place(sibFirst) },
-    { kind:'partner', label:mates.length ? 'Another partner' : 'Partner', icon:'⚭', at:place(parFirst) }
+        : 'Add somebody by the word your family uses for them, rather than by where they sit.' },
+    { kind:'child',   label:'Child',   icon:'↑' },
+    { kind:'sibling', label:'Sibling', icon:'↔' },
+    { kind:'partner', label:mates.length ? 'Another partner' : 'Partner', icon:'⚭' }
   ];
   if (canParent) out.push({ kind:'parent', icon:'↓',
-    label:pu && pu.partners.length ? 'Other parent' : 'Parent', at:place([90, 60, 120, 35, 145]) });
+    label:pu && pu.partners.length ? 'Other parent' : 'Parent' });
 
   /* ── SOMEBODY ALREADY HERE ───────────────────────────────────────────────
    *
@@ -7774,26 +7764,182 @@ function placeBuds(){
   if (people().length > 2) out.push({ kind:'join', icon:'⇢',
     label:'Somebody already here',
     title:'Bring somebody already in this tree onto this branch. No second ' +
-          'record, no duplicate.',
-    at:place([140, -140, 180, -180, 40, -40, 0]) });
+          'record, no duplicate.' });
   // A rooted person loses the Parent bud, which on its own reads as "you
   // cannot go further" rather than "we said this was as far as we got".
   // This puts the way through in the same place the Parent bud would have
   // been: one tap lifts the root and opens the form to add the parent.
-  if (isRoot) out.push({ kind:'deepen', icon:'↓', label:'Deepen the root',
-                         at:place([90, 60, 120, 35, 145]) });
+  if (isRoot) out.push({ kind:'deepen', icon:'↓', label:'Deepen the root' });
+
+  /* HOW WIDE EACH ONE IS. Measured off the page when the page will say — the
+     numbers are read once per set of buds and kept for the pans that follow —
+     and estimated from the words otherwise, which is what the headless tests
+     and the very first paint get. The old code assumed every bud was the same
+     168px wide, so "Somebody already here" was modelled as barely half its
+     real width and sat on whatever was to its right. */
+  const guess = o => 30 + 12 + String(o.label).length * 7.2;
+  for (const o of out) if (!(budSize[o.kind] > 0)) budSize[o.kind] = guess(o);
+  const W = o => budSize[o.kind] || guess(o);
+  // They are all one line of one size, so one height does for all of them —
+  // measured with the widths, estimated until then.
+  const BH = budHeight, GAP = 12;            // a bud's height, and between two
+
+  const hits = (box, list) =>
+    list.some(q => box.l < q.r && q.l < box.r && box.t < q.b && q.t < box.b);
+  const onScreen = box =>
+    box.l >= PAD && box.r <= innerWidth - PAD && box.t >= TOP && box.b <= BAR;
+  const fits = box => onScreen(box) && !hits(box, pods) && !hits(box, placed);
+  /* WHAT A PLACE COSTS. Off the screen is fatal and weighed as such — a bud
+     nobody can reach is not an offer — while sitting over a name is merely
+     untidy, since the bud is drawn above the tree and still takes the tap. */
+  const cost = boxes => boxes.reduce((n, b) =>
+    n + (onScreen(b) ? 0 : 100) + (hits(b, pods) ? 1 : 0), 0);
+
+  /* A column beside the pod: `dir` is -1 for the left of it and +1 for the
+     right. Every bud in it is given the width of the widest, so the two
+     vertical edges are straight. `lift` moves it off the pod's own line. */
+  const columnAt = (kinds, dir, lift) => {
+    const mine = kinds.map(k => out.find(o => o.kind === k)).filter(Boolean);
+    if (!mine.length) return [];
+    const wide = Math.max(...mine.map(W));
+    const tall = mine.length * BH + (mine.length - 1) * GAP;
+    const mid = cx + dir * (halfW + 20 + wide / 2);
+    const top = cy + lift - tall / 2 + BH / 2;
+    return mine.map((o, i) => {
+      const y = top + i * (BH + GAP);
+      return { o, wide, l:mid - wide / 2, r:mid + wide / 2,
+               t:y - BH / 2, b:y + BH / 2, x:mid, y };
+    });
+  };
+
+  /* BOTH COLUMNS MOVE TOGETHER, and that is the whole of why this reads as
+     tidy rather than as two buds that wandered off.
+   *
+   * Beside a person, the canvas is at its most crowded exactly where these
+   * want to go: the pods to the left and right of somebody ARE their brothers
+   * and their husband. So a column that steps sideways to avoid a neighbour
+   * walks into the next one, and 260px later it is sitting beside a stranger.
+   * The room is above and below — the band between one generation and the
+   * next is empty by construction.
+   *
+   * So when the pair does not fit on the pod's own line, the pair lifts, by
+   * the same amount on both sides, and stays level. Asymmetry is what the eye
+   * reads as disorder; two columns a little higher than expected is not. */
+  let budRows = [];
+  const columns = () => {
+    const lifts = [0];
+    for (let d = halfH + 34; d <= halfH + 300; d += 40) lifts.push(-d, d);
+
+    /* EVERY ARRANGEMENT IS WEIGHED, and the best one wins — not the first one
+       that happens to work. Taking the first meant that when nothing worked
+       the pair was placed anyway, exactly where it had already been found not
+       to fit: against the left edge of a person sitting near the edge of the
+       screen, half of it off the screen altogether.
+     *
+     * AND ONE COLUMN IS AN ARRANGEMENT TOO. Beside somebody at the edge of
+     * the canvas there is no room on one side at all, and the tidy answer is
+     * not to cram a column into it — it is to put all four in a single
+     * aligned column on the side that has the room. Still one straight edge,
+     * still evenly spaced; the compass in the middle is what carries the
+     * direction, and it keeps it. Worth a small penalty so that the
+     * symmetrical pair is preferred wherever it genuinely fits. */
+    const tries = [];
+    for (const lift of lifts){
+      tries.push({ pair:true, lift,
+        boxes: columnAt(['sibling', 'join'], -1, lift)
+          .concat(columnAt(['partner', 'ways'], +1, lift)) });
+    }
+    for (const lift of lifts) for (const dir of [1, -1]){
+      tries.push({ pair:false, lift,
+        boxes: columnAt(['partner', 'ways', 'sibling', 'join'], dir, lift) });
+    }
+
+    let pick = null;
+    for (const t of tries){
+      if (!t.boxes.length) return;
+      // The tie-breakers: a pair over a single column, and near the pod over
+      // far from it. Both are worth less than one bud sitting on a name.
+      const c = cost(t.boxes) + (t.pair ? 0 : 2) + Math.abs(t.lift) / 1000;
+      if (!pick || c < pick.c) pick = { ...t, c };
+    }
+
+    for (const b of pick.boxes){
+      placed.push(b);
+      b.o.at = [b.x, b.y];
+      b.o.w = b.wide;
+    }
+    const best = pick.boxes, lifted = pick.pair && pick.lift !== 0;
+    /* WHICH LINES THE PAIR ENDED UP ON, so the buds in the middle can stand on
+       the same ones. Empty while the columns are still flanking the pod: there
+       the middle is a compass — Child above it and Parent below — and it
+       should stay one. */
+    budRows = lifted
+      ? [...new Set(best.map(b => b.y))].sort((a, b) => a - b)
+      : [];
+  };
+
+  /* A bud in the middle, centred on the pod. `dir` is -1 for above it.
+   *
+   * ON THE PAIR'S OWN LINES WHERE THERE ARE ANY. Once the columns have lifted
+   * off the pod's line the three of them are a grid, and a Child bud nine
+   * pixels below the Sibling beside it is exactly the kind of almost-straight
+   * that reads as careless. Where the columns are still flanking the pod,
+   * this stays a compass: above for the generation the tree grows down to,
+   * below for the one it came from. */
+  const row = (kinds, dir) => {
+    const mine = kinds.map(k => out.find(o => o.kind === k)).filter(Boolean);
+    if (!mine.length) return;
+    const wide = Math.max(...mine.map(W));
+    const put = y => ({ l:cx - wide / 2, r:cx + wide / 2,
+                        t:y - BH / 2, b:y + BH / 2, x:cx, y });
+
+    let best = null;
+    if (budRows.length){
+      const shared = put(dir < 0 ? budRows[0] : budRows[budRows.length - 1]);
+      if (fits(shared)) best = shared;
+    }
+    for (let push = 0; !best && push <= 260; push += 30){
+      const box = put(cy + dir * (halfH + 26 + push));
+      if (fits(box)) best = box;
+    }
+    if (!best) best = put(cy + dir * (halfH + 26));   // nowhere clear; its own place
+    placed.push(best);
+    mine.forEach(o => { o.at = [best.x, best.y]; o.w = wide; });
+  };
+
+  /* THE COLUMNS FIRST, because they are the wide ones and the ones with two
+     buds in them — the rows are single and can step out of the way of a
+     column far more cheaply than the other way round. */
+  const lay = () => {
+    placed.length = 0;
+    for (const o of out){ o.at = null; o.w = 0; }
+    columns();
+    row(['child'], -1);
+    row(['parent', 'deepen'], +1);
+  };
+
+  const apply = () => {
+    for (let i = 0; i < out.length && i < layer.children.length; i++){
+      const el = layer.children[i], o = out[i];
+      if (!o.at) continue;
+      el.style.left = o.at[0].toFixed(1) + 'px';
+      el.style.top  = o.at[1].toFixed(1) + 'px';
+      // Every bud in a column wears the width of the widest one in it, which
+      // is what makes the two edges of the column straight.
+      el.style.minWidth = Math.round(o.w) + 'px';
+    }
+  };
 
   // Panning re-runs this on every frame. Rebuilding the markup each time would
   // restart the pop-in animation and make the buds flicker, so once the same
   // set is on screen we only move them.
   const sig = id + '|' + out.map(o => o.kind + o.label).join(',') + '|' + (meId || '');
-  if (sig === budSig && layer.children.length >= out.length){
-    out.forEach((o, i) => {
-      layer.children[i].style.left = o.at[0].toFixed(1) + 'px';
-      layer.children[i].style.top  = o.at[1].toFixed(1) + 'px';
-    });
-    return;
-  }
+  // A different set of buds means the widths that were measured belong to
+  // words that are no longer on screen — "Partner" is not "Another partner".
+  if (sig !== budSig) budSize = {};
+
+  lay();
+  if (sig === budSig && layer.children.length >= out.length){ apply(); return; }
   budSig = sig;
   budInk = out.map(o =>
     `<div class="bud" data-bud="${o.kind}" data-anchor="${id}" tabindex="0" role="button"` +
@@ -7801,6 +7947,23 @@ function placeBuds(){
     ` style="left:${o.at[0].toFixed(1)}px; top:${o.at[1].toFixed(1)}px">` +
     `<i>${o.icon}</i>${esc(o.label)}</div>`).join('');
   layer.innerHTML = budInk;
+
+  /* AND NOW THE PAGE CAN SAY HOW WIDE THEY REALLY ARE. The estimate is good
+     enough to lay out with and not good enough to line up with, so the widths
+     are read back — on this frame only, the one where the set of buds
+     changed — and the columns are set out again from the truth. */
+  let learnt = false;
+  for (const el of layer.children){
+    const w = el.offsetWidth, h = el.offsetHeight, k = el.dataset ? el.dataset.bud : null;
+    if (k && typeof w === 'number' && w > 0 && Math.abs((budSize[k] || 0) - w) > 1){
+      budSize[k] = w; learnt = true;
+    }
+    if (typeof h === 'number' && h > 0 && Math.abs(budHeight - h) > 1){
+      budHeight = h; learnt = true;
+    }
+  }
+  if (learnt) lay();
+  apply();
 }
 
 /* The buds of the last draw, so a test can read the offers the page actually

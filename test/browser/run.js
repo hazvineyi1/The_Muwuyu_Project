@@ -47,6 +47,7 @@ const SUITES = [
   { name: 'visibility',   kind: 'api', env: { MW_PUBLIC_READ: 'on' } },
   { name: 'keeper',       kind: 'api', needs: 'MW_ADMIN_PASSPHRASE',
     env: { MW_ADMIN_PASSPHRASE: process.env.MW_ADMIN_PASSPHRASE } },
+  { name: 'buds',         kind: 'static' },
   { name: 'lines',        kind: 'static' },
   { name: 'look',         kind: 'static' },
   { name: 'roots',        kind: 'static' },
