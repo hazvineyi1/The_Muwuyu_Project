@@ -21,6 +21,7 @@ const { trigramAvailable } = require('./db/reads');
 const { ensureHomeTree } = require('./db/home');
 const { gate, requireAdmin } = require('./auth');
 const audit = require('./db/audit');
+const deletePasscode = require('./db/passcode');
 const { securityHeaders, withNonce, canonicalHost } = require('./security');
 
 const app = express();
@@ -186,6 +187,15 @@ async function setupDatabase() {
       }));
       console.log('Public record is off (set MW_PUBLIC_READ=on to publish ancestors).');
     }
+
+    /* SAID AT BOOT, because removing somebody fails SHUT without it. A keeper
+       who mislays this variable would otherwise find out from a relative who
+       could not delete a duplicate, which is a bad way to learn it. The value
+       is never printed, only whether there is one. See db/passcode.js. */
+    console.log(deletePasscode.set()
+      ? 'Removing somebody for good asks for MW_DELETE_PASSCODE.'
+      : 'No MW_DELETE_PASSCODE set — nobody can be removed from a tree for ' +
+        'good. Everything else, including Set aside, still works.');
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS kv_store (
