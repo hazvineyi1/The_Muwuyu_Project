@@ -1139,6 +1139,7 @@ body.carrying .pod{transition:none;}
   text-transform:uppercase; color:var(--gold); white-space:nowrap;
 }
 #form .dupe[disabled]{opacity:.6; cursor:default; border-style:dashed;}
+#form .dupe u small.nolink{color:var(--muted); font-style:italic;}
 /* An offer to MOVE somebody, which is not the same as an offer to join them
    on and must not look like one. Solid edge, because it is live; and the
    line naming the household they would leave is the one thing that has to be
@@ -1524,6 +1525,9 @@ body.carrying .pod{transition:none;}
   text-decoration:underline; text-underline-offset:2px;
 }
 #seed p{color:var(--muted); font-size:var(--t-name); line-height:1.6; margin:0 auto 24px; max-width:34ch;}
+/* The rule, under the invitation that breaks it once. Quieter than the
+   line above it — it is not what to do now, it is what happens next. */
+#seed p.seedrule{font-size:var(--t-read); margin-bottom:24px; opacity:.85;}
 #seed .box{
   padding:16px; border-radius:26px 8px 26px 8px;
   background:var(--pod); border:1.5px solid var(--pod-edge); box-shadow:var(--lift);
@@ -1790,12 +1794,25 @@ body.carrying .pod{transition:none;}
      tree, because it has not said who is looking or because the read failed,
      went on showing it. Somebody following a link to a family of two hundred
      was met with a box to type a name into and a button that says plant. -->
+<!-- THE ONE NAME THAT IS NOT JOINED TO ANYBODY.
+
+     Everywhere else in the app a person starts from a person already here:
+     a newcomer finds the relative they know before they write their own
+     name, and a brand new person is added from somebody's card. This screen
+     is the single exception, and it exists only because an empty family has
+     nobody to start from. It says so, so that the rule is learned here
+     rather than contradicted here — and it is never shown again once this
+     family has one name in it. -->
 <div id="seed" hidden>
   <h1>The <em>Muwuyu</em> Project</h1>
-  <p>A baobab is mostly roots. Plant one person — anyone at all — and grow the family outward from them.</p>
+  <p>A baobab is mostly roots. This family has nobody in it yet, so one name has
+     to go in on its own — anyone at all.</p>
+  <p class="seedrule">Only this one. Everybody after them starts from somebody
+     already here: you open a name that is in the tree and grow the next one
+     from it, so no name is ever left floating.</p>
   <div class="box">
     <input id="seedName" class="fld" placeholder="A name to start with" autocomplete="off">
-    <button class="btn" id="seedGo">Plant the first person</button>
+    <button class="btn" id="seedGo">Start the family with this name</button>
   </div>
   <p id="seedFamily" hidden>
     <button type="button" id="seedFamilyGo">Get this family's link</button>
@@ -5089,6 +5106,14 @@ const MOVE = 'move';
 
 function canLink(kind, anchorId, otherId){
   if (anchorId === otherId) return 'that is the same person';
+  /* A HUSBAND IS NOT A SON. Somebody already married to this person was
+     offered as their child, their parent and their brother: each of those
+     checks looked at parents and at ancestry, and none of them looked
+     sideways at the marriage sitting right there. Harmless-looking until you
+     see where it lands — in a small family the spouse is often the only name
+     left on the list, which makes it the one that gets tapped. */
+  if (kind !== 'partner' && partnersOf(anchorId).includes(otherId))
+    return 'they are married to each other';
   const up = ancestry(anchorId).up, down = ancestry(otherId).up;
   if (kind === 'parent'){
     if (down.has(anchorId)) return 'that would make them their own ancestor';
@@ -5113,15 +5138,25 @@ function canLink(kind, anchorId, otherId){
    * and that is a sentence the family can be shown and asked about, rather
    * than a door with no handle. Returning the reason MOVE says so; the list
    * turns it into an offer and names the household they would leave. */
+  /* ALREADY THERE IS NOT A MOVE. Somebody who is already this person's child
+     was being offered as "move them here" — an act that would take them out
+     of a household and put them back into the same one. It read as a live
+     offer and did nothing, and it did it in the list of people to start
+     from, which is the first thing the form now shows. The test is the union
+     linkExisting would actually use, not merely "has parents": a child of a
+     first marriage really can be moved to a second. */
   if (kind === 'child'){
     if (up.has(otherId)) return 'that would make them their own descendant';
     const pu = parentUnionOf(otherId);
+    const into = unionsOf(anchorId)[0];
+    if (pu && into && pu.id === into.id) return 'already recorded as a child here';
     if (pu) return MOVE;
   }
   if (kind === 'sibling'){
     const pu = parentUnionOf(otherId);
     const mine = parentUnionOf(anchorId);
     if (up.has(otherId) || down.has(anchorId)) return 'they are already an ancestor or descendant here';
+    if (pu && mine && pu.id === mine.id) return 'already a brother or sister here';
     if (pu && mine && pu.id !== mine.id) return MOVE;
   }
   if (kind === 'partner'){
@@ -11699,6 +11734,19 @@ function openForm(kind, anchorId, said){
        nobody is left wondering whether they have just made a loose name. */
     `<p class="covnote">Recorded as ${esc(LABEL[kind])} <b>${esc(anchor.name)}</b>. ` +
     `Every name in the tree branches from somebody.</p>` +
+    /* START FROM SOMEBODY ALREADY HERE — the first thing asked, not a
+       footnote under the name box.
+       A newcomer joining themselves is now made to find their relative
+       before they write their own name, and a brand new person added by
+       somebody else is the same act seen from the other side: the family
+       already in the tree is what you build from. Asked in this order it is
+       a choice between people, and a new record is what you fall through to
+       when none of them is the one — which is also the only order in which
+       the answer to "is grandfather already in here?" arrives BEFORE a
+       second grandfather has been typed out. */
+    `<p class="lbl">1 · Already in this tree?</p>` +
+    `<div class="dupes" id="fDupes"></div>` +
+    `<p class="lbl">2 · Nobody above — a new name</p>` +
     `<input id="fName" class="fld" placeholder="Their name" autocomplete="off">` +
     `<p class="roothint" id="fNameWhy"></p>` +
     `<div class="seg" id="fSex">` +
@@ -11756,13 +11804,16 @@ function openForm(kind, anchorId, said){
     if (e.key === 'Escape'){ e.preventDefault(); closeForm(); }
   });
 
-  // Watch the name as it is typed and offer anyone already in the tree who
-  // might be the same person, so two branches meeting in the middle join up
-  // instead of each keeping their own copy of a grandfather.
-  const box = document.createElement('div');
-  box.className = 'dupes';
-  // Below the hint, not between it and the field it explains.
-  ($('fNameWhy') || $('fName')).insertAdjacentElement('afterend', box);
+  /* Watch the name as it is typed and offer anyone already in the tree who
+     might be the same person, so two branches meeting in the middle join up
+     instead of each keeping their own copy of a grandfather.
+
+     The box is in the markup above the name field now rather than being
+     spliced in under it, because step 1 has to be on screen before anything
+     is typed. The name field doubles as its finder — the list narrows as the
+     name is written — so one field serves both steps and nobody is asked to
+     type the same name twice. */
+  const box = $('fDupes');
   const nameEl = $('fName');
   const nameWhy = $('fNameWhy');
   const tellName = () => {
@@ -11782,13 +11833,39 @@ function openForm(kind, anchorId, said){
     const typed = nameEl.value.trim().length >= 3;
     const matches = typed ? matchesForName(nameEl.value, anchorId)
                           : linkCandidates(kind, anchorId);
-    const heading = typed ? '' :
-      `<p class="browse">Or join someone already in this tree —
-        ${esc(KIND_AS[kind] || 'related')} to ${esc((state.people[anchorId].name || '').split(' ')[0])}.
-        No second record, no duplicate.</p>`;
-    box.innerHTML = heading + matches.map(({ id, m }) => {
+    /* THE STEP SPEAKS IN ALL FOUR CASES. It used to say nothing at all once
+       three letters had been typed, and nothing at all when there was
+       nobody to offer — so the leading question fell silent exactly when it
+       was being answered. An empty list is an answer too: it says this one
+       really is new, and says it before the name is finished. */
+    const first = esc((state.people[anchorId].name || '').split(' ')[0]);
+    const as = esc(KIND_AS[kind] || 'related');
+    /* Worked out once, here, because the heading has to know it too: a list
+       of names that all turn out to be unusable is a different answer from a
+       list you can pick from, and saying the same sentence over both is how
+       "use one of these" ends up printed above four greyed-out rows. */
+    const rows = matches.map(({ id }) => ({ id, why: canLink(kind, anchorId, id) }));
+    const live = rows.filter(r => !r.why || r.why === MOVE).length;
+    const heading = !rows.length
+      ? (typed
+          ? `<p class="browse">Nobody of that name is here yet, so this is a
+              new person — joined on to ${first} below.</p>`
+          : `<p class="browse">Nobody already in this tree can be ${as} to
+              ${first}, so this one is new. They will still branch from
+              ${first}.</p>`)
+      : live
+        ? (typed
+            ? `<p class="browse">Already here, and near enough to be the same
+                person. If one of these is who you mean, use them — ${as} to
+                ${first}, one record and no second copy.</p>`
+            : `<p class="browse">Start from somebody already here. Any of these
+                can be joined on as ${as} to ${first} — no second record, no
+                duplicate. Type below to look through the rest of the family.</p>`)
+        : `<p class="browse">Somebody of that name is already in the tree, but
+            cannot be ${as} to ${first} — the reason is under each name. If
+            yours is a different person who shares the name, carry on below.</p>`;
+    box.innerHTML = heading + rows.map(({ id, why }) => {
       const q = state.people[id];
-      const why = canLink(kind, anchorId, id);
       const move = why === MOVE;
       const blocked = move ? null : why;
       const life = q.born ? `b. ${esc(q.born)} · ` : '';
@@ -11816,6 +11893,11 @@ function openForm(kind, anchorId, said){
         `<u>${esc(q.name)}<small>${life}${esc(positionOf(id))}${tag}</small>` +
         (house ? `<small class="onehouse">both ${esc(house.name)} — one house</small>` : '') +
         (move ? `<small class="leaves">now recorded under ${esc(from)}</small>` : '') +
+        /* WHY NOT, WRITTEN DOWN. It was in the title attribute, which is a
+           tooltip — a thing that does not exist on the phone most of this
+           family uses. A greyed row with no reason beside it is the app
+           knowing the answer and not saying it. */
+        (blocked ? `<small class="nolink">${esc(blocked)}</small>` : '') +
         `</u><em>${blocked ? 'can’t link' : move ? 'move them here' : 'use this one'}</em></button>`;
     }).join('');
     box.querySelectorAll('.dupe:not([disabled])').forEach(btn => btn.onclick = () => {
@@ -11853,6 +11935,12 @@ function openForm(kind, anchorId, said){
      somebody already here is only ever made to people who started typing,
      which is exactly the door that was missing. */
   suggest();
+  /* AND PLACED AGAIN, because it has just grown. placeForm centres the panel
+     on its anchor using the height it had when it was appended — which, now
+     that the list of people already here leads the form, is a fraction of
+     the height it ends up with. Placed only once, the top of a full form sat
+     above the top of the screen and the first line could not be read. */
+  placeForm(el);
 
   $('fName').focus();
 }
@@ -11892,7 +11980,7 @@ function submitForm(){
     if (box && !document.querySelector('#form .warn')){
       box.insertAdjacentHTML('beforebegin',
         `<p class="warn"><b>${esc(q.name)}</b> is already in the tree — ${esc(positionOf(near[0].id))}. ` +
-        `If that is the same person, use them above. If not, press Grow again: ` +
+        `If that is the same person, use them below. If not, press Grow again: ` +
         `two people in one family can share a name.</p>`);
       submitForm.confirmed = true;
       return;
