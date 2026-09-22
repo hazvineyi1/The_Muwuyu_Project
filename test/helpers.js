@@ -151,6 +151,11 @@ function loadFrontend(){
       sharedNow(){ store = 'shared'; },
       // The grow form as it is built, so a suite can read what it offers.
       formHtml(kind, anchorId, said){ openForm(kind, anchorId, said); return formInk; },
+      /* And the card, the same way — captured off the element the page
+         builds, because the stubbed document keeps nothing. */
+      // And the card, the same way.
+      cardHtml(id){ openCard(id); return cardInk; },
+      cardOpenSet(){ return cardOpen; },
       treeSvg(){ draw(); return treeSvg(); },
       // The standing notices on the bar, as the page assembles them.
       barNotices(){ const out = []; const el = { hidden:false,

@@ -1068,6 +1068,34 @@ body.carrying .pod{transition:none;}
    answer is "because this is correct, and here is the rule", and a card that
    opened with a paragraph of layout reasoning would be answering a question
    most people are not asking. One line, and the reason behind it. */
+/* ── THE PARTS OF A CARD THAT ARE FOLDED AWAY ────────────────────────────
+   Not hidden: a summary that reads as a row you can press, in the ink of the
+   card rather than the gold of a link, so it sits with the sections above it
+   instead of competing with them. The mark on the right is the one thing
+   inside worth knowing without opening it. */
+#form .cardfold{
+  margin:10px 0 0; border-top:1.5px solid var(--pod-edge);
+}
+#form .cardfold>summary{
+  list-style:none; cursor:pointer; padding:9px 2px 8px;
+  display:flex; align-items:center; gap:8px;
+  font-family:'Karla',sans-serif; font-size:11.5px; font-weight:700;
+  letter-spacing:.02em; color:var(--ink);
+}
+#form .cardfold>summary::-webkit-details-marker{display:none;}
+#form .cardfold>summary::marker{content:'';}
+#form .cardfold>summary::before{
+  content:'\203A'; display:inline-block; width:10px; color:var(--gold);
+  font-size:15px; line-height:1; transform:rotate(0deg); transition:transform .15s;
+}
+#form .cardfold[open]>summary::before{transform:rotate(90deg);}
+#form .cardfold>summary:hover{color:var(--gold);}
+#form .cardfold>summary i{
+  margin-left:auto; font-style:normal; font-size:10px; font-weight:700;
+  letter-spacing:.06em; text-transform:uppercase; color:var(--gold);
+}
+#form .cardfold .foldin{padding-top:2px;}
+#form .cardfold .foldin>*:last-child{margin-bottom:0;}
 #form .whyfold{margin:-2px 0 10px;}
 #form .whyfold>summary{
   list-style:none; cursor:pointer; padding:6px 2px;
@@ -1243,6 +1271,12 @@ body.carrying .pod{transition:none;}
   background:var(--gold); border:1.5px solid var(--gold); color:var(--pod);
 }
 .btn.ghost{background:transparent; color:var(--muted); border-color:var(--pod-edge); flex:0 0 76px;}
+/* AND A WIDE ONE IS STILL WIDE. .btn.wide asks for the full width and comes
+   earlier in this file, so the flex-basis above quietly won and every ghost
+   button marked wide that happened to sit inside a row was pinned to 76px —
+   which is a three-line box around a four-word label. It has looked like that
+   on the card since the row was added. */
+.btn.ghost.wide{flex:none; width:100%;}
 .btn:hover{background:var(--gold-soft); border-color:var(--gold-soft);}
 .btn.ghost:hover{background:transparent; color:var(--ink); border-color:var(--muted);}
 
@@ -8077,10 +8111,10 @@ function parentageBlock(id){
            `title="Take this link out. Nobody is removed from the tree.">` +
            `Nobody yet</button>` : '') +
     `</div>` +
-    `<p class="roothint">A brother or sister by a different mother or father is ` +
-    `still your brother or sister — the tree says so either way. This is about ` +
-    `whose child they are, which is a different question and one worth getting ` +
-    `right.</p>`;
+    cardNote(
+      `Whose child they are, which is a different question from who their brothers and sisters are.`,
+      'Why does this matter?',
+      `A brother or sister by a different mother or father is still your brother or sister — the tree says so either way. This is about whose child they are, which is a different question and one worth getting right.`);
 }
 
 /* THE MARRIAGES THIS PERSON IS RECORDED IN, and the way out of one.
@@ -8151,11 +8185,15 @@ function marriageBlock(id){
           `Not joined at all</button>` +
       `</div>`;
     }).join('') + `</div>` +
-    `<p class="roothint">Only the join goes. Everybody keeps their name, ` +
-    `their years and their own children — and Undo puts it back. ` +
-    `<b>Together</b> is for a couple with children who did not marry; ` +
-    `<b>Parted</b> is for a marriage that ended. Somebody who has died keeps ` +
-    `whichever they were — the year they died says the rest.</p>`;
+    cardNote(
+      `Only the join goes — everybody keeps their name, their years and their ` +
+      `own children, and Undo puts it back.`,
+      'What do Together and Parted mean?',
+      `<b>Together</b> is for a couple with children who did not marry. ` +
+      `<b>Parted</b> is for a marriage that ended — divorce and separation are ` +
+      `one answer here, because most families do not draw the line the courts ` +
+      `draw. Somebody who has died keeps whichever they were; the year they ` +
+      `died says the rest, and this card reads it off their own record.`);
 }
 
 /* Whether this person is in the public record.
@@ -10071,18 +10109,84 @@ function kinOnCard(id){
 
 /* The card behind a person: the details that aren't worth room on the pod,
    the switch that marks the end of a line, and what they are to you. */
+/* ── WHICH PARTS OF A CARD ARE OPEN ──────────────────────────────────────
+ *
+ * Kept on the device and never sent: which sections of the card somebody
+ * left open is a habit, not a fact about the family. Held for the session
+ * rather than written down, because it is the smallest possible preference
+ * and the right default on a new day is closed. */
+const cardOpen = new Set();
+/* The card of the last draw. See formInk. */
+let cardInk = '';
+/* Where the card that just closed had been scrolled to. See closeForm. */
+let cardScroll = null;
+
+/* The card behind a person: what they are to you, what is known about them,
+   how they are joined, and the rarer switches out of the way.
+
+   WHY IT IS IN SECTIONS NOW.
+
+   "Do not make this hard for people to use, make it easy for them to
+    understand how to add." — and then, plainly: "fix the card."
+
+   It was fourteen blocks in one scroll. The kinship word, a paragraph about
+   the kinship word, a button, a fold about the drawing, the name, the other
+   name, a note about teknonyms, She/He, born and died, the mutupo, the end
+   of the line, a note about houses, whose child, who they are joined to, the
+   public record, this-is-me, show-only-this-branch, set aside, delete, save.
+   Every one of them earns its place on somebody's screen one day a year, and
+   all of them were on everybody's screen every time.
+
+   THREE THINGS ARE OPEN, and they are the three reasons a card gets opened:
+   what this person is to you, what is known about them, and how they are
+   joined — the last of which is the one the family asked to be able to put
+   right by tapping a name. The rest is two folds, one tap away, and it
+   remembers which fold you left open.
+
+   NOTHING WAS REMOVED. Every control that was on this card is still on it. */
+/* A NOTE SOMEBODY READS ONCE.
+ *
+ * "Fix the card."
+ *
+ * Measured on a real card, the explanations came to 268 pixels — more than a
+ * fifth of it, and every one of them worth reading exactly once. The line
+ * that says what a control does stays where it is; the paragraph that says
+ * why it works that way goes one tap away, under a summary that says what is
+ * in it. Nothing is lost and the card is a card again. */
+function cardNote(line, label, more){
+  return `<p class="roothint">${line}</p>` +
+    (more ? `<details class="whyfold"><summary>${esc(label)}</summary>` +
+            `<p class="roothint">${more}</p></details>` : '');
+}
+
+function cardFold(key, title, body, mark){
+  if (!body) return '';
+  return `<details class="cardfold" data-fold="${esc(key)}"` +
+    `${cardOpen.has(key) ? ' open' : ''}>` +
+    `<summary>${esc(title)}${mark ? `<i>${esc(mark)}</i>` : ''}</summary>` +
+    `<div class="foldin">${body}</div></details>`;
+}
+
 function openCard(id){
   closeForm();
+  const keepAt = (cardScroll && cardScroll.id === id) ? cardScroll.at : 0;
+  cardScroll = null;
   const p = state.people[id];
   if (!p) return;
   pending = { kind:'card', anchorId:id };
   const rel = meId && meId !== id ? relationship(meId, id) : null;
+  const first = esc((p.name || '').split(' ')[0]);
 
   const el = document.createElement('div');
   el.id = 'form';
-  el.innerHTML =
+  /* Kept so a test can read the card the page actually builds rather than a
+     second copy of the code that builds it — the same reason formInk exists
+     for the grow form. The page has no use for it. */
+  cardInk =
     `<p class="cap">${esc(p.name)}` +
       `${p.also ? ` <i class="alsocap">${esc(p.also)}</i>` : ''}</p>` +
+
+    // ── 1. what they are to you ───────────────────────────────────────────
     (rel ? `<p class="lbl">To you</p>` + kinOnCard(id) +
       /* WHEN THE WORD IS WRONG BECAUSE THE LINK IS WRONG.
        *
@@ -10096,15 +10200,15 @@ function openCard(id){
        * shape that should never have been reached, and make the mistake
        * harder to find afterwards rather than easier.
        *
-       * So the line says which of the two it is, and both doors are here:
-       * the word, in the box above; the links, below. */
-      `<p class="roothint">That word is worked out from how this tree is ` +
-      `joined up. If it is wrong, one of the joins is wrong — the word is ` +
-      `only ever the answer to them.</p>` +
-      `<div class="row"><button class="btn ghost wide" id="cJoin">` +
-      `Join ${esc((p.name || '').split(' ')[0])} to somebody</button></div>`
+       * So the line says which of the two it is; the word is in the box
+       * above, and the links are in their own section below, which is where
+       * somebody looking to correct a join would go anyway. */
+      `<p class="roothint">Worked out from the joins below. If the word is ` +
+      `wrong, one of them is.</p>`
       : '') +
-    whyOnCard(id) +
+
+    // ── 2. what is known about them ───────────────────────────────────────
+    `<p class="lbl">Who ${first} is</p>` +
     `<input id="cName" class="fld" value="${esc(p.name)}" placeholder="Name" autocomplete="off">` +
     /* THE OTHER NAME. One field, not a maiden/married pair — that pair decides
        which of the two is the real one, and different families answer that
@@ -10122,47 +10226,58 @@ function openCard(id){
       if (!t || (p.also || '').trim()) return '';
       const kid = (state.people[t.child] || {}).name || '';
       return `<p class="roothint">Since ${esc(kid.split(' ')[0])} was born, most ` +
-        `families would call ${esc((p.name || '').split(' ')[0])} <b>${esc(t.text)}</b>. ` +
+        `families would call ${first} <b>${esc(t.text)}</b>. ` +
         `<button type="button" class="linkbtn" id="cTek">Use that too</button></p>`;
     })() +
     `<div class="seg" id="cSex">` +
       `<button type="button" data-sex="f" aria-pressed="${p.sex === 'f'}">She</button>` +
       `<button type="button" data-sex="m" aria-pressed="${p.sex === 'm'}">He</button>` +
       `<button type="button" data-sex="" aria-pressed="${!p.sex}">—</button></div>` +
-    `<p class="lbl">Born · Died</p><div class="row">` +
-      `<input id="cBorn" class="fld" value="${esc(p.born || '')}" placeholder="Born" autocomplete="off">` +
-      `<input id="cDied" class="fld" value="${esc(p.died || '')}" placeholder="Died" autocomplete="off">` +
+    `<div class="row">` +
+      `<input id="cBorn" class="fld" value="${esc(p.born || '')}" placeholder="Year born" autocomplete="off">` +
+      `<input id="cDied" class="fld" value="${esc(p.died || '')}" placeholder="Year died" autocomplete="off">` +
     `</div>` +
     `<input id="cTotem" class="fld" value="${esc(p.totem || '')}" placeholder="Totem / mutupo" autocomplete="off">` +
-    `<button class="btn ghost wide${p.root ? ' on' : ''}" id="cRoot">` +
-      `${p.root ? '● ' : ''}Furthest we can trace</button>` +
-    `<p class="roothint">${p.root
-      ? 'Marked as the end of this line. Anyone who can go further can lift it ' +
-        'from the tree itself.'
-      : 'Mark this if nobody can go back past them — it tells the next person ' +
-        'the work ended here rather than leaving them to guess.'}</p>` +
+
+    // ── 3. how they are joined ────────────────────────────────────────────
+    `<p class="lbl">How ${first} is joined</p>` +
+    parentageBlock(id) +
+    marriageBlock(id) +
     (() => {
-      // Which house they are of — see houseName. Said on the child's card
-      // because that is where somebody is trying to tell two brothers apart.
+      // Which house they are of — see houseName. Said here because this is
+      // where somebody is trying to tell two brothers apart.
       const h = houseOf(id);
       return h ? `<p class="roothint">Of <b>${esc(h.text)}</b> — ` +
         `${esc((state.people[h.holder] || {}).name || '')} has more than one ` +
         `house, and these are the children of this one.</p>` : '';
     })() +
-    parentageBlock(id) +
-    marriageBlock(id) +
-    visibilityBlock(p) +
-    `<button class="btn ghost wide${meId === id ? ' on' : ''}" id="cMe">` +
-      `${meId === id ? '● This is you' : 'This is me'}</button>` +
-    `<button class="btn ghost wide${building && building.from === id ? ' on' : ''}" id="cBuild">` +
-      `${building && building.from === id
-        ? '\u25CF Showing only this branch'
-        : 'Show only this branch'}</button>` +
-    `<p class="roothint">${building && building.from === id
-      ? 'Everybody else is off the screen while you work. Nothing has been changed or removed, ' +
-        'and the whole family comes back when you close it.'
-      : 'Takes everybody else off the screen, so this branch can be grown without ' +
-        'the rest of the family in the way. It changes no records.'}</p>` +
+    `<div class="row"><button class="btn ghost wide" id="cJoin">` +
+      `Join ${first} to somebody already here</button></div>` +
+    whyOnCard(id) +
+
+    // ── 4. the rarer switches, out of the way ─────────────────────────────
+    cardFold('more', `More about ${(p.name || '').split(' ')[0]}`,
+      `<button class="btn ghost wide${p.root ? ' on' : ''}" id="cRoot">` +
+        `${p.root ? '● ' : ''}Furthest we can trace</button>` +
+      `<p class="roothint">${p.root
+        ? 'Marked as the end of this line. Anyone who can go further can lift it ' +
+          'from the tree itself.'
+        : 'Mark this if nobody can go back past them — it tells the next person ' +
+          'the work ended here rather than leaving them to guess.'}</p>` +
+      visibilityBlock(p) +
+      `<button class="btn ghost wide${meId === id ? ' on' : ''}" id="cMe">` +
+        `${meId === id ? '● This is you' : 'This is me'}</button>` +
+      `<button class="btn ghost wide${building && building.from === id ? ' on' : ''}" id="cBuild">` +
+        `${building && building.from === id
+          ? '\u25CF Showing only this branch'
+          : 'Show only this branch'}</button>` +
+      `<p class="roothint">${building && building.from === id
+        ? 'Everybody else is off the screen while you work. Nothing has been changed or removed, ' +
+          'and the whole family comes back when you close it.'
+        : 'Takes everybody else off the screen, so this branch can be grown without ' +
+          'the rest of the family in the way. It changes no records.'}</p>`,
+      p.root ? 'end of the line' : (p.vis ? 'set by hand' : '')) +
+
     /* TAKING THEM OUT, on the card, where somebody looking at a wrong entry
        already is. It was only ever in the Set aside panel, which you cannot
        reach until you have already set somebody aside from the tree — so
@@ -10170,23 +10285,52 @@ function openCard(id){
        and the answer to "why can I not delete an entry" was that you can,
        somewhere else.
 
+       BEHIND A FOLD NOW, and that is not hiding it: it is the one thing on
+       this card nobody opens it to do, and it was sitting between the family's
+       records and the Save button.
+
        BOTH DOORS, because they are different acts. Set aside is reversible
        and is what nearly every doubt deserves. Delete for good is not, and
-       still makes you type the name — that has not been softened, only
-       moved to where it is needed. */
-    `<p class="lbl">Take them out</p>` +
-    `<div class="row">` +
-      `<button class="btn ghost" id="cAside">Set aside</button>` +
-      `<button class="btn ghost danger" id="cGone">Delete for good</button>` +
-    `</div>` +
-    `<p class="roothint">Set aside takes them out of the picture and keeps ` +
-    `every record — Set aside in the toolbar puts them back. Delete for good ` +
-    `goes at once; the bar offers to put them back for a few seconds, and ` +
-    `after that it cannot be undone.</p>` +
+       still makes you type the name — that has not been softened. */
+    cardFold('out', `Take ${(p.name || '').split(' ')[0]} out`,
+      `<div class="row">` +
+        `<button class="btn ghost" id="cAside">Set aside</button>` +
+        `<button class="btn ghost danger" id="cGone">Delete for good</button>` +
+      `</div>` +
+      `<p class="roothint">Set aside takes them out of the picture and keeps ` +
+      `every record — Set aside in the toolbar puts them back. Delete for good ` +
+      `goes at once; the bar offers to put them back for a few seconds, and ` +
+      `after that it cannot be undone.</p>`) +
+
     `<div class="row"><button class="btn" id="cSave">Save</button>` +
     `<button class="btn ghost" id="cNo">Close</button></div>`;
+  el.innerHTML = cardInk;
   document.body.appendChild(el);
   placeForm(el);
+  /* WHERE THEY WERE READING. The card rebuilds itself whenever something on
+     it changes the tree — saying two people parted, teaching a word — and
+     without this every one of those threw whoever did it back to the top of
+     a card they were halfway down.
+
+     TWICE, AND THE SECOND TIME IS THE ONE THAT WORKS. A card with a section
+     folded open is not its full height at the moment it is appended, so a
+     scroll set here is clamped to a height the card does not have yet and
+     lands at the top — which is the very thing this is for. The first set
+     covers the ordinary case without a frame of flicker; the second lands
+     once the folds have laid out. */
+  if (keepAt){
+    el.scrollTop = keepAt;
+    if (typeof requestAnimationFrame === 'function'){
+      requestAnimationFrame(() => { if (el.isConnected) el.scrollTop = keepAt; });
+    }
+  }
+
+  /* AND WHICH SECTIONS THEY LEFT OPEN, for as long as this session lasts.
+     Somebody putting the public record right on six people should not open
+     the same fold six times. */
+  el.querySelectorAll('.cardfold').forEach(d => d.addEventListener('toggle', () => {
+    if (d.open) cardOpen.add(d.dataset.fold); else cardOpen.delete(d.dataset.fold);
+  }));
 
   el.querySelectorAll('.seg').forEach(seg => seg.querySelectorAll('button').forEach(btn =>
     btn.onclick = () => seg.querySelectorAll('button')
@@ -10959,6 +11103,15 @@ let suggestTimer = null;
 function closeForm(){
   clearTimeout(suggestTimer);
   const f = $('form');
+  /* WHERE THEY HAD SCROLLED TO, remembered on the way out rather than read on
+     the way in. A card rebuilds itself whenever something on it changes the
+     tree, and the rebuild does not always come straight after the close —
+     render() can take the panel away first. Reading it here catches every
+     route, and it is one number about one card, thrown away when a different
+     card is opened. */
+  if (f && pending && pending.kind === 'card' && pending.anchorId){
+    cardScroll = { id: pending.anchorId, at: f.scrollTop || 0 };
+  }
   if (f) f.remove();
   pending = null;
   submitForm.confirmed = false;
