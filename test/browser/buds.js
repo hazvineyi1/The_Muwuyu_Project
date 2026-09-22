@@ -1,7 +1,7 @@
 // The buds around a selected person, and whether they land in order.
 //
 // "These don't show up in a very orderly manner, they need to be more
-//  orderly."
+//  orderly." — and then: "make it one plain aligned list."
 //
 // They did not, and the reason was that every bud found its own place. Each
 // was given a list of preferred angles and walked a ring around the pod at
@@ -9,6 +9,12 @@
 // and distances and no two edges lined up. A bud that found no gap swept the
 // whole screen for the nearest free spot, which is how Child ended up under
 // its own person and Sibling ended up beside somebody else's.
+//
+// What replaced it first was a compass — Child above the pod, Parent below,
+// the rest in columns either side. Defensible, and three layouts in one
+// function, because a compass has to become something else beside a crowded
+// person and something else again at the edge of the canvas. A list is one
+// layout everywhere, and that is what this file now holds it to.
 //
 // It has to be a browser test. What is being asserted is where things
 // actually came out — a column is only aligned if the widths the browser gave
@@ -83,12 +89,6 @@ const FAMILY = JSON.stringify({
                t:Math.round(r.top), b:Math.round(r.bottom) };
     }));
   };
-  const podOf = who => page.$eval(`.pod[data-id="${who}"]`, e => {
-    const r = e.getBoundingClientRect();
-    return { l:r.left, r:r.right, t:r.top, b:r.bottom };
-  });
-  const rowsOf = buds => [...new Set(buds.map(b => b.t))].sort((a, b) => a - b);
-  const colsOf = buds => [...new Set(buds.map(b => b.l))].sort((a, b) => a - b);
   const overlapping = buds => {
     const out = [];
     for (let i = 0; i < buds.length; i++) for (let j = i + 1; j < buds.length; j++){
@@ -98,33 +98,27 @@ const FAMILY = JSON.stringify({
     return out;
   };
 
+  const isList = (buds, where) => {
+    is(new Set(buds.map(b => b.l)).size, 1, where + ': they share a left edge');
+    is(new Set(buds.map(b => b.r)).size, 1, 'and a right edge, so both are straight');
+    const ys = buds.map(b => b.t).sort((a, b) => a - b);
+    const steps = ys.slice(1).map((y, i) => y - ys[i]);
+    is(new Set(steps).size, 1, 'and one spacing all the way down: ' + steps.join(', '));
+    // The same spacing as every other list, not merely even within itself.
+    is(steps.every(d => d === 42), true, 'the pitch every list uses: ' + steps.join(', '));
+    is(overlapping(buds), [], 'no bud sits on another');
+    is(buds.every(b => b.l >= 0 && b.r <= 1280 && b.t >= 0 && b.b <= 900), true,
+       'and none of them is off the screen');
+  };
+
   // ── the crowded middle ────────────────────────────────────────────────
   section('BESIDE SOMEBODY WITH A HUSBAND ON ONE SIDE AND A BROTHER ON THE OTHER');
+  /* The case the ring could do nothing tidy with: the pods to the left and
+     right of somebody ARE their brother and their husband. */
   {
     const buds = await budsOn('p3');
     is(buds.length >= 5, true, `${buds.length} buds offered`);
-    is(overlapping(buds), [], 'no bud sits on another');
-
-    /* THE LINES THEY STAND ON. Every bud shares a top edge with the others on
-       its line — not nearly, exactly. Nine pixels out is the kind of
-       almost-straight that reads as careless. */
-    const rows = rowsOf(buds);
-    is(rows.length <= 2, true, 'they stand on at most two lines: ' + rows.join(', '));
-    for (const y of rows){
-      const line = buds.filter(b => b.t === y);
-      is(new Set(line.map(b => b.b)).size, 1,
-         `the ${line.length} on line ${y} share a bottom edge too`);
-    }
-
-    /* AND THE EDGES THEY LINE UP ON. Three columns, each one as wide as its
-       widest bud, so both of a column's vertical edges are straight. */
-    const cols = colsOf(buds);
-    is(cols.length <= 3, true, 'in at most three columns: ' + cols.join(', '));
-    for (const x of cols){
-      const col = buds.filter(b => b.l === x);
-      is(new Set(col.map(b => b.r)).size, 1,
-         `the ${col.length} in column ${x} share a right edge`);
-    }
+    isList(buds, 'one column');
   }
 
   section('and none of them covers a person');
@@ -139,35 +133,34 @@ const FAMILY = JSON.stringify({
     is(covered, [], 'nobody is under a bud');
   }
 
-  section('the middle of the grid stands on the same lines as the sides');
-  {
-    const buds = await budsOn('p4');           // he has no parents recorded
-    const by = Object.fromEntries(buds.map(b => [b.kind, b]));
-    is(!!by.parent, true, 'a Parent bud is offered, since nobody is above him');
-    is(by.child.t, by.sibling.t, 'Child is level with Sibling');
-    is(by.parent.t, by.join.t, 'and Parent with the door below it');
-    const pod = await podOf('p4');
-    const mid = b => Math.round((b.l + b.r) / 2), cx = Math.round((pod.l + pod.r) / 2);
-    is(Math.abs(mid(by.child) - cx) <= 1, true, 'Child is centred on the pod');
-    is(Math.abs(mid(by.parent) - cx) <= 1, true, 'and so is Parent');
-  }
-
-  section('AND AT THE EDGE OF THE CANVAS THEY BECOME ONE COLUMN');
-  /* There is no room on one side of somebody at the edge, and the tidy answer
-     is not to cram a column into it. All four go in a single aligned column
-     on the side that has the room — and the old code's answer, half a column
-     off the screen altogether, is the one thing that must never happen. */
+  section('AND AT THE EDGE OF THE CANVAS IT IS THE SAME LIST');
+  /* There is only one side to be on beside somebody at the edge, and the
+     person next to them is on it — so the list steps past them rather than
+     sitting on their name. Same list, same width, further out. */
   {
     const buds = await budsOn('p7');
-    is(buds.every(b => b.l >= 0 && b.r <= 1280), true,
-       'not one of them is off the screen: ' + JSON.stringify(buds.map(b => [b.l, b.r])));
-    is(overlapping(buds), [], 'and none sits on another');
-    const sides = buds.filter(b => b.kind !== 'child' && b.kind !== 'parent');
-    is(new Set(sides.map(b => b.l)).size, 1, 'the four of them share a left edge');
-    is(new Set(sides.map(b => b.r)).size, 1, 'and a right edge');
-    const ys = sides.map(b => b.t).sort((a, b) => a - b);
-    const steps = ys.slice(1).map((y, i) => y - ys[i]);
-    is(new Set(steps).size, 1, 'evenly spaced: ' + steps.join(', '));
+    isList(buds, 'still one column');
+    const pods = await page.$$eval('.pod', els => els.map(e => {
+      const r = e.getBoundingClientRect();
+      return { l:r.left, r:r.right, t:r.top, b:r.bottom };
+    }));
+    is(buds.filter(b => pods.some(q =>
+      b.l < q.r && q.l < b.r && b.t < q.b && q.t < b.b)).length, 0,
+      'and it clears the person beside them');
+  }
+
+  section('IT READS DOWN THE TREE, AND THE MARKUP AGREES WITH THE PICTURE');
+  /* The word first, then Parent, Sibling, Partner, Child — the way the
+     picture behind it runs — and the door that adds nobody last. The order in
+     the markup is the order on screen, so tabbing through them goes the way
+     the eye does. */
+  {
+    const buds = await budsOn('p4');           // he has no parents recorded
+    is(buds.map(b => b.kind),
+       ['ways', 'parent', 'sibling', 'partner', 'child', 'join'],
+       'the order in the markup');
+    const byTop = [...buds].sort((a, b) => a.t - b.t).map(b => b.kind);
+    is(byTop, buds.map(b => b.kind), 'and the same order down the screen');
   }
 
   section('and the same person tapped twice gets the same picture twice');

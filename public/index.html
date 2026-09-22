@@ -1699,6 +1699,13 @@ body.carrying .pod{transition:none;}
 }
 #form .askrow .mini:hover{border-color:var(--gold); color:var(--gold);}
 #form .askrow .mini:disabled{opacity:.5; cursor:default;}
+/* A REFUSED OFFER HAS TO LOOK REFUSED. The reason is written under the name
+   either way, but a button that is the same weight as the live one beside it
+   is a button somebody taps twice and then wonders about. Everywhere a mini
+   button can be disabled, not only in the rows that had it first. */
+#form .mini:disabled{opacity:.45; cursor:default;}
+#form .mini:disabled:hover{background:var(--pod-hi); border-color:var(--pod-edge);
+  color:var(--ink);}
 #bar .tally{
   padding:0 12px 0 10px; color:var(--muted); font-size:var(--t-read);
   border-left:1px solid var(--pod-edge); margin-left:4px;
@@ -1943,7 +1950,6 @@ let budSig = '';                    // which buds are currently on screen
    and kept for the pans that follow. The columns are aligned from these, so a
    guess is enough to lay out with and not enough to line up with. */
 let budSize = {};
-let budHeight = 30;                 // and how tall, which is the same for all
 let meId = null;                    // who is looking — this device only
 let pickingMe = false;
 
@@ -7706,8 +7712,24 @@ function placeBuds(){
    * ranks. A tidy arrangement slightly further from the pod reads as
    * deliberate; the same buds scattered do not. */
   const placed = [];
-  const PAD = 10, BAR = innerHeight - 70;     // stay on screen, clear of the toolbar
+  const PAD = 10, BAR = innerHeight - PAD;    // stay on screen
   const TOP = PAD + TOPBAR;                   // and out from under the banner
+
+  /* AND CLEAR OF THE PAGE'S OWN FURNITURE. The toolbar and the two status
+     lines sit over the canvas, and a bud underneath one of them cannot be
+     tapped at all — the bar takes the tap instead, which is the worst kind of
+     broken because the bud is right there and looks live.
+   *
+     This used to be a number: keep seventy pixels off the bottom. That was
+     enough while the buds huddled around the pod and stopped being enough the
+     moment they became a list long enough to reach down there. The elements
+     know where they are, so they are asked. */
+  const chrome = ['bar', 'litbar', 'others', 'stalled']
+    .map(k => $(k))
+    .filter(el => el && !el.hidden && typeof el.getBoundingClientRect === 'function')
+    .map(el => el.getBoundingClientRect())
+    .filter(r => r.width > 0 && r.height > 0)
+    .map(r => ({ l:r.left - 6, r:r.right + 6, t:r.top - 6, b:r.bottom + 6 }));
 
   const pu = parentUnionOf(id);
   const isRoot = !!(state.people[id] && state.people[id].root);
@@ -7740,12 +7762,18 @@ function placeBuds(){
         ? `Add somebody by the word your family uses for them — ${words.join(', ')} and the rest. ` +
           `The app works out where they go.`
         : 'Add somebody by the word your family uses for them, rather than by where they sit.' },
-    { kind:'child',   label:'Child',   icon:'↑' },
-    { kind:'sibling', label:'Sibling', icon:'↔' },
-    { kind:'partner', label:mates.length ? 'Another partner' : 'Partner', icon:'⚭' }
   ];
+  /* THE ORDER THEY ARE READ IN, which in a list is most of the design. The
+     word first, for the reason above; then the tree, top to bottom — Parent,
+     Sibling, Partner, Child — so the list runs the way the picture behind it
+     runs and nobody has to look twice for the one they want. The door that
+     adds nobody comes last. */
   if (canParent) out.push({ kind:'parent', icon:'↓',
     label:pu && pu.partners.length ? 'Other parent' : 'Parent' });
+  out.push(
+    { kind:'sibling', label:'Sibling', icon:'↔' },
+    { kind:'partner', label:mates.length ? 'Another partner' : 'Partner', icon:'⚭' },
+    { kind:'child',   label:'Child',   icon:'↑' });
 
   /* ── SOMEBODY ALREADY HERE ───────────────────────────────────────────────
    *
@@ -7780,142 +7808,102 @@ function placeBuds(){
   const guess = o => 30 + 12 + String(o.label).length * 7.2;
   for (const o of out) if (!(budSize[o.kind] > 0)) budSize[o.kind] = guess(o);
   const W = o => budSize[o.kind] || guess(o);
-  // They are all one line of one size, so one height does for all of them —
-  // measured with the widths, estimated until then.
-  const BH = budHeight, GAP = 12;            // a bud's height, and between two
+  /* A FIXED PITCH DOWN THE LIST, and fixed on purpose. The widths have to be
+     measured — they are whatever the words come out as — but the height is
+     one line of one size, set by the stylesheet, the same for every bud.
+     Measuring it bought nothing and cost consistency: the first list drawn
+     used the estimate and later ones used the measurement, so one person's
+     buds sat 42px apart and the next person's 40. A list that changes its own
+     spacing between one tap and the next is the thing this was meant to fix. */
+  const BH = 30, GAP = 12;                   // a bud's height, and between two
 
   const hits = (box, list) =>
     list.some(q => box.l < q.r && q.l < box.r && box.t < q.b && q.t < box.b);
   const onScreen = box =>
     box.l >= PAD && box.r <= innerWidth - PAD && box.t >= TOP && box.b <= BAR;
-  const fits = box => onScreen(box) && !hits(box, pods) && !hits(box, placed);
+  const fits = box =>
+    onScreen(box) && !hits(box, pods) && !hits(box, chrome) && !hits(box, placed);
   /* WHAT A PLACE COSTS. Off the screen is fatal and weighed as such — a bud
      nobody can reach is not an offer — while sitting over a name is merely
      untidy, since the bud is drawn above the tree and still takes the tap. */
   const cost = boxes => boxes.reduce((n, b) =>
-    n + (onScreen(b) ? 0 : 100) + (hits(b, pods) ? 1 : 0), 0);
+    n + (onScreen(b) ? 0 : 100) + (hits(b, chrome) ? 100 : 0) +
+        (hits(b, pods) ? 1 : 0), 0);
 
-  /* A column beside the pod: `dir` is -1 for the left of it and +1 for the
-     right. Every bud in it is given the width of the widest, so the two
-     vertical edges are straight. `lift` moves it off the pod's own line. */
-  const columnAt = (kinds, dir, lift) => {
-    const mine = kinds.map(k => out.find(o => o.kind === k)).filter(Boolean);
-    if (!mine.length) return [];
-    const wide = Math.max(...mine.map(W));
-    const tall = mine.length * BH + (mine.length - 1) * GAP;
-    const mid = cx + dir * (halfW + 20 + wide / 2);
-    const top = cy + lift - tall / 2 + BH / 2;
-    return mine.map((o, i) => {
-      const y = top + i * (BH + GAP);
-      return { o, wide, l:mid - wide / 2, r:mid + wide / 2,
-               t:y - BH / 2, b:y + BH / 2, x:mid, y };
-    });
-  };
+  /* ── ONE LIST, BESIDE THE PERSON ──────────────────────────────────────
+   *
+   * "Make it one plain aligned list."
+   *
+   * The arrangement before this was a compass — Child above the pod, Parent
+   * below, the rest in columns either side — and it was defensible: the tree
+   * has a direction and the buds pointed the way they meant. It was also
+   * three layouts in one function, because a compass has to become something
+   * else beside a crowded person and something else again at the edge of the
+   * canvas, and three layouts is three chances to look like none.
+   *
+   * So: every bud, one under the other, one width, one spacing, top to
+   * bottom, on whichever side of the person has room for it. The direction is
+   * still said — it is on the arrow and in the word, which is where somebody
+   * reads it anyway — and the picture is a list, which needs no explaining.
+   *
+   * WHICH SIDE, and it is decided rather than fixed: both are tried, and each
+   * is weighed by what it would cover. A list off the edge of the screen is
+   * the one outcome that is fatal — a bud nobody can reach is not an offer —
+   * so it is weighed a hundred times heavier than a list over somebody's
+   * name, which is merely untidy, since the bud is drawn above the tree and
+   * still takes the tap. */
+  const list = () => {
+    const wide = Math.max(...out.map(W));
+    const tall = out.length * BH + (out.length - 1) * GAP;
 
-  /* BOTH COLUMNS MOVE TOGETHER, and that is the whole of why this reads as
-     tidy rather than as two buds that wandered off.
-   *
-   * Beside a person, the canvas is at its most crowded exactly where these
-   * want to go: the pods to the left and right of somebody ARE their brothers
-   * and their husband. So a column that steps sideways to avoid a neighbour
-   * walks into the next one, and 260px later it is sitting beside a stranger.
-   * The room is above and below — the band between one generation and the
-   * next is empty by construction.
-   *
-   * So when the pair does not fit on the pod's own line, the pair lifts, by
-   * the same amount on both sides, and stays level. Asymmetry is what the eye
-   * reads as disorder; two columns a little higher than expected is not. */
-  let budRows = [];
-  const columns = () => {
+    const at = (dir, lift, push) => {
+      const mid = cx + dir * (halfW + 20 + push + wide / 2);
+      /* Centred on the person, then held on the screen. A list taller than
+         the room it has is pinned to the top rather than hanging off it: the
+         first thing anybody reads has to be there. */
+      let first = cy + lift - tall / 2 + BH / 2;
+      const low = TOP + BH / 2, high = BAR - tall + BH / 2;
+      first = high >= low ? Math.min(Math.max(first, low), high) : low;
+      return out.map((o, i) => {
+        const y = first + i * (BH + GAP);
+        return { o, l:mid - wide / 2, r:mid + wide / 2,
+                 t:y - BH / 2, b:y + BH / 2, x:mid, y };
+      });
+    };
+
     const lifts = [0];
-    for (let d = halfH + 34; d <= halfH + 300; d += 40) lifts.push(-d, d);
-
-    /* EVERY ARRANGEMENT IS WEIGHED, and the best one wins — not the first one
-       that happens to work. Taking the first meant that when nothing worked
-       the pair was placed anyway, exactly where it had already been found not
-       to fit: against the left edge of a person sitting near the edge of the
-       screen, half of it off the screen altogether.
-     *
-     * AND ONE COLUMN IS AN ARRANGEMENT TOO. Beside somebody at the edge of
-     * the canvas there is no room on one side at all, and the tidy answer is
-     * not to cram a column into it — it is to put all four in a single
-     * aligned column on the side that has the room. Still one straight edge,
-     * still evenly spaced; the compass in the middle is what carries the
-     * direction, and it keeps it. Worth a small penalty so that the
-     * symmetrical pair is preferred wherever it genuinely fits. */
-    const tries = [];
-    for (const lift of lifts){
-      tries.push({ pair:true, lift,
-        boxes: columnAt(['sibling', 'join'], -1, lift)
-          .concat(columnAt(['partner', 'ways'], +1, lift)) });
-    }
-    for (const lift of lifts) for (const dir of [1, -1]){
-      tries.push({ pair:false, lift,
-        boxes: columnAt(['partner', 'ways', 'sibling', 'join'], dir, lift) });
-    }
+    for (let d = 40; d <= 320; d += 40) lifts.push(-d, d);
+    /* AND IT CAN STEP FURTHER OUT. Beside somebody at the edge of the canvas
+       there is only one side to be on, and the person next to them is on it —
+       so the list moves past them rather than sitting on their name. It is
+       the same list at the same width; only further from the person it
+       belongs to, which is why it is the last thing tried. */
+    const pushes = [0];
+    for (let d = 40; d <= 400; d += 40) pushes.push(d);
 
     let pick = null;
-    for (const t of tries){
-      if (!t.boxes.length) return;
-      // The tie-breakers: a pair over a single column, and near the pod over
-      // far from it. Both are worth less than one bud sitting on a name.
-      const c = cost(t.boxes) + (t.pair ? 0 : 2) + Math.abs(t.lift) / 1000;
-      if (!pick || c < pick.c) pick = { ...t, c };
+    for (const dir of [1, -1]) for (const push of pushes) for (const lift of lifts){
+      const boxes = at(dir, lift, push);
+      // The tie-breakers, and all of them are worth less than one bud over a
+      // name: the right of somebody before the left, close before far, and
+      // their own line before above or below it.
+      const c = cost(boxes) + (dir > 0 ? 0 : 0.5) +
+                push / 1000 + Math.abs(lift) / 10000;
+      if (!pick || c < pick.c) pick = { boxes, c };
+      if (pick.c === 0) break;
     }
 
     for (const b of pick.boxes){
       placed.push(b);
       b.o.at = [b.x, b.y];
-      b.o.w = b.wide;
+      b.o.w = wide;                 // one width, so both edges are straight
     }
-    const best = pick.boxes, lifted = pick.pair && pick.lift !== 0;
-    /* WHICH LINES THE PAIR ENDED UP ON, so the buds in the middle can stand on
-       the same ones. Empty while the columns are still flanking the pod: there
-       the middle is a compass — Child above it and Parent below — and it
-       should stay one. */
-    budRows = lifted
-      ? [...new Set(best.map(b => b.y))].sort((a, b) => a - b)
-      : [];
   };
 
-  /* A bud in the middle, centred on the pod. `dir` is -1 for above it.
-   *
-   * ON THE PAIR'S OWN LINES WHERE THERE ARE ANY. Once the columns have lifted
-   * off the pod's line the three of them are a grid, and a Child bud nine
-   * pixels below the Sibling beside it is exactly the kind of almost-straight
-   * that reads as careless. Where the columns are still flanking the pod,
-   * this stays a compass: above for the generation the tree grows down to,
-   * below for the one it came from. */
-  const row = (kinds, dir) => {
-    const mine = kinds.map(k => out.find(o => o.kind === k)).filter(Boolean);
-    if (!mine.length) return;
-    const wide = Math.max(...mine.map(W));
-    const put = y => ({ l:cx - wide / 2, r:cx + wide / 2,
-                        t:y - BH / 2, b:y + BH / 2, x:cx, y });
-
-    let best = null;
-    if (budRows.length){
-      const shared = put(dir < 0 ? budRows[0] : budRows[budRows.length - 1]);
-      if (fits(shared)) best = shared;
-    }
-    for (let push = 0; !best && push <= 260; push += 30){
-      const box = put(cy + dir * (halfH + 26 + push));
-      if (fits(box)) best = box;
-    }
-    if (!best) best = put(cy + dir * (halfH + 26));   // nowhere clear; its own place
-    placed.push(best);
-    mine.forEach(o => { o.at = [best.x, best.y]; o.w = wide; });
-  };
-
-  /* THE COLUMNS FIRST, because they are the wide ones and the ones with two
-     buds in them — the rows are single and can step out of the way of a
-     column far more cheaply than the other way round. */
   const lay = () => {
     placed.length = 0;
     for (const o of out){ o.at = null; o.w = 0; }
-    columns();
-    row(['child'], -1);
-    row(['parent', 'deepen'], +1);
+    list();
   };
 
   const apply = () => {
@@ -7954,12 +7942,9 @@ function placeBuds(){
      changed — and the columns are set out again from the truth. */
   let learnt = false;
   for (const el of layer.children){
-    const w = el.offsetWidth, h = el.offsetHeight, k = el.dataset ? el.dataset.bud : null;
+    const w = el.offsetWidth, k = el.dataset ? el.dataset.bud : null;
     if (k && typeof w === 'number' && w > 0 && Math.abs((budSize[k] || 0) - w) > 1){
       budSize[k] = w; learnt = true;
-    }
-    if (typeof h === 'number' && h > 0 && Math.abs(budHeight - h) > 1){
-      budHeight = h; learnt = true;
     }
   }
   if (learnt) lay();
@@ -8685,6 +8670,40 @@ function marriageBlock(id){
            children of it hanging off Evelyn alone, and he would lose his own
            son by correcting a claim about his wife. Where nobody is recorded on
            the other side there is only one person in it to take out. */
+        /* ── AND WHEN IT IS THE WRONG PERSON ALTOGETHER ──────────────────
+         *
+         * "Relationship edits and fixes need to be enabled to allow the
+         *  relationship to be corrected."
+         *
+         * The card has been telling people to come here for weeks — the line
+         * under the kinship word says "worked out from the joins below; if
+         * the word is wrong, one of them is" — and then offered two things
+         * that are not corrections. HOW they are joined is a different
+         * question from WHO, and taking the join out is not a fix, it is
+         * giving up: you lose the marriage, the children of it are left
+         * hanging off one parent, and you build it again from nothing.
+         *
+         * The commonest wrong join in a family tree is not a join that should
+         * not exist. It is a join to the wrong person — two Marys, two
+         * Josephs, a woman entered against her husband's brother. So: say who
+         * it should be, and the marriage stays where it is with everything in
+         * it. The children never move, because they were never in doubt.
+         *
+         * AND WHERE NOBODY IS RECORDED ON THE OTHER SIDE, the same control
+         * fills it rather than replaces it. That is the row in every family's
+         * tree that reads "nobody recorded yet · 1 child" — a marriage whose
+         * other half was never entered — and until now the only way to answer
+         * it was to add a second person who might already be in the tree. */
+        `<button type="button" class="mini" data-rejoin="${esc(u.id)}" ` +
+          `data-was="${esc(other[0] || '')}" ` +
+          `title="${other.length
+            ? `Say who ${esc(first(id))} is really joined to here. The join ` +
+              `stays where it is` +
+              `${n ? ` and so do the ${n} ${n === 1 ? 'child' : 'children'} of it` : ''}.`
+            : `Say who is on the other side of this join. It is already ` +
+              `recorded${n ? ` with ${n} ${n === 1 ? 'child' : 'children'}` : ''}; ` +
+              `only the other name is missing.`}">` +
+          `${other.length ? 'Somebody else' : 'Say who'}</button>` +
         `<button type="button" class="mini" data-unmarry="${esc(u.id)}" ` +
           `data-drop="${esc(other[0] || id)}" ` +
           `title="Take this join out altogether. Nobody leaves the tree` +
@@ -11216,6 +11235,10 @@ function openCard(id){
       : now === 'parted'   ? `${p.name} and ${them} were married, and parted. Both stay in the tree.`
       : `Nobody has said how ${p.name} and ${them} are joined.`);
   });
+  el.querySelectorAll('[data-rejoin]').forEach(b => b.onclick = () => {
+    commit();
+    openRejoin(id, b.dataset.rejoin, b.dataset.was || null);
+  });
   el.querySelectorAll('[data-unmarry]').forEach(b => b.onclick = () => {
     commit();
     const drop = b.dataset.drop;
@@ -12260,6 +12283,133 @@ function openFind(anchorId){
 
   draw();
   el.addEventListener('keydown', e => { if (e.key === 'Escape'){ e.preventDefault(); closeForm(); } });
+}
+
+/* ── THE JOIN IS TO THE WRONG PERSON, OR TO NOBODY YET ────────────────────
+ *
+ * "Relationship edits and fixes need to be enabled to allow the relationship
+ *  to be corrected."
+ *
+ * WHAT THIS IS NOT. It is not unjoining and joining again. The marriage keeps
+ * its id, its bond and every child recorded in it — only the name on the
+ * other side of it changes. That matters because the children of a marriage
+ * are rarely what is in doubt: somebody recorded Joseph's wife against the
+ * wrong Mary, and the four children are still Joseph's four children by that
+ * marriage. Taking the join out and building it again would put them through
+ * a state where they hang off one parent, which is a worse record of the
+ * family than the wrong Mary was.
+ *
+ * WHO CANNOT BE PICKED, and why each one is SAID rather than left out of the
+ * list. A name that is simply missing reads as a name the app cannot find,
+ * and somebody will type it again as a new person — which is the duplicate
+ * this whole project keeps trying not to make.
+ *
+ *   themselves           a person is not joined to themselves
+ *   already in this one  it is the answer that is already recorded
+ *   an ancestor or a     the model will not carry it, and no amount of
+ *   descendant           wanting makes it able to
+ *   already joined       they are joined to each other somewhere else; that
+ *                        marriage is the one to correct, not this one
+ *
+ * The one who is replaced STAYS IN THE TREE, with their name, their years and
+ * their own parents. If this was the only thing joining them to anybody they
+ * will be adrift, which is a thing the app finds and says — so it is said
+ * here too, in the same breath, rather than discovered later. */
+function openRejoin(mineId, unionId, wasId){
+  closeForm();
+  const u = state.unions[unionId], me = state.people[mineId];
+  if (!u || !me) return;
+  pending = { kind:'card', anchorId: mineId };
+  const el = document.createElement('div');
+  el.id = 'form';
+  el.className = 'wide';
+  document.body.appendChild(el);
+
+  const first = x => ((state.people[x] || {}).name || '').split(' ')[0];
+  const was = wasId && state.people[wasId] ? state.people[wasId] : null;
+  const kids = u.children.filter(present).length;
+  let q = '';
+
+  const why = other => {
+    if (other === mineId) return 'that is the same person';
+    if (u.partners.includes(other)) return 'already recorded in this one';
+    const up = ancestry(mineId).up, down = ancestry(other).up;
+    if (up.has(other) || down.has(mineId)) return 'an ancestor or a descendant';
+    if (partnersOf(mineId).includes(other) && other !== wasId){
+      return `already joined to ${esc(first(mineId))} elsewhere`;
+    }
+    return null;
+  };
+
+  const draw = () => {
+    const hits = q.trim().length < 2 ? [] : searchPeople(q, 12);
+    el.innerHTML =
+      `<p class="cap">Who is ${esc(me.name)} joined to here?</p>` +
+      (was
+        ? `<p class="covnote">Recorded as <b>${esc(was.name)}</b>. Pick the ` +
+          `right person and the join stays exactly where it is` +
+          `${kids ? `, with the ${kids} ${kids === 1 ? 'child' : 'children'} of it` : ''}` +
+          ` — only the name changes. ${esc(was.name)} stays in the tree.</p>`
+        : `<p class="covnote">Nobody is recorded on the other side of this one` +
+          `${kids ? `, though ${kids === 1 ? 'a child of it is' : `${kids} children of it are`}` : ''}. ` +
+          `Pick whoever belongs there. If they are not in the tree yet, close ` +
+          `this and use <b>Partner</b> beside ${esc(first(mineId))} instead.</p>`) +
+      `<input id="rjQ" class="fld" value="${esc(q)}" autocomplete="off" ` +
+        `placeholder="Name, or part of one" aria-label="Search for a name">` +
+      `<div class="dupes" id="rjList">` +
+        (q.trim().length < 2
+          ? `<p class="browse">Two letters is enough.</p>`
+          : !hits.length
+            ? `<p class="browse">Nobody by that name. Names entered with a ` +
+              `different spelling still turn up — try a shorter piece of it.</p>`
+            : hits.map(h => {
+                const r = state.people[h.id];
+                const no = why(h.id);
+                const life = r.born ? `b. ${esc(r.born)} · ` : '';
+                return `<div class="found">` +
+                  `<u>${esc(r.name)}<small>${life}${esc(positionOf(h.id))}</small>` +
+                  (no ? `<small class="leaves">${esc(no)}</small>` : '') + `</u>` +
+                  `<span class="acts">` +
+                    `<button type="button" class="mini join" data-pick="${esc(h.id)}"` +
+                    `${no ? ' disabled' : ''}>This one</button>` +
+                  `</span></div>`;
+              }).join('')) +
+      `</div>` +
+      `<div class="row"><button class="btn ghost" id="rjNo">Back</button></div>`;
+    placeForm(el);
+    const box = $('rjQ');
+    box.oninput = () => { q = box.value; draw(); $('rjQ').focus(); };
+    box.focus();
+    try { box.setSelectionRange(box.value.length, box.value.length); } catch (e) {}
+    el.querySelectorAll('[data-pick]:not([disabled])').forEach(b =>
+      b.onclick = () => take(b.dataset.pick));
+    $('rjNo').onclick = () => { closeForm(); openCard(mineId); };
+  };
+
+  const take = pick => {
+    if (why(pick)) return;
+    const wereLoose = adrift().length;
+    snapshot();
+    const live = state.unions[unionId];
+    if (!live){ closeForm(); return; }        // it went while the panel was open
+    if (wasId) live.partners = live.partners.filter(x => x !== wasId);
+    if (!live.partners.includes(pick)) live.partners.push(pick);
+    ancestryCache.clear();
+    closeForm(); render(); save();
+    const now = (state.people[pick] || {}).name || 'them';
+    say((was
+      ? `${me.name} is recorded as joined to ${now} now, not ${was.name}` +
+        `${kids ? `. The ${kids} ${kids === 1 ? 'child' : 'children'} of it stayed` : ''}. ` +
+        `${was.name} is still in the tree.`
+      : `${me.name} and ${now} are recorded as joined` +
+        `${kids ? `, with the ${kids} ${kids === 1 ? 'child' : 'children'} already there` : ''}.`)
+      + setLoose(wereLoose));
+  };
+
+  draw();
+  el.addEventListener('keydown', e => {
+    if (e.key === 'Escape'){ e.preventDefault(); closeForm(); openCard(mineId); }
+  });
 }
 
 /* WHICH RELATION IT IS — asked once, plainly, with the ones that cannot be

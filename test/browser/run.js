@@ -48,6 +48,7 @@ const SUITES = [
   { name: 'keeper',       kind: 'api', needs: 'MW_ADMIN_PASSPHRASE',
     env: { MW_ADMIN_PASSPHRASE: process.env.MW_ADMIN_PASSPHRASE } },
   { name: 'buds',         kind: 'static' },
+  { name: 'correcting',   kind: 'static' },
   { name: 'lines',        kind: 'static' },
   { name: 'look',         kind: 'static' },
   { name: 'roots',        kind: 'static' },
