@@ -2795,8 +2795,14 @@ function openDeletePasscode(id, then){
     `<p class="lbl">Passcode</p>` +
     `<input id="dpCode" class="fld" inputmode="numeric" autocomplete="off" ` +
       `type="password" placeholder="The family's passcode">` +
-    `<p class="roothint" id="dpWhy">Ask whoever keeps this tree if you do not ` +
-      `have it. Set aside takes somebody out of the picture without it, and ` +
+    /* SAID AT THE LAST MOMENT, because this is where somebody stands who
+       reached for delete when what they wanted was a correction — a wrong
+       year on the right person, or the right person joined to the wrong
+       husband. Those need no passcode and never did. */
+    `<p class="roothint" id="dpWhy">A wrong year, a wrong name or a wrong ` +
+      `join does not need this — cancel and change it on their card, which ` +
+      `anybody can do. Ask whoever keeps this tree if you do need the ` +
+      `passcode. Set aside takes somebody out of the picture without it, and ` +
       `anyone can put them back.</p>` +
     `<div class="row"><button class="btn" id="dpGo">Remove for good</button>` +
     `<button class="btn ghost" id="dpNo">Cancel</button></div>`;
@@ -11218,6 +11224,22 @@ function openCard(id){
 
     // ── 2. what is known about them ───────────────────────────────────────
     `<p class="lbl">Who ${first} is</p>` +
+    /* HOW TO CHANGE IT, said where the fields are.
+     *
+     * Every one of these has always been editable — you type over it and
+     * press Save — and the card never once said so. A form full of filled-in
+     * boxes reads as a record being SHOWN, not a record being OFFERED, and
+     * the commonest thing a family wanted to do with a wrong year was ask
+     * somebody whether they were allowed to change it.
+     *
+     * It matters more now that removing somebody asks for a passcode: a
+     * relative who meets one gate assumes there are others, and the honest
+     * answer is that this is the only one. So the line says both halves —
+     * anybody, any time, no passcode — and that the change is signed, which
+     * is the reason it can be so open in the first place. */
+    `<p class="roothint">Type over anything below and press <b>Save</b>. ` +
+    `Anybody can correct a year, a name or a mutupo at any time — no ` +
+    `passcode — and every change is kept with your name on it.</p>` +
     `<input id="cName" class="fld" value="${esc(p.name)}" placeholder="Name" autocomplete="off">` +
     /* THE OTHER NAME. One field, not a maiden/married pair — that pair decides
        which of the two is the real one, and different families answer that
@@ -11250,6 +11272,36 @@ function openCard(id){
 
     // ── 3. how they are joined ────────────────────────────────────────────
     `<p class="lbl">How ${first} is joined</p>` +
+    /* AND HOW TO CORRECT ONE, by the name of the button that does it.
+     *
+     * The controls went in when a family asked for relationship fixes to be
+     * enabled. They are there, they work, and nothing on the card says which
+     * of them answers which mistake — so the family that asked for them has
+     * to try each one on a real record to find out, which is exactly what
+     * nobody wants to do with their grandmother's marriage.
+     *
+     * Written as four wrong answers rather than four buttons, because that
+     * is the way round somebody arrives: they are not looking for "rejoin",
+     * they are looking at Mary joined to the wrong Joseph. Each line names
+     * what is wrong first and the button second. */
+    cardNote(
+      `Every one of these can be corrected by anybody, with no passcode — and ` +
+      `nothing here removes a person from the tree.`,
+      `How do I fix a wrong join?`,
+      `<b>Joined to the wrong person</b> — press <b>Somebody else</b> on that ` +
+      `row and pick the right one. The marriage keeps its children; only the ` +
+      `name on one side of it changes.<br><br>` +
+      `<b>Nobody recorded on the other side</b> — press <b>Say who</b> and ` +
+      `pick them, or add them if they are not here yet.<br><br>` +
+      `<b>Joined to somebody they were never joined to</b> — press <b>Not ` +
+      `joined at all</b>. Both people stay in the tree with their own names, ` +
+      `years and children, and Undo puts the join back.<br><br>` +
+      `<b>Recorded under the wrong parents</b> — use <b>Whose child</b> above. ` +
+      `<b>Nobody yet</b> there takes the link out without taking anybody out ` +
+      `of the tree.<br><br>` +
+      `<b>Married or parted, rather than wrongly joined</b> — that is ` +
+      `<b>Married · Together · Parted</b> on the row, and it changes no links ` +
+      `at all.`) +
     parentageBlock(id) +
     marriageBlock(id) +
     (() => {
@@ -11306,6 +11358,11 @@ function openCard(id){
         `<button class="btn ghost" id="cAside">Set aside</button>` +
         `<button class="btn ghost danger" id="cGone">Delete for good</button>` +
       `</div>` +
+      /* THE THIRD DOOR, which is usually the right one and was not named
+         here at all: the entry is not wrong to exist, it is wrong. */
+      `<p class="roothint">If it is only the <b>details</b> that are wrong — a ` +
+      `year, a name, who they are joined to — none of this is needed. Close ` +
+      `this and change it above; anybody can, and no passcode is asked for.</p>` +
       `<p class="roothint">Set aside takes them out of the picture and keeps ` +
       `every record — Set aside in the toolbar puts them back. Delete for good ` +
       `goes at once; the bar offers to put them back for a few seconds, and ` +
