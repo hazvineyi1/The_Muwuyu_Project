@@ -7474,7 +7474,14 @@ function draw(){
       ` aria-label="${esc(p.name)} — show where the tree can grow from here"` +
       ` style="left:${at.x}px; top:${at.y}px` +
       (hue !== undefined ? `; --fam:${hue}` : '') + `">` +
-      capt + folds + sector +
+      /* THE ONE MARK SAYING WHICH PERSON EVERY TERM ON THIS CANVAS IS
+         MEASURED FROM — and it had stopped being drawn. The string was still
+         built above, the stylesheet still had rules for it, and the bud
+         placer still reserved the space above the pod for it; only the line
+         putting it into the pod had been lost in a rewrite of this markup. So
+         a tree full of Shona terms reckoned from one person showed nothing at
+         all about who that person was, and the taproot went unnamed too. */
+      badge + capt + folds + sector +
       (lost.has(p.id)
         ? `<span class="loose" title="Not joined to anybody yet. Tap to say ` +
           `where they belong — nothing is wrong with the record.">not joined</span>`
@@ -12989,11 +12996,28 @@ function askWhoIsViewing(roster, saying){
     placeForm(el);
     setTimeout(() => { try { $('whoQ').focus(); } catch (e) {} }, 60);
 
+    /* ── AND IF THE PANEL GOES WITHOUT BEING ANSWERED ────────────────────
+     *
+     * Escape closes it, and so does anything else that opens a panel over it.
+     * Whatever is waiting on this would then wait for ever — and on the save
+     * path that is a page which never saves again, silently, which is worse
+     * than the question being asked twice. So the panel leaving resolves it
+     * as UNANSWERED, and whoever asked can ask again on the next read. */
+    let answered = false;
+    const watch = new MutationObserver(() => {
+      if (answered || document.body.contains(el)) return;
+      watch.disconnect();
+      resolve(null);
+    });
+    watch.observe(document.body, { childList: true });
+
     const pick = async id => {
       const ok = await claimViewer(id);
       if (!ok) return;                       // the message is already on screen
       meId = id;
       try { localStorage.setItem(ME_KEY, id); } catch (e) {}
+      answered = true;
+      watch.disconnect();
       closeForm();
       resolve(id);
     };
@@ -14786,8 +14810,13 @@ async function refresh({ quiet = false } = {}){
     if (e.whoAreYou){
       try {
         askingWho = askingWho || askWhoIsViewing(e.whoAreYou, e.saying);
-        await askingWho;
+        const said = await askingWho;
         askingWho = null;
+        /* Asked and not answered — the panel was closed rather than used.
+           The tree on screen is the last good one, so it stays; the next read
+           will ask again. Stalling here would punish somebody for pressing
+           Escape once. */
+        if (!said) return;
         await pull();
       } catch (again) {
         askingWho = null;

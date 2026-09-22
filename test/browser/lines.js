@@ -11,8 +11,15 @@
 // different elements, so no click is ever raised, and the tap has to be
 // tracked from down to up. Nothing headless would see any of that.
 //
-//   npx http-server public -p 3930 -s &
-//   NODE_PATH=$(npm root -g) node test/browser/lines.js
+// HOW TO RUN IT. Through the runner, which starts the server this suite
+// needs — see test/browser/run.js, where what that is for each of them is
+// written down once:
+//
+//   TEST_DATABASE_URL=postgres://... NODE_PATH=$(npm root -g) \
+//     npm run test:browser lines
+//
+// Without a name it runs all of them. Not part of `npm test`: these need
+// Chromium.
 
 const { chromium } = require('playwright');
 

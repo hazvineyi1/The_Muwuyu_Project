@@ -6,12 +6,16 @@
 // lifts the root and asks for the parent, and that the Roots panel keeps
 // declared roots and open ends visibly apart.
 //
-// Not part of `npm test` — it needs Chromium. Run it against a static server:
+// HOW TO RUN IT. Through the runner, which starts the server this suite
+// needs — see test/browser/run.js, where what that is for each of them is
+// written down once:
 //
-//   npx http-server public -p 3930 -s &
-//   NODE_PATH=$(npm root -g) node test/browser/roots.js
+//   TEST_DATABASE_URL=postgres://... NODE_PATH=$(npm root -g) \
+//     npm run test:browser roots
 //
-// Point it elsewhere with MW_BASE_URL / MW_CHROMIUM.
+// Without a name it runs all of them. Not part of `npm test`: these need
+// Chromium.
+
 const { chromium } = require('playwright');
 
 const BASE = process.env.MW_BASE_URL || 'http://127.0.0.1:3930/';
@@ -24,12 +28,19 @@ const is  = (a, b, m) => a === b ? ok(m) : bad(m, `expected ${JSON.stringify(b)}
 
 (async () => {
   const browser = await chromium.launch({ executablePath: EXE });
-  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  /* ONLY THIS ORIGIN. The page asks Google for its fonts, the sandbox these
+     suites run in cannot reach it, and a navigation that waits for that to
+     time out costs more than the whole suite — which is what this one was
+     doing: thirty seconds at the first goto and nothing after it. Every other
+     suite here has had this line for a while. */
+  await ctx.route('**', r => r.request().url().startsWith(BASE) ? r.continue() : r.abort());
+  const page = await ctx.newPage();
   page.on('pageerror', e => bad('page error', e.message));
 
   // A four-person line: Sekuru -> Baba -> Me, plus Amai married in with no
   // parents of her own. Sekuru is declared the root; Amai is an open end.
-  await page.goto(BASE);
+  await page.goto(BASE, { waitUntil:'domcontentloaded' });
   await page.evaluate(() => {
     const P = (id, name, sex, born, root) =>
       ({ id, name, sex, born, root: root || false });
@@ -100,23 +111,37 @@ const is  = (a, b, m) => a === b ? ok(m) : bad(m, `expected ${JSON.stringify(b)}
   is(await page.evaluate(() => frontier().open.some(e => e.name === 'Tateguru Nyika')), true,
      'the new ancestor is now the open end');
 
-  // ── the Roots panel ───────────────────────────────────────────────────
+  // ── where the tree stops, which is now half of where it can grow ──────
+  /* THE PANEL THIS USED TO OPEN IS GONE, and gone on purpose. "Where the tree
+     stops" listed the rooted lines and the open ends and then put you back on
+     the tree to find them; the growth view marks them on the tree and answers
+     them where they stand. The facts are the same facts, so they are still
+     asserted — against the door they live behind now. */
   await page.evaluate(() => { state.people.p1.root = false; state.people.p3.root = true; render(); });
-  await page.click('#roots');
-  await page.waitForSelector('#form');
+  await page.click('#hub');
+  await page.waitForSelector('[data-room="grow"]', { timeout: 10000 });
+  await page.click('[data-room="grow"]');
+  await page.waitForSelector('#form', { timeout: 10000 });
   const panel = await page.textContent('#form');
-  is(/Where the tree stops/.test(panel), true, 'the panel is titled');
-  is(/Rooted/.test(panel) && /Amai Rudo/.test(panel), true, 'Amai shows under Rooted');
-  is(/Open ends/.test(panel) && /Tateguru Nyika/.test(panel), true, 'Tateguru shows under Open ends');
-  const rows = await page.$$eval('#form .askrow em', es => es.map(e => e.textContent));
-  is(rows.includes('deepen') && rows.includes('trace back'), true,
-     'roots say deepen, open ends say trace back');
-  is(/<b>1<\/b> rooted/.test(await page.innerHTML('#form')), true, 'the tally counts one root');
+  is(/Where it can grow/.test(panel), true, 'the view is titled');
+  is(/As far back as anyone has traced/.test(panel) && /Amai Rudo/.test(panel), true,
+     'Amai is listed as far back as anyone has traced');
+  is(/The line stops here/.test(panel) && /Tateguru Nyika/.test(panel), true,
+     'and Tateguru is where a line stops');
+  is(/As far back as anyone has traced · 1/.test(panel), true,
+     'with one of them, counted on the heading');
 
-  // Tapping a row travels to that person.
-  await page.click('#form .askrow[data-goto="p3"]');
-  await page.waitForTimeout(200);
-  is(await page.evaluate(() => sel), 'p3', 'the row selected the person');
+  /* AND ANSWERED WHERE IT STANDS, rather than sending somebody off to find
+     the person: a root offers going further back, an open end offers saying
+     the line is traced — both without leaving the list. */
+  const acts = await page.$$eval('#form .grow1 .mini', bs => bs.map(b => b.textContent.trim()));
+  is(acts.includes('Go further back…'), true,
+     'a root offers going further back: ' + acts.join(' | '));
+
+  // Showing one travels to that person, which is what tapping a row did.
+  await page.click('#form [data-gsee="p3"]');
+  await page.waitForTimeout(300);
+  is(await page.evaluate(() => sel), 'p3', 'showing one selected the person');
 
   console.log(`\n  ${pass} passed, ${fail} failed`);
   await browser.close();

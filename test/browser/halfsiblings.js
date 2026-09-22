@@ -10,11 +10,15 @@
 // and the ordering that guarantees it lives in diffOps. Nothing but a round
 // trip against the real constraint can show that it holds.
 //
-// Not part of `npm test` — needs Chromium and a live server. Run:
+// HOW TO RUN IT. Through the runner, which starts the server this suite
+// needs — see test/browser/run.js, where what that is for each of them is
+// written down once:
 //
-//   DATABASE_URL=... PORT=3940 node server.js &
-//   MW_BASE_URL=http://127.0.0.1:3940/ APP_PASSPHRASE=... \
-//     NODE_PATH=$(npm root -g) node test/browser/halfsiblings.js
+//   TEST_DATABASE_URL=postgres://... NODE_PATH=$(npm root -g) \
+//     npm run test:browser halfsiblings
+//
+// Without a name it runs all of them. Not part of `npm test`: these need
+// Chromium.
 
 const { chromium } = require('playwright');
 const { BASE, EXE, openApp, ready, settled, saved } = require('./lib');

@@ -12,14 +12,18 @@
 // it should not — with the answers the new model gives, which are mostly the
 // opposite ones.
 //
-// Not part of `npm test` — needs Chromium and a live server. Run:
+// HOW TO RUN IT. Through the runner, which starts the server this suite
+// needs — see test/browser/run.js, where what that is for each of them is
+// written down once:
 //
-//   DATABASE_URL=... PORT=3940 node server.js &
-//   MW_BASE_URL=http://127.0.0.1:3940/ APP_PASSPHRASE=... \
-//     NODE_PATH=$(npm root -g) node test/browser/multifamily.js
+//   TEST_DATABASE_URL=postgres://... NODE_PATH=$(npm root -g) \
+//     npm run test:browser multifamily
+//
+// Without a name it runs all of them. Not part of `npm test`: these need
+// Chromium.
 
 const { chromium } = require('playwright');
-const { BASE, EXE, openApp, onlyThisOrigin, enter, ready, settled } = require('./lib');
+const { BASE, EXE, openApp, onlyThisOrigin, enter, ready, settled, sayWhoYouAre } = require('./lib');
 
 let pass = 0, fail = 0;
 const ok  = m => { pass++; console.log('  ok   ' + m); };
@@ -97,7 +101,12 @@ const section = t => console.log('\n' + t);
     state.rootId = addPerson('Chenjerai ' + t, 'm', 'Nzou', '1908', '');
     save();
   }, TAG);
-  await home.page.waitForTimeout(1800);
+  /* AND SAYS WHO SHE IS. The family was empty when this page loaded, so
+     nobody was asked; the first name planted ends that and the save's own
+     read asks. Left unanswered, the question sits over the family panel this
+     section is about to open. */
+  await sayWhoYouAre(home.page, { timeout: 8000 });
+  await home.page.waitForTimeout(1200);
   is(await home.page.evaluate(() => people().length), 1, 'recorded here');
 
   // ── an invitation, which is now the way in ───────────────────────────

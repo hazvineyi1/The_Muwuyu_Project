@@ -6,10 +6,15 @@
 // that it survives a reload, that light and dark stay independent of it, and
 // that the swatches redraw to the face you would actually get.
 //
-// Not part of `npm test` — it needs Chromium. Run:
+// HOW TO RUN IT. Through the runner, which starts the server this suite
+// needs — see test/browser/run.js, where what that is for each of them is
+// written down once:
 //
-//   npx http-server public -p 3930 -s &
-//   NODE_PATH=$(npm root -g) node test/browser/look.js
+//   TEST_DATABASE_URL=postgres://... NODE_PATH=$(npm root -g) \
+//     npm run test:browser look
+//
+// Without a name it runs all of them. Not part of `npm test`: these need
+// Chromium.
 
 const { chromium } = require('playwright');
 
@@ -50,7 +55,14 @@ const token = (page, name) => page.evaluate(
   is(await page.evaluate(() => document.documentElement.dataset.palette), undefined,
      'no palette attribute is set for the default');
   is(await token(page, 'gold'), '#8A5A16', 'and it is wearing antique brass');
-  is(await page.textContent('#look'), 'Muwuyu', 'the button names it');
+  /* THE DOOR NO LONGER WEARS THE ANSWER. This button used to be the palette
+     button and was named after whichever palette was on. It opens a panel
+     covering four separate things now — the shape, how much of the tree, day
+     or night, and the colours — so naming it after one of them would be
+     naming it wrongly three quarters of the time. Which palette is on is said
+     inside, on the row that is marked, which is where somebody choosing one
+     is looking. */
+  is(await page.textContent('#look'), 'Look', 'the door is named for the panel, not the palette');
 
   section('the chooser shows every palette, with its colours');
   await page.click('#look');
@@ -71,9 +83,13 @@ const token = (page, name) => page.evaluate(
      'the page is in Stone');
   is(await token(page, 'gold'), '#2F3338', 'the accent is graphite now');
   is(await token(page, 'sky'), '#F4F4F5', 'and the sky behind the tree is grey');
-  is(await page.textContent('#look'), 'Stone', 'the button follows');
   is(await page.$eval('#form .pal[data-palette="stone"]', b => b.classList.contains('on')), true,
-     'and so does the mark in the panel');
+     'the mark in the panel follows');
+  is(await page.$eval('#form .pal[data-palette="stone"] u',
+                      u => u.childNodes[0].textContent.trim()), 'Stone',
+     'and the marked row names it');
+  is(await page.$eval('#form .pal[data-palette=""]', b => b.classList.contains('on')), false,
+     'while the one it was on lets go');
 
   section('it survives a reload, because it is the family’s own choice');
   await page.reload({ waitUntil:'domcontentloaded' });

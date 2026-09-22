@@ -7,15 +7,18 @@
 // a living person in front of the world, and choosing "Private" really does
 // take them back.
 //
-// Not part of `npm test` — needs Chromium and a live server with
-// MW_PUBLIC_READ=on. Run:
+// HOW TO RUN IT. Through the runner, which starts the server this suite
+// needs — see test/browser/run.js, where what that is for each of them is
+// written down once:
 //
-//   DATABASE_URL=... APP_PASSPHRASE=... MW_PUBLIC_READ=on PORT=3940 node server.js &
-//   MW_BASE_URL=http://127.0.0.1:3940/ NODE_PATH=$(npm root -g) \
-//     node test/browser/visibility.js
+//   TEST_DATABASE_URL=postgres://... NODE_PATH=$(npm root -g) \
+//     npm run test:browser visibility
+//
+// Without a name it runs all of them. Not part of `npm test`: these need
+// Chromium.
 
 const { chromium } = require('playwright');
-const { BASE, EXE, openApp, ready } = require('./lib');
+const { BASE, EXE, openApp, ready, sayWhoYouAre } = require('./lib');
 
 let pass = 0, fail = 0;
 const ok  = m => { pass++; console.log('  ok   ' + m); };
@@ -39,6 +42,13 @@ const section = t => console.log('\n' + t);
     grow('child', old, 'Garikai ' + t, 'm', 'Nzou', { born: String(y - 40) });
     save();
   }, [TAG, YEAR]);
+  /* AND SAYS WHO SHE IS. The family was empty when this page loaded, so
+     nobody was asked who is looking; planting the first name ends that and
+     the save's own read comes back asking. Until it is answered the page
+     holds the tree it has, which here still carried the optimistic "assume
+     they are living" that every locally-made person starts with — so the
+     card said a man with a year of death was living. */
+  await sayWhoYouAre(page, { timeout: 8000 });
   await page.waitForTimeout(1800);
 
   // What the world can see, asked without any passphrase at all.
@@ -59,7 +69,17 @@ const section = t => console.log('\n' + t);
       const p = people().find(x => x.name.startsWith(w + ' ' + t));
       sel = p.id; render(); openCard(p.id);
     }, [who, TAG]);
-    await page.waitForSelector('#cVis');
+    /* BEHIND A FOLD. The card is grouped now — the name and the dates first,
+       then the family, then what the tree says about them, and the rarer
+       switches last and out of the way. Whether somebody is in the public
+       record is one of the rarer ones, and it is still reached in one tap. */
+    await page.waitForSelector('#form [data-fold="more"]', { timeout: 10000 });
+    // Asked of the fold itself rather than of #cVis: a card that is still
+    // laying out reports everything inside it as hidden, and this then skips
+    // the one click it came for.
+    const shut = await page.$eval('#form [data-fold="more"]', d => !d.open);
+    if (shut) await page.click('#form [data-fold="more"] summary');
+    await page.waitForSelector('#cVis', { state:'visible', timeout: 10000 });
     return page.textContent('#form');
   };
 

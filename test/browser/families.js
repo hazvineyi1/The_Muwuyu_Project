@@ -6,11 +6,15 @@
 // the same grandfather, says "that is the same man", and the two families are
 // joined without either losing anything.
 //
-// Not part of `npm test` — needs Chromium and a live server. Run:
+// HOW TO RUN IT. Through the runner, which starts the server this suite
+// needs — see test/browser/run.js, where what that is for each of them is
+// written down once:
 //
-//   DATABASE_URL=... PORT=3940 node server.js &
-//   MW_BASE_URL=http://127.0.0.1:3940/ NODE_PATH=$(npm root -g) \
-//     node test/browser/families.js
+//   TEST_DATABASE_URL=postgres://... NODE_PATH=$(npm root -g) \
+//     npm run test:browser families
+//
+// Without a name it runs all of them. Not part of `npm test`: these need
+// Chromium.
 
 const { chromium } = require('playwright');
 
@@ -81,8 +85,14 @@ const section = t => console.log('\n' + t);
   section('the button appears, and the panel finds them');
   await page.evaluate(() => render());
   await page.waitForTimeout(300);
-  is(await page.isVisible('#families'), true, 'Other families is offered');
-  await page.click('#families');
+  /* BEHIND THE HUB NOW. "Other families" was a button of its own on the bar;
+     it is a room, in its own group — "Beyond this tree" — because that is
+     what it is, and the bar was carrying nine doors. */
+  await page.evaluate(() => closeForm());
+  await page.click('#hub');
+  await page.waitForSelector('[data-room="families"]', { timeout: 15000 });
+  is(await page.isVisible('[data-room="families"]'), true, 'Other families is offered');
+  await page.click('[data-room="families"]');
   await page.waitForSelector('#form .askrow', { timeout: 15000 });
   const panel = await page.textContent('#form');
   is(panel.includes('Chenjerai ' + TAG), true, 'the grandfather is named');
@@ -115,7 +125,10 @@ const section = t => console.log('\n' + t);
     });
   }, [otherTree, linkId]);
   await page.click('#fmNo');
-  await page.click('#families');
+  await page.evaluate(() => closeForm());
+  await page.click('#hub');
+  await page.waitForSelector('[data-room="families"]', { timeout: 15000 });
+  await page.click('[data-room="families"]');
   await page.waitForSelector('#form .askrow', { timeout: 15000 });
   const joined = await page.textContent('#form');
   is(/both families agree/.test(joined), true, 'the panel says both families agree');

@@ -7,11 +7,15 @@
 // it — silently. These drive that exact sequence and assert it no longer
 // happens.
 //
-// Not part of `npm test` — needs Chromium and a live server. Run:
+// HOW TO RUN IT. Through the runner, which starts the server this suite
+// needs — see test/browser/run.js, where what that is for each of them is
+// written down once:
 //
-//   DATABASE_URL=... PORT=3940 node server.js &
-//   MW_BASE_URL=http://127.0.0.1:3940/ NODE_PATH=$(npm root -g) \
-//     node test/browser/concurrent.js
+//   TEST_DATABASE_URL=postgres://... NODE_PATH=$(npm root -g) \
+//     npm run test:browser concurrent
+//
+// Without a name it runs all of them. Not part of `npm test`: these need
+// Chromium.
 
 const { chromium } = require('playwright');
 
