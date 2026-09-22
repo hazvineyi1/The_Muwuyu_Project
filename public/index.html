@@ -139,6 +139,38 @@
    * the screen. Measured by taking the vignette away and watching a pod's
    * pixels change. The bands put it back under the people, where it was
    * always meant to be. */
+  /* ── HOW LONG THINGS TAKE, AND HOW THEY GET THERE ──────────────────────
+   *
+   * BEFORE THIS: seven durations — .15, .18, .2, .24, .25, .45, .55 — several
+   * of them a hundredth of a second apart, which nobody has ever perceived.
+   * The same nudged-until-it-looked-right numbers as the type sizes, and the
+   * same fix.
+   *
+   * Four, and each one is a different kind of movement:
+   *
+   *   --m-tap    something answering a finger: a border, a colour, a shadow
+   *   --m-in     something arriving on the screen
+   *   --m-far    a big movement — a new person landing, the view travelling
+   *   --m-draw   the wood drawing itself in
+   *
+   * AND THE MOTION WAS THE WRONG WAY ROUND. The smallest change on the screen
+   * — a shadow under a pointer — was eased over 180ms, while the largest, the
+   * view jumping across the whole tree to a person you tapped, happened
+   * between one frame and the next with nothing to follow. That is backwards:
+   * a hover needs no explaining and a journey does. See glide().
+   *
+   * THREE CURVES, ONE OF THEM SHARED WITH THE JAVASCRIPT. The camera solves
+   * --ease-move itself rather than approximating it, so the view travels on
+   * exactly the curve the stylesheet names — one system, not two that look
+   * alike. See bezier(). */
+  --m-tap:  150ms;
+  --m-in:   240ms;
+  --m-far:  450ms;
+  --m-draw: 550ms;
+  --ease:      cubic-bezier(.22,.61,.36,1);   /* arriving, and settling      */
+  --ease-move: cubic-bezier(.4,0,.2,1);       /* travelling: eased both ends */
+  --ease-pop:  cubic-bezier(.2,1.5,.4,1);     /* a new person, and only that */
+
   --z-veil:   1;  --z-pods:  2;  --z-buds:  3;
   --z-frame: 40;  --z-over: 50;  --z-panel: 60;
   --z-said:  70;  --z-state: 80;
@@ -475,7 +507,7 @@ body.carrying .pod{transition:none;}
    that takes a pointer at all — everything else there is drawing. */
 .hit{fill:none; stroke:transparent; stroke-linecap:round; pointer-events:stroke;
      cursor:pointer;}
-.grow{stroke-dasharray:1400; stroke-dashoffset:1400; animation:draw .55s ease-out forwards;}
+.grow{stroke-dasharray:1400; stroke-dashoffset:1400; animation:draw var(--m-draw) var(--ease) forwards;}
 @keyframes draw{to{stroke-dashoffset:0;}}
 
 /* ── person pods ────────────────────────────────────────────────────── */
@@ -486,7 +518,7 @@ body.carrying .pod{transition:none;}
   background:var(--pod); border:1.5px solid var(--pod-edge);
   border-radius:26px 8px 26px 8px;
   box-shadow:var(--shadow); cursor:pointer; user-select:none;
-  transition:box-shadow .18s, border-color .18s;
+  transition:box-shadow var(--m-tap) var(--ease), border-color var(--m-tap) var(--ease);
 }
 .pod:hover{border-color:var(--gold-soft); box-shadow:var(--lift);}
 .pod:focus-visible{outline:2.5px solid var(--gold); outline-offset:3px;}
@@ -535,7 +567,7 @@ body.carrying .pod{transition:none;}
   letter-spacing:.06em; text-transform:uppercase; color:var(--gold);
   white-space:nowrap; max-width:100%; overflow:hidden; text-overflow:ellipsis;
 }
-.pod.sprout{animation:pop .45s cubic-bezier(.2,1.5,.4,1) backwards;}
+.pod.sprout{animation:pop var(--m-far) var(--ease-pop) backwards;}
 /* WHEN ONE WORD IS BEING SHOWN. Everybody the word reaches is lifted and the
    rest are set back — not hidden, because the answer to "who are my Baba" is
    only worth anything if you can still see where they stand among everybody
@@ -984,7 +1016,7 @@ body.carrying .pod{transition:none;}
   background:var(--pod); border:1.5px dashed var(--gold-soft); color:var(--gold);
   font-size:var(--t-read); font-weight:700; letter-spacing:.05em;
   white-space:nowrap; cursor:pointer; box-shadow:var(--shadow);
-  animation:bud .24s ease-out backwards;
+  animation:bud var(--m-in) var(--ease) backwards;
 }
 .bud:hover{background:var(--gold); border-style:solid; border-color:var(--gold); color:var(--pod);}
 .bud:focus-visible{outline:2.5px solid var(--gold); outline-offset:3px;}
@@ -1015,7 +1047,7 @@ body.carrying .pod{transition:none;}
   z-index:var(--z-panel);
   width:252px; padding:16px; border-radius:22px 6px 22px 6px;
   background:var(--pod); border:2px solid var(--gold);
-  box-shadow:var(--lift); animation:bud .2s ease-out backwards;
+  box-shadow:var(--lift); animation:bud var(--m-in) var(--ease) backwards;
   max-height:calc(100vh - 110px); overflow-y:auto;   /* short screens still reach Grow */
 }
 /* A list of people with two things you can do to each needs more than the
@@ -1231,7 +1263,7 @@ body.carrying .pod{transition:none;}
 #form .cardfold>summary::marker{content:'';}
 #form .cardfold>summary::before{
   content:'\203A'; display:inline-block; width:10px; color:var(--gold);
-  font-size:var(--t-name); line-height:1; transform:rotate(0deg); transition:transform .15s;
+  font-size:var(--t-name); line-height:1; transform:rotate(0deg); transition:transform var(--m-tap) var(--ease);
 }
 #form .cardfold[open]>summary::before{transform:rotate(90deg);}
 #form .cardfold>summary:hover{color:var(--gold);}
@@ -1463,7 +1495,7 @@ body.carrying .pod{transition:none;}
   box-shadow:var(--lift);
   font-family:'Karla',sans-serif; font-size:var(--t-read); line-height:1.5;
   color:var(--muted);
-  animation:bud .25s ease-out backwards;
+  animation:bud var(--m-in) var(--ease) backwards;
 }
 
 /* Shown only when the shared tree could not be read. It has to be
@@ -11459,7 +11491,7 @@ function bringIntoView(id){
   else if (s.x > innerWidth - mx) dx = innerWidth - mx - s.x;
   if (s.y < top) dy = top - s.y;
   else if (s.y > innerHeight - bot) dy = innerHeight - bot - s.y;
-  if (dx || dy){ pos.x += dx; pos.y += dy; applyTransform(); }
+  if (dx || dy) glideTo({ x: pos.x + dx, y: pos.y + dy, k: pos.k });
 }
 
 /* Measure what actually got drawn and shift the view so the selected person
@@ -11485,12 +11517,23 @@ function revealBuds(){
     if (box.top < top) dy = top - box.top;
     else if (box.bottom > barTop) dy = barTop - box.bottom;
   }
-  if (dx || dy){ pos.x += dx; pos.y += dy; applyTransform(); }
+  if (dx || dy) glideTo({ x: pos.x + dx, y: pos.y + dy, k: pos.k });
 }
 
+/* AND THE ONE MOVE THAT MUST NOT BE A MOVE.
+ *
+ * The rule the whole motion scale comes down to: the view GLIDES when it is
+ * taking you somewhere, and CUTS when it is holding something still.
+ *
+ * This is the second kind. A row of brothers and sisters has just been re-laid
+ * out underneath somebody's finger, and this cancels the shift so the pod they
+ * are looking at does not slide out from under them. Easing it would animate
+ * the very drift it exists to remove — the pod would travel to where it was
+ * already, over half a second, which is the wrong answer arrived at slowly. */
 function keepSteady(id, before){
   const after = screenOf(id);
   if (!before || !after) return;
+  stopGlide();
   pos.x += before.x - after.x;
   pos.y += before.y - after.y;
   applyTransform();
@@ -13280,6 +13323,10 @@ const zoomAt = (k, cx, cy) => {
 
 stage.addEventListener('pointerdown', e => {
   if (e.target.closest('#form')) return;
+  /* A HAND ON THE TREE ENDS ANY JOURNEY. A glide that fights a drag is a
+     glide that has to be waited out; touching the canvas stops it where it
+     is, which is what a hand on a moving thing does. */
+  stopGlide();
   touches.set(e.pointerId, { x:e.clientX, y:e.clientY });
   if (touches.size === 2){
     const [a, b] = [...touches.values()];
@@ -13364,13 +13411,129 @@ function land(){
   say('Opened where you stand. Fit shows the whole family.');
 }
 
+/* ── HOW THE VIEW TRAVELS ────────────────────────────────────────────────
+ *
+ * It did not. focusOn, bringIntoView and fit all set the position and painted
+ * it, so the view arrived between one frame and the next — the largest
+ * movement this app makes, and the only one with nothing to follow. Meanwhile
+ * a shadow under a pointer was eased over a fifth of a second. That is
+ * backwards: a hover needs no explaining, and being carried across four
+ * generations of a family does.
+ *
+ * "It is confusing to add a name and it jumps to the far side of the screen."
+ *
+ * That was about the LAYOUT moving, and was fixed where it happened. This is
+ * the other half of the same complaint: when the view itself moves, you
+ * should be able to see that it moved rather than find yourself somewhere
+ * else.
+ *
+ * ON THE STYLESHEET'S OWN CURVE. --ease-move is a cubic-bezier, so this
+ * solves that bezier rather than approximating it with whatever easing
+ * function was nearest to hand. One curve named in one place, used by the
+ * page and by the canvas, instead of two that look alike until somebody
+ * changes one.
+ *
+ * WHAT STOPS IT: a hand on the tree. A glide that fights a drag is a glide
+ * that has to be waited out, so touching the canvas ends it where it is. */
+function bezier(x1, y1, x2, y2){
+  // Standard cubic-bezier with P0 at the origin and P3 at (1,1): find t for a
+  // given x by Newton's method, then read y off it. Eight iterations is more
+  // than the two decimal places a frame can show.
+  const cx = 3 * x1, bx = 3 * (x2 - x1) - cx, ax = 1 - cx - bx;
+  const cy = 3 * y1, by = 3 * (y2 - y1) - cy, ay = 1 - cy - by;
+  const xAt = t => ((ax * t + bx) * t + cx) * t;
+  const dxAt = t => (3 * ax * t + 2 * bx) * t + cx;
+  const yAt = t => ((ay * t + by) * t + cy) * t;
+  return x => {
+    let t = x;
+    for (let i = 0; i < 8; i++){
+      const d = dxAt(t);
+      if (Math.abs(d) < 1e-6) break;
+      const e = xAt(t) - x;
+      if (Math.abs(e) < 1e-6) break;
+      t -= e / d;
+    }
+    return yAt(Math.max(0, Math.min(1, t)));
+  };
+}
+/* READ OFF --ease-move, not copied from it. The stylesheet is where the
+   curve is defined — nothing in CSS travels, so the camera is its only user,
+   and a copy of the four numbers here is a copy that drifts. The fallback is
+   the same curve for the case with no document to ask: the tests run this
+   file against a stand-in for the browser. */
+function cssBezier(name, fallback){
+  try {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name);
+    const m = /cubic-bezier\(([^)]*)\)/.exec(v || '');
+    if (!m) return bezier(...fallback);
+    const n = m[1].split(',').map(x => parseFloat(x));
+    if (n.length !== 4 || n.some(x => !Number.isFinite(x))) return bezier(...fallback);
+    return bezier(...n);
+  } catch (e) { return bezier(...fallback); }
+}
+const easeMove = cssBezier('--ease-move', [.4, 0, .2, 1]);
+
+/* AND THE DURATION IS READ OFF THE STYLESHEET, so --m-far is one number in
+   one place rather than one in the CSS and a copy of it here that drifts.
+   Falls back where there is no document to ask — the tests run this file
+   against a stand-in for the browser. */
+const cssMs = (name, fallback) => {
+  try {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    const n = parseFloat(v);
+    if (!Number.isFinite(n) || n <= 0) return fallback;
+    return /ms\s*$/.test(v) ? n : n * 1000;
+  } catch (e) { return fallback; }
+};
+const MOTION_FAR = cssMs('--m-far', 450);
+
+/* Somebody who has asked for less movement is asking about this most of all:
+   a whole screen of family sliding past is the biggest motion here. */
+const stillness = () => {
+  try { return matchMedia('(prefers-reduced-motion: reduce)').matches; }
+  catch (e) { return false; }
+};
+
+let gliding = null;
+function stopGlide(){
+  if (!gliding) return;
+  try { cancelAnimationFrame(gliding.raf); } catch (e) {}
+  gliding = null;
+}
+/* Take the view to `to` over --m-far. Lands exactly on it, always: the last
+   frame is assigned rather than interpolated, so a journey never leaves the
+   view a pixel short of where it was sent. */
+function glideTo(to, ms){
+  stopGlide();
+  const land = () => { pos.x = to.x; pos.y = to.y; pos.k = to.k; applyTransform(); };
+  if (stillness() || typeof requestAnimationFrame !== 'function' ||
+      typeof performance === 'undefined'){ land(); return; }
+  const from = { x:pos.x, y:pos.y, k:pos.k };
+  const far = Math.abs(to.x - from.x) + Math.abs(to.y - from.y);
+  // Nothing worth watching. A glide over four pixels is a stutter, not a move.
+  if (far < 6 && Math.abs(to.k - from.k) < 0.01){ land(); return; }
+  const t0 = performance.now();
+  const span = ms || MOTION_FAR;
+  const step = now => {
+    const t = Math.min(1, (now - t0) / span);
+    if (t >= 1){ gliding = null; land(); return; }
+    const e = easeMove(t);
+    pos.x = from.x + (to.x - from.x) * e;
+    pos.y = from.y + (to.y - from.y) * e;
+    pos.k = from.k + (to.k - from.k) * e;
+    applyTransform();
+    gliding.raf = requestAnimationFrame(step);
+  };
+  gliding = { raf: requestAnimationFrame(step) };
+}
+
 function focusOn(id, k){
   const at = layout.persons[id];
   if (!at) return;
-  pos.k = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, k || 0.78));
-  pos.x = innerWidth/2 - at.x * pos.k;
-  pos.y = (innerHeight + TOPBAR)/2 - at.y * pos.k;
-  applyTransform();
+  const want = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, k || 0.78));
+  glideTo({ k: want,
+            x: innerWidth/2 - at.x * want,
+            y: (innerHeight + TOPBAR)/2 - at.y * want });
 }
 
 function fit(){

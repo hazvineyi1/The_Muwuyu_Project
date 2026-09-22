@@ -146,6 +146,7 @@ function loadFrontend(){
       BONDS, bondBetween, setBond, bondLine, widowedIn, marriageBlock,
       mergedRoom, setAutoMerged(list){ autoMerged = list; }, lightWord,
       growthGaps, growthFor, growthRoom, frontier, isOpenEnd,
+      bezier, easeMove, MOTION_FAR, glideTo, stopGlide, focusOn, getPos(){ return pos; },
       setGrowing(on){ growing = !!on; }, growingNow(){ return growing; },
       pick(id){ sel = id; },
       budsHtml(id){ sel = id; computeLayout(); placeBuds(); return budsHtml(); },

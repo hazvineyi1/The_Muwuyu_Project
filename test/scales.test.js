@@ -215,4 +215,145 @@ section('LIGHT AGREES WITH STACKING');
   eq('two depths and no more', [...depths].sort(), ['--lift', '--shadow']);
 }
 
+// ── and how long things take to get there ─────────────────────────────────
+//
+// BEFORE THIS: seven durations — .15, .18, .2, .24, .25, .45, .55 — several a
+// hundredth of a second apart, which nobody has ever perceived. The same
+// nudged-until-it-looked-right numbers as the type sizes.
+//
+// AND THE MOTION WAS THE WRONG WAY ROUND. The smallest change on the screen, a
+// shadow under a pointer, was eased over 180ms; the largest, the view jumping
+// across the whole tree to somebody you tapped, happened between one frame and
+// the next with nothing to follow. A hover needs no explaining. A journey does.
+
+const DUR  = ['--m-tap', '--m-in', '--m-far', '--m-draw'];
+const EASE = ['--ease', '--ease-move', '--ease-pop'];
+const msOf = t => Number((css.match(new RegExp(`\\${t}:\\s*(\\d+)ms`)) || [])[1]);
+
+section('FOUR DURATIONS, AND EACH ONE A DIFFERENT KIND OF MOVEMENT');
+{
+  const missing = DUR.filter(t => !Number.isFinite(msOf(t)));
+  eq('all four are set, in milliseconds', missing, []);
+  /* --ease-move is the exception and is meant to be: nothing in CSS travels,
+     so the camera is its only user. It is DECLARED here because this is where
+     the curve is defined, and read from here by the page. */
+  const unused = DUR.concat(EASE)
+    .filter(t => t !== '--ease-move')
+    .filter(t => !new RegExp(`var\\(\\${t}\\)`).test(css));
+  eq('and every one of them is used by a rule', unused, []);
+  check('and the one that is not is read by the page instead',
+        /cssBezier\('--ease-move'/.test(html), 'nothing reads --ease-move');
+  const order = DUR.map(msOf);
+  eq('they go up, and no two are the same',
+     order, [...new Set(order)].sort((a, b) => a - b));
+  /* A hundredth of a second apart is not a step. */
+  const gaps = order.slice(1).map((v, i) => v / order[i]);
+  check('and each is far enough from the last to be a different speed',
+        gaps.every(g => g >= 1.15), JSON.stringify(order));
+}
+
+section('AND NOTHING MOVES ON A NUMBER THAT IS NOT ONE OF THEM');
+{
+  const loose = [];
+  for (const m of css.matchAll(/(?:transition|animation):([^;}]+)/g)){
+    const v = m[1].trim();
+    if (v === 'none') continue;
+    /* The tokens out first — var(--ease) contains the word "ease". */
+    const bare = v.replace(/var\(--[a-z-]+\)/g, '');
+    for (const t of bare.matchAll(/(\d*\.?\d+)(m?s)\b/g)) loose.push(t[0]);
+    for (const e of bare.matchAll(/cubic-bezier\([^)]*\)|ease-in-out|ease-out|ease-in|\bease\b/g))
+      loose.push(e[0]);
+  }
+  eq('every duration and every curve is a token', [...new Set(loose)], []);
+}
+
+section('THREE CURVES, AND THE OVERSHOOT IS ONLY FOR A NEW PERSON');
+/* A spring is a delight once and a tic on everything. */
+{
+  const pop = (css.match(/--ease-pop:\s*(cubic-bezier\([^)]*\))/) || [])[1] || '';
+  const y1 = Number((pop.match(/cubic-bezier\([^,]*,\s*([-0-9.]+)/) || [])[1]);
+  check('the pop curve overshoots', y1 > 1, pop);
+  const uses = (css.match(/var\(--ease-pop\)/g) || []).length;
+  eq('and exactly one thing uses it', uses, 1);
+  check('and that thing is a new person landing',
+        /animation:pop var\(--m-far\) var\(--ease-pop\)/.test(css), 'the pop moved');
+  for (const t of ['--ease', '--ease-move']){
+    const c = (css.match(new RegExp(`\\${t}:\\s*(cubic-bezier\\([^)]*\\))`)) || [])[1] || '';
+    const ys = [...c.matchAll(/,\s*([-0-9.]+)/g)].map(x => Number(x[1]));
+    check(`${t} does not overshoot`, ys.every(y => y <= 1 && y >= 0), c);
+  }
+}
+
+section('THE CAMERA TRAVELS ON THE STYLESHEET’S OWN CURVE');
+/* One curve named in one place, solved rather than approximated — not two
+   that look alike until somebody changes one. */
+{
+  const { loadFrontend } = require('./helpers');
+  const fe = loadFrontend();
+  const move = (css.match(/--ease-move:\s*cubic-bezier\(([^)]*)\)/) || [])[1] || '';
+  const [x1, y1, x2, y2] = move.split(',').map(Number);
+  const mine = fe.bezier(x1, y1, x2, y2);
+  eq('the page solves the same four numbers', [x1, y1, x2, y2], [0.4, 0, 0.2, 1]);
+  check('it starts at nothing', Math.abs(mine(0) - 0) < 1e-6, String(mine(0)));
+  check('and ends at everything', Math.abs(mine(1) - 1) < 1e-6, String(mine(1)));
+  check('it never goes backwards',
+        [...Array(40)].every((_, i) => mine(i / 40) <= mine((i + 1) / 40) + 1e-9));
+  /* Eased at BOTH ends, which is what makes a long journey readable: it is
+     behind a straight line at the start and ahead of it in the middle. */
+  check('slow away from the start', mine(0.15) < 0.15, String(mine(0.15)));
+  check('quick through the middle', mine(0.5) > 0.45, String(mine(0.5)));
+  check('and slow into the end', 1 - mine(0.85) < 0.15, String(1 - mine(0.85)));
+  /* The duration is read off the stylesheet where there is one to read, and
+     falls back to the same number where there is not. */
+  eq('and the duration the page uses is the one in the stylesheet',
+     fe.MOTION_FAR, msOf('--m-far'));
+}
+
+section('AND SOMEBODY WHO ASKED FOR STILLNESS GETS A CUT, NOT A GLIDE');
+/* A whole screen of family sliding past is the biggest motion here, so it is
+   the one that most needs to be refusable. */
+{
+  check('the stylesheet stands everything down',
+        /prefers-reduced-motion: reduce\)\{[^}]*animation-duration:\.01ms/.test(
+          css.replace(/\s+/g, '')) ||
+        /prefers-reduced-motion:reduce\)\{[^}]*animation-duration:\.01ms/.test(
+          css.replace(/\s+/g, '')),
+        'the reduced-motion block has changed');
+  check('and the camera asks the same question before it moves',
+        /prefers-reduced-motion: reduce/.test(html.split('</style>')[1] || ''),
+        'glideTo does not check for reduced motion');
+}
+
+section('A JOURNEY LANDS EXACTLY WHERE IT WAS SENT');
+/* Interpolating the last frame leaves the view a pixel short for good. */
+{
+  const { loadFrontend } = require('./helpers');
+  const fe = loadFrontend();
+  fe.glideTo({ x: 123, y: -456, k: 0.9 });
+  const pos = fe.getPos();
+  eq('exactly there', [pos.x, pos.y, pos.k], [123, -456, 0.9]);
+}
+
+section('THE VIEW GLIDES WHEN IT TAKES YOU SOMEWHERE, AND CUTS WHEN IT HOLDS STILL');
+/* The rule the whole motion scale comes down to, and the two of them live
+   eight lines apart. keepSteady cancels a layout shift so the pod under
+   somebody's finger does not slide out from under them — easing that would
+   animate the very drift it exists to remove. */
+{
+  const js = html.split('</style>')[1] || '';
+  const body = name => {
+    const at = js.indexOf(`function ${name}(`);
+    return at < 0 ? '' : js.slice(at, js.indexOf('\n}', at));
+  };
+  for (const going of ['focusOn', 'bringIntoView', 'revealBuds']){
+    check(`${going} travels`, /glideTo\(/.test(body(going)), body(going).slice(0, 120));
+  }
+  const still = body('keepSteady');
+  check('keepSteady does not', !/glideTo\(/.test(still), still);
+  check('and stops any journey that was already running, rather than fighting it',
+        /stopGlide\(\)/.test(still), still);
+  check('a hand on the tree stops one too',
+        /pointerdown[\s\S]{0,500}stopGlide\(\)/.test(js), 'nothing stops a glide on a drag');
+}
+
 report();
