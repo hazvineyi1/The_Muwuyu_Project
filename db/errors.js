@@ -28,5 +28,11 @@ const cycle      = (msg, details) => new OpError(422, 'cycle', msg, details);
 // because it is the one refusal a family will actually meet and the page has
 // something better to say about it than "that could not be saved".
 const adrift     = (msg, details) => new OpError(422, 'not_joined', msg, details);
+// A write that reached outside the one branch of the family it was given.
+// 403 and not 404: the people holding a branch know perfectly well that the
+// rest of the family exists — they are related to it — and pretending records
+// do not exist would make the app lie to relatives rather than keep a wall.
+const outOfBranch = (msg, details) => new OpError(403, 'not_your_branch', msg, details);
 
-module.exports = { OpError, ConflictError, badRequest, notFound, cycle, adrift };
+module.exports = { OpError, ConflictError, badRequest, notFound, cycle, adrift,
+                   outOfBranch };

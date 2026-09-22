@@ -369,6 +369,108 @@ async function fullTree(pool, treeId) {
   };
 }
 
+/* ── ONE SIDE OF THE FAMILY, AND NOTHING ELSE ─────────────────────────────
+ *
+ * "I want to give that family access to only grow that aspect without them
+ *  seeing the full tree, only limited to their part."
+ *
+ * A SEPARATE FUNCTION, not a flag on fullTree, for the reason written two
+ * functions down about publicTree: a boolean parameter on a read is one `if`
+ * away from serving the whole family to somebody holding one branch, and that
+ * mistake is silent. This one has no way to return a person outside the
+ * branch, because it is handed the branch and asks for nothing else.
+ *
+ * It takes the member set rather than working it out, so that the one place
+ * that decides who is in a branch is db/branch.js and there is never a second
+ * answer to that question living in the read layer.
+ *
+ * WHAT IS DELIBERATELY MISSING:
+ *
+ *   the root         A branch has no taproot of its own. Handing over the
+ *                    family's root would name somebody they may not see, and
+ *                    the page manages without one — it opens on the anchor.
+ *   total            The size of the family is a fact about the family. A
+ *                    branch is told the size of the branch.
+ *   set-aside people from outside the branch, obviously, and from inside it
+ *                    they come through as everywhere else so they can be put
+ *                    back by the people who know them.
+ *
+ * The lexicon IS shared, whole. A family's own word for a shape is the
+ * family's word, it names nobody, and a branch that could not read it would
+ * produce English kin terms — which is the one thing this project will not
+ * do. */
+async function branchTree(pool, treeId, { members, unions: unionIds, anchorId, name }) {
+  const { rowCount } = await pool.query('SELECT 1 FROM trees WHERE id = $1', [treeId]);
+  if (!rowCount) throw notFound(`tree ${treeId} does not exist`);
+
+  const ids = [...members];
+  const seq = await headSeq(pool, treeId);
+  if (!ids.length) {
+    return { treeId, seq, people: [], unions: [], notDuplicates: [], lexicon: {},
+             rootId: null, total: 0, branch: { anchorId, name } };
+  }
+  const uids = [...unionIds];
+
+  const [peopleR, unionsR, ndR, termsR] = await Promise.all([
+    pool.query(`SELECT ${PERSON_COLS} FROM people
+                 WHERE tree_id = $1 AND id = ANY($2::uuid[]) ORDER BY created_at`,
+               [treeId, ids]),
+    uids.length ? pool.query(`
+      SELECT u.id, u.updated_at, u.bond,
+             COALESCE((SELECT array_agg(up.person_id ORDER BY up.position)
+                         FROM union_partners up WHERE up.union_id = u.id), '{}') AS partners,
+             COALESCE((SELECT array_agg(uc.person_id ORDER BY uc.birth_order)
+                         FROM union_children uc WHERE uc.union_id = u.id), '{}') AS children
+        FROM unions u WHERE u.tree_id = $1 AND u.id = ANY($2::uuid[])
+        ORDER BY u.created_at`, [treeId, uids])
+      : Promise.resolve({ rows: [] }),
+    // Both halves of a dismissal must be inside, or it names somebody outside.
+    pool.query(`SELECT a_id, b_id FROM not_duplicates
+                 WHERE tree_id = $1 AND a_id = ANY($2::uuid[]) AND b_id = ANY($2::uuid[])`,
+               [treeId, ids]),
+    pool.query('SELECT shape, term, note, by, at FROM kin_terms WHERE tree_id = $1', [treeId])
+  ]);
+
+  const lexicon = {};
+  for (const t of termsR.rows) {
+    lexicon[t.shape] = { term: t.term, note: t.note, by: t.by, at: t.at };
+  }
+
+  return {
+    treeId, seq,
+    people: peopleR.rows,
+    unions: unionsR.rows.map(u => ({
+      id: u.id, updated_at: u.updated_at, bond: u.bond || '',
+      partners: u.partners.slice(), children: u.children.slice()
+    })),
+    notDuplicates: ndR.rows.map(r => [r.a_id, r.b_id]),
+    lexicon,
+    // The anchor stands in for the root: it is the person this side of the
+    // family is reckoned from and the one person they are certain to know.
+    rootId: null,
+    total: peopleR.rows.filter(p => !p.aside_at).length,
+    branch: { anchorId, name }
+  };
+}
+
+/* What changed, of the things this branch may see.
+ *
+ * The page uses the changes feed as a SIGNAL — anything at all in it makes it
+ * re-read the tree — so filtering here costs nothing and closes a door that
+ * would otherwise be wide open: the feed carries op payloads, which carry
+ * names. A Mandaba must not learn that somebody was added on the other side,
+ * let alone who.
+ *
+ * `head` is the family's true head and stays so, because it is a number with
+ * no information in it and because the cursor has to be able to move past
+ * changes this branch cannot see — otherwise every poll re-reads the same
+ * range for ever. */
+async function branchChanges(pool, treeId, since, limit, { members, unions: unionIds }) {
+  const all = await changesSince(pool, treeId, since, limit);
+  const mine = new Set([...members, ...unionIds]);
+  return { ...all, changes: all.changes.filter(c => mine.has(c.entity_id)) };
+}
+
 /* The tree as the world sees it.
  
    A separate function rather than a flag on fullTree, and that is deliberate.
@@ -477,5 +579,6 @@ async function setAsideList(pool, treeId, { recordedBy } = {}) {
   };
 }
 
-module.exports = { bootstrap, fullTree, publicTree, publicPerson, changesSince,
+module.exports = { bootstrap, fullTree, branchTree, branchChanges,
+                   publicTree, publicPerson, changesSince,
                    search, headSeq, familyContext, trigramAvailable, setAsideList };

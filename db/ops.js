@@ -11,9 +11,10 @@
 // the same rows, and two people editing the SAME person is detected and
 // reported rather than resolved by whoever happened to save last.
 
-const { ConflictError, badRequest, notFound, cycle, adrift } = require('./errors');
+const { ConflictError, badRequest, notFound, cycle, adrift, outOfBranch } = require('./errors');
 const graph = require('./graph');
 const joined = require('./joined');
+const branch = require('./branch');
 
 // Namespace for this app's advisory locks, so a tree lock can never collide
 // with the migration lock in db/migrate.js.
@@ -1072,6 +1073,32 @@ async function applyOps(pool, treeId, ops, actor = '', opts = {}) {
     const { rowCount } = await client.query('SELECT 1 FROM trees WHERE id = $1', [treeId]);
     if (!rowCount) throw notFound(`tree ${treeId} does not exist`);
 
+    /* ── BEFORE: EVERY RECORD THIS BATCH NAMES IS ALREADY INSIDE ──────────
+     *
+     * Read before a single op runs, so a refusal costs nothing and cannot
+     * half-apply. Reading it after would be reading the tree the batch made,
+     * which is the wrong tree to ask. */
+    let wasInside = null;
+    if (opts.within && opts.within.anchorId) {
+      wasInside = await branch.membersOf(client, treeId, opts.within.anchorId);
+      const mineUnions = await branch.unionsOf(client, treeId, wasInside);
+      const named = branch.idsNamedBy(ops);
+      const outside = [...named].filter(id => !wasInside.has(id) && !mineUnions.has(id));
+      if (outside.length) {
+        /* NAMED, BUT NOT NAMED. Which records were refused is said by count
+           and not by name: half the point of a branch is that the people
+           holding it cannot enumerate the rest of the family, and an error
+           message that listed what they had just reached for would hand them
+           exactly that, one guess at a time. */
+        throw outOfBranch(
+          outside.length === 1
+            ? 'That is not part of the family you were given. Nothing has been changed.'
+            : `${outside.length} of those are not part of the family you were ` +
+              'given. Nothing has been changed.',
+          { count: outside.length });
+      }
+    }
+
     const refs = new Map();
     const ctx = { client, treeId, actor, refs, resolve: makeResolver(refs) };
 
@@ -1115,6 +1142,34 @@ async function applyOps(pool, treeId, ops, actor = '', opts = {}) {
               `relatives they belong to and add them from there.`) +
           ' Nothing has been changed.',
           { people: loose, names: said });
+      }
+    }
+
+    /* ── AFTER: EVERY RECORD THIS BATCH MADE ENDS UP INSIDE ───────────────
+     *
+     * A branch is closed under growing — a parent of a Mandaba is a Mandaba
+     * ancestor, a brother is a child of those ancestors — so everything these
+     * relatives would naturally add is already inside and this fires only on
+     * the one thing they may not do: reach sideways through a marriage into
+     * somebody else's house. */
+    if (wasInside) {
+      const nowInside = await branch.membersOf(client, treeId, opts.within.anchorId);
+      const made = [];
+      for (const [i, op] of ops.entries()) {
+        if (op?.op !== 'addPerson') continue;
+        const id = op.ref ? refs.get(op.ref) : results[i]?.id;
+        if (id) made.push(id);
+      }
+      const strays = made.filter(id => !nowInside.has(id));
+      if (strays.length) {
+        const { rows: names } = await client.query(
+          'SELECT name FROM people WHERE id = ANY($1::uuid[]) ORDER BY name', [strays]);
+        const said = names.map(r => r.name).filter(Boolean);
+        throw outOfBranch(
+          `${said.join(', ') || 'That name'} would sit outside the family you ` +
+          'were given. Add them from somebody on your own side and they will ' +
+          'be in it. Nothing has been changed.',
+          { count: strays.length, names: said });
       }
     }
 

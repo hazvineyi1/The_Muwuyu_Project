@@ -47,6 +47,25 @@ const THRESHOLD = Number(process.env.MW_DUPLICATE_THRESHOLD || 0.5);
 // signal, or an overwhelming score. A name alone can never reach either.
 const isLikely = d => d.strong || d.score >= 0.75;
 
+/* AND A LOWER BAR FOR SOMEBODY WHO CANNOT LOOK FOR THEMSELVES.
+ *
+ * "If they should have a duplication, they are told that that person is
+ *  already added to the family tree."
+ *
+ * Every threshold above is set for a family that can see its own tree: if the
+ * app is unsure, it says nothing and they scroll and find out. A family given
+ * one SIDE of the tree cannot do that. The thing they would check is the thing
+ * they were not shown, so silence there is not caution, it is a duplicate
+ * being made on purpose by an app that knew better.
+ *
+ * 0.45 is exactly "the same name, and at least one other fact agreeing" — the
+ * same mutupo, or the same birth year, or a shared marriage. A NAME ON ITS OWN
+ * still says nothing (0.34), and it must not: three living Garikais in one
+ * family is ordinary because children are named after their grandfathers, and
+ * an app that announced every one of them would be reading the other side of
+ * the wall aloud, one common name at a time. */
+const BEHIND_A_WALL = 0.45;
+
 const TITLES = new Set([
   'sekuru','tateguru','ambuya','mbuya','gogo','baba','babamukuru','babamunini',
   'amai','mai','mainini','maiguru','tete','vatete','mudhara','mukoma','muninina',
@@ -645,6 +664,68 @@ async function conclusiveFor(pool, treeId, ids){
   return out;
 }
 
+/* The pairs worth MENTIONING involving any of `ids` — the same scoped, bucketed
+ * question as conclusiveFor, asked at the ordinary threshold rather than at
+ * certainty.
+ *
+ * "If they should have a duplication, they are told that that person is
+ *  already added to the family tree."
+ *
+ * Which is a different need from folding. A family working on one side of the
+ * tree cannot see the other side, so the commonest duplicate they will make is
+ * one they had no way of knowing about — a cousin who married into the other
+ * house and was written down there years ago. Folding those automatically
+ * needs certainty. TELLING somebody needs only a good reason to think it, and
+ * being told is the whole of what was asked for.
+ *
+ * Whole-tree, on purpose: the point is precisely the people the person writing
+ * cannot see. What is DONE with that — which of these are named, and what else
+ * about them is said — is the caller's to decide, and the caller behind a wall
+ * says the name and nothing else. */
+async function likelyFor(pool, treeId, ids, { threshold = THRESHOLD } = {}){
+  const want = new Set((ids || []).filter(Boolean));
+  if (!want.size) return [];
+  const g = await loadTree(pool, treeId);
+  const gen = generations(g);
+
+  const byKey = new Map(), byPrefix = new Map();
+  for (const p of g.people){
+    if (!p.name_key) continue;
+    if (!byKey.has(p.name_key)) byKey.set(p.name_key, []);
+    byKey.get(p.name_key).push(p);
+    const pk = p.name_key.slice(0, PREFIX_BLOCK);
+    if (!byPrefix.has(pk)) byPrefix.set(pk, []);
+    byPrefix.get(pk).push(p);
+  }
+
+  const seen = new Set(), out = [];
+  for (const p of g.people){
+    if (!want.has(p.id) || !p.name_key) continue;
+    const near = new Map();
+    for (const q of (byKey.get(p.name_key) || [])) near.set(q.id, q);
+    for (const q of (byPrefix.get(p.name_key.slice(0, PREFIX_BLOCK)) || [])) near.set(q.id, q);
+    for (const q of near.values()){
+      if (q.id === p.id) continue;
+      let a = p, b = q;
+      if (a.id > b.id) [a, b] = [b, a];
+      const key = `${a.id}|${b.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (g.dismissed.has(key)) continue;
+      const m = sameness(g, gen, a.id, b.id);
+      if (!m || m.score < threshold) continue;
+      // Which of the two is the one just written, so a caller can say "the one
+      // you typed" without working it out again.
+      out.push({ mine: want.has(a.id) ? publicPerson(a) : publicPerson(b),
+                 theirs: want.has(a.id) ? publicPerson(b) : publicPerson(a),
+                 score: m.score, why: m.why, against: m.against || [] });
+    }
+  }
+  return out;
+}
+
+module.exports.likelyFor = likelyFor;
+module.exports.BEHIND_A_WALL = BEHIND_A_WALL;
 module.exports.conclusive = conclusive;
 module.exports.conclusiveFor = conclusiveFor;
 module.exports.findDuplicates = findDuplicates;

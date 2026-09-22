@@ -286,23 +286,27 @@ function forgetTree(treeId) {
 async function createSession(pool, {
   scope, treeId = null, via = '', inviteId = null, actor = '',
   ip = null, userAgent = '', passcodeGen = 0, days = SESSION_DAYS,
-  personId = null, personVia = 'self'
+  personId = null, personVia = 'self',
+  // One branch of the family, or null for all of it. A branch session is a
+  // NARROWER thing than a family session and is only ever handed out by
+  // somebody who already holds the whole family. See db/branch.js.
+  branchId = null
 } = {}) {
   const raw = token();
   const { rows } = await pool.query(
     `INSERT INTO sessions
        (token_hash, scope, tree_id, passcode_gen, via, invite_id, actor,
         expires_at, created_ip, last_ip, user_agent, person_id, person_set_at,
-        person_via)
+        person_via, branch_id)
      VALUES ($1, $2, $3, $4, $5, $6, $7,
              clock_timestamp() + ($8 || ' days')::interval, $9::text::inet,
              $9::text::inet, $10, $11,
              CASE WHEN $11::uuid IS NULL THEN NULL ELSE clock_timestamp() END,
-             CASE WHEN $11::uuid IS NULL THEN '' ELSE $12 END)
-     RETURNING id, scope, tree_id, expires_at, person_id, person_via`,
+             CASE WHEN $11::uuid IS NULL THEN '' ELSE $12 END, $13)
+     RETURNING id, scope, tree_id, expires_at, person_id, person_via, branch_id`,
     [sha256(raw).toString('hex'), scope, treeId, passcodeGen, via, inviteId,
      String(actor || '').slice(0, 120), String(days), ip,
-     String(userAgent || '').slice(0, 400), personId, personVia]);
+     String(userAgent || '').slice(0, 400), personId, personVia, branchId]);
 
   return { ...rows[0], cookie: `${rows[0].id}.${raw}` };
 }
@@ -331,7 +335,7 @@ async function readSession(pool, cookieValue) {
     const { rows } = await pool.query(
       `SELECT s.id, s.token_hash, s.scope, s.tree_id, s.passcode_gen, s.via,
               s.actor, s.expires_at, s.revoked_at, s.person_id, s.person_set_at,
-              s.person_via, p.name AS person_name,
+              s.person_via, s.branch_id, p.name AS person_name,
               t.name AS tree_name, t.handle, t.passcode_gen AS tree_gen,
               t.suspended_at
          FROM sessions s
@@ -368,7 +372,13 @@ async function readSession(pool, cookieValue) {
     personSetAt: row.person_set_at || null,
     // 'invite' means somebody else named them and this session cannot
     // re-answer; 'self' means it said so itself, with a shared passcode.
-    personVia: row.person_via || ''
+    personVia: row.person_via || '',
+    /* THE ONE BRANCH THIS SESSION MAY READ AND WRITE, or null for the whole
+       family — which is what every session in this deployment already is.
+       Carried here because it has to be known on every single request: it
+       decides what the tree looks like and what a write is allowed to touch,
+       and a wall consulted only sometimes is not a wall. */
+    branchId: row.branch_id || null
   } : null;
 
   cache.set(id, { until: Date.now() + CACHE_MS, session, tokenHash: row.token_hash,
@@ -665,7 +675,8 @@ async function decoyHash() {
    forwarded any number of times. A family that wants a link for the whole
    WhatsApp group can say so with uses. */
 async function createInvite(pool, treeId, {
-  by = '', note = '', days = INVITE_DAYS, uses = 1, forPersonId = null
+  by = '', note = '', days = INVITE_DAYS, uses = 1, forPersonId = null,
+  branchId = null
 } = {}) {
   const raw = token();
 
@@ -692,16 +703,36 @@ async function createInvite(pool, treeId, {
     forPerson = who[0];
   }
 
+  /* AND AN INVITATION TO ONE SIDE OF IT. Checked here rather than trusted,
+     because a link is the thing that gets forwarded: a branch id belonging to
+     another family would otherwise hand this family's link to that family's
+     tree. */
+  let branch = null;
+  if (branchId) {
+    const { rows: b } = await pool.query(
+      `SELECT id, name FROM branches
+        WHERE id = $1 AND tree_id = $2 AND retired_at IS NULL`, [branchId, treeId]);
+    if (!b.length) {
+      const e = new Error('That branch is not one of this family\'s.');
+      e.status = 400; e.code = 'no_such_branch';
+      throw e;
+    }
+    branch = b[0];
+  }
+
   const { rows } = await pool.query(
     `INSERT INTO invites (tree_id, token_hash, created_by, note, expires_at, max_uses,
-                          for_person_id)
-     VALUES ($1, $2, $3, $4, clock_timestamp() + ($5 || ' days')::interval, $6, $7)
-     RETURNING id, tree_id, created_at, expires_at, max_uses, uses, note, for_person_id`,
+                          for_person_id, branch_id)
+     VALUES ($1, $2, $3, $4, clock_timestamp() + ($5 || ' days')::interval, $6, $7, $8)
+     RETURNING id, tree_id, created_at, expires_at, max_uses, uses, note, for_person_id,
+               branch_id`,
     [treeId, sha256(raw).toString('hex'), String(by || '').slice(0, 120),
      String(note || '').slice(0, 200), String(Math.max(1, Math.min(365, Number(days) || INVITE_DAYS))),
-     Math.max(1, Math.min(500, Number(uses) || 1)), forPerson ? forPerson.id : null]);
+     Math.max(1, Math.min(500, Number(uses) || 1)), forPerson ? forPerson.id : null,
+     branch ? branch.id : null]);
   // The token is returned once and never again — same rule as the passcode.
-  return { ...rows[0], forPersonName: forPerson ? forPerson.name : '', token: raw };
+  return { ...rows[0], forPersonName: forPerson ? forPerson.name : '',
+           branchName: branch ? branch.name : '', token: raw };
 }
 
 /* Take up an invitation. The whole check-and-consume is one statement so that
@@ -718,7 +749,7 @@ async function acceptInvite(pool, rawToken, { ip = null, userAgent = '', actor =
         AND revoked_at IS NULL
         AND expires_at > clock_timestamp()
         AND uses < max_uses
-      RETURNING id, tree_id, for_person_id`,
+      RETURNING id, tree_id, for_person_id, branch_id`,
     [sha256(rawToken).toString('hex')]);
 
   if (!rows.length) return { ok: false, reason: 'not_usable' };
@@ -736,22 +767,28 @@ async function acceptInvite(pool, rawToken, { ip = null, userAgent = '', actor =
     passcodeGen: trees[0].passcode_gen, actor, ip, userAgent,
     // Named by whoever sent the link, so this session never has to be asked
     // and never gets to answer differently.
-    personId: rows[0].for_person_id || null, personVia: 'invite'
+    personId: rows[0].for_person_id || null, personVia: 'invite',
+    /* A LINK TO ONE SIDE OF THE FAMILY OPENS ONE SIDE OF THE FAMILY. The
+       narrowing is on the invitation, so it cannot be widened by whoever
+       opens it — there is nothing for them to answer differently. */
+    branchId: rows[0].branch_id || null
   });
   return { ok: true, inviteId: rows[0].id, treeId: trees[0].id,
            treeName: trees[0].name, handle: trees[0].handle,
-           personId: rows[0].for_person_id || null, session };
+           personId: rows[0].for_person_id || null,
+           branchId: rows[0].branch_id || null, session };
 }
 
 async function listInvites(pool, treeId, { limit = 50 } = {}) {
   const { rows } = await pool.query(
     `SELECT i.id, i.created_by, i.created_at, i.expires_at, i.max_uses, i.uses,
-            i.note, i.revoked_at, i.revoked_by, i.for_person_id,
-            p.name AS for_person_name,
+            i.note, i.revoked_at, i.revoked_by, i.for_person_id, i.branch_id,
+            p.name AS for_person_name, b.name AS branch_name,
             (i.revoked_at IS NULL AND i.expires_at > clock_timestamp()
              AND i.uses < i.max_uses) AS usable
        FROM invites i
        LEFT JOIN people p ON p.id = i.for_person_id
+       LEFT JOIN branches b ON b.id = i.branch_id
       WHERE i.tree_id = $1
       ORDER BY i.created_at DESC LIMIT $2`,
     [treeId, Math.max(1, Math.min(200, Number(limit) || 50))]);

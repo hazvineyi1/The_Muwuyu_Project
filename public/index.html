@@ -9037,6 +9037,36 @@ function openFamily(){
     `<p class="lbl" style="margin-top:16px;">Invitations you have made</p>` +
     `<div id="famInviteList"><p class="covnote">Looking…</p></div>` +
 
+    /* ── SHARING ONE SIDE OF THE FAMILY ───────────────────────────────────
+     *
+     * "I want to grow my mother's side of the family, Mandaba. I want to give
+     *  that family access to only grow that aspect without them seeing the
+     *  full tree, only limited to their part."
+     *
+     * The panel above hands somebody the WHOLE family. This hands them one
+     * house of it, to read and to grow, and nothing else. Which people that
+     * is comes from one person — see db/branch.js — and it is shown in full
+     * before anything is given out, because "who exactly will they be able to
+     * see" is the only question worth asking here and it must not have to be
+     * taken on trust. */
+    /* NOT OFFERED TO SOMEBODY WHO HOLDS ONE SIDE. The server refuses it
+       either way — access in this project only ever narrows — but offering an
+       act and then refusing it is a worse answer than not offering it. */
+    (onBranch ? '' :
+    `<p class="lbl" style="margin-top:16px;">Share one side of the family</p>` +
+    `<p class="covnote">Pick whose side it is. They get that person, everybody ` +
+    `above them, everybody below those, and the husbands and wives of all of ` +
+    `them — to read and to add to. The walk stops at a husband or a wife: their ` +
+    `own parents and brothers stay their family's business, and the rest of this ` +
+    `tree stays yours.</p>` +
+    `<input id="famSideWho" class="fld" placeholder="Whose side? Search the family" autocomplete="off">` +
+    `<div class="kinlist" id="famSideList"></div>` +
+    `<div id="famSidePreview"></div>` +
+    `<input id="famSideName" class="fld" placeholder="What do you call it? e.g. the Mandaba side" autocomplete="off">` +
+    `<div class="row"><button class="btn" id="famSideGo">Share it</button></div>` +
+    `<div id="famSideOut"></div>` +
+    `<div id="famSideList2"><p class="covnote">Looking…</p></div>`) +
+
     `<p class="lbl" style="margin-top:16px;">Start another family</p>` +
     `<p class="covnote">A separate tree, with its own passcode. Useful when the ` +
     `people you are recording are not related to the family above — the two ` +
@@ -9145,6 +9175,136 @@ function openFamily(){
     });
   };
   $('famFor').oninput = drawFor;
+
+  /* ── SHARING ONE SIDE ─────────────────────────────────────────────────
+   *
+   * Three steps and the middle one is the point: pick whose side, SEE WHO
+   * THAT IS, then hand it over. A panel that went straight from a name to a
+   * link would be asking somebody to give away part of their family on a
+   * description of an algorithm. */
+  let sideWho = null;
+  const drawSide = async () => {
+    if (!$('famSideWho')) return;
+    const q = $('famSideWho').value.trim();
+    const box = $('famSideList'), out = $('famSidePreview');
+    if (sideWho && state.people[sideWho]){
+      box.innerHTML = '';
+      out.innerHTML = `<p class="browse">Working out who that is…</p>`;
+      try {
+        const r = await fetch(`/api/branches/preview?anchorId=${encodeURIComponent(sideWho)}`);
+        if (!r.ok) throw new Error('answered ' + r.status);
+        const d = await r.json();
+        /* NAMED IN FULL, not counted. "14 of 60" is a number somebody has to
+           trust; a list of fourteen names is something they can read and
+           disagree with before anybody else sees it. */
+        out.innerHTML =
+          `<p class="maybe">Whoever you send this to will see these ` +
+          `<b>${d.size}</b> of the ${d.family} in this family, and nobody else. ` +
+          `<button type="button" class="linkbtn" id="famSideElse">somebody else</button></p>` +
+          `<div class="kinlist browse">` +
+          d.people.map(p => `<button type="button" disabled>${esc(p.name)}</button>`).join('') +
+          `</div>`;
+        const other = $('famSideElse');
+        if (other) other.onclick = () => {
+          sideWho = null; $('famSideWho').value = ''; drawSide();
+        };
+      } catch (e) {
+        out.innerHTML = `<p class="warn">That could not be worked out just now.</p>`;
+      }
+      return;
+    }
+    out.innerHTML = '';
+    if (!q){ box.innerHTML = ''; return; }
+    const hits = people().filter(p => matchesName(p, q)).slice(0, 6);
+    box.innerHTML = hits.length
+      ? hits.map(p => `<button type="button" data-side="${p.id}">${esc(p.name)}` +
+          `<small>${esc(positionOf(p.id))}</small></button>`).join('')
+      : `<p class="covnote">Nobody of that name is in this family.</p>`;
+    box.querySelectorAll('[data-side]').forEach(b => b.onclick = () => {
+      sideWho = b.dataset.side;
+      $('famSideWho').value = state.people[sideWho].name;
+      if (!$('famSideName').value.trim()){
+        // A sensible name they can overwrite. A surname is what a family calls
+        // a side of itself, so the last word of the anchor's name is the best
+        // guess there is and it is only ever a guess.
+        const sur = state.people[sideWho].name.trim().split(/\s+/).pop();
+        $('famSideName').value = sur ? `the ${sur} side` : '';
+      }
+      drawSide();
+    });
+  };
+  if ($('famSideWho')) $('famSideWho').oninput = drawSide;
+
+  if ($('famSideGo')) $('famSideGo').onclick = async () => {
+    if (!sideWho){
+      $('famSideOut').innerHTML = `<p class="warn">Pick whose side it is first.</p>`;
+      $('famSideWho').focus();
+      return;
+    }
+    $('famSideGo').disabled = true;
+    try {
+      const r = await fetch('/api/branches', {
+        method:'POST', headers:{ 'Content-Type':'application/json',
+                                 'X-Muti-Actor': meName() },
+        body: JSON.stringify({ anchorId: sideWho, name: $('famSideName').value.trim() })
+      });
+      if (!r.ok) throw new Error('answered ' + r.status);
+      const made = await r.json();
+      // And straight into a link for it, because sharing a side and not being
+      // able to send it to anybody is half an act.
+      const link = await fetch('/api/invites', {
+        method:'POST', headers:{ 'Content-Type':'application/json',
+                                 'X-Muti-Actor': meName() },
+        body: JSON.stringify({ branchId: made.id, note: made.name, uses: 1 })
+      });
+      if (!link.ok) throw new Error('answered ' + link.status);
+      showInvite(await link.json());
+      sideWho = null;
+      $('famSideWho').value = ''; $('famSideName').value = '';
+      drawSide(); loadSides(); loadInvites();
+      say(`${made.name || 'That side'} is shared — ${made.size} people.`);
+    } catch (e) {
+      $('famSideOut').innerHTML =
+        `<p class="warn">That could not be shared just now.</p>`;
+    }
+    $('famSideGo').disabled = false;
+  };
+
+  const loadSides = async () => {
+    const box = $('famSideList2');
+    if (!box) return;
+    try {
+      const r = await fetch('/api/branches');
+      if (!r.ok) throw new Error('answered ' + r.status);
+      const d = await r.json();
+      if (!d.branches.length){ box.innerHTML = ''; return; }
+      box.innerHTML =
+        `<p class="teachlbl">Sides you have shared</p>` +
+        d.branches.map(b =>
+          `<p class="covnote"><b>${esc(b.name || b.anchor.name)}</b> — around ` +
+          `${esc(b.anchor.name)}. ${b.openLinks} link${b.openLinks === 1 ? '' : 's'} ` +
+          `still open. <button type="button" class="linkbtn" data-unshare="${esc(b.id)}">` +
+          `give it back</button></p>`).join('');
+      box.querySelectorAll('[data-unshare]').forEach(b => b.onclick = async () => {
+        /* Said in full before it happens, because it stops working for
+           everybody holding it at once and there is no undo that puts a
+           closed link back. */
+        if (!confirm('Stop sharing that side of the family?\n\nEvery link to ' +
+                     'it stops working immediately, and anybody who has it open ' +
+                     'will be shut out. Nothing they recorded is lost.')) return;
+        b.disabled = true;
+        try {
+          const r = await fetch(`/api/branches/${b.dataset.unshare}/retire`,
+                                { method:'POST', headers:{ 'X-Muti-Actor': meName() } });
+          if (!r.ok) throw new Error('answered ' + r.status);
+          const d = await r.json();
+          say(d.message || 'That side is no longer shared.');
+          loadSides(); loadInvites();
+        } catch (e) { b.disabled = false; say('That could not be given back just now.', 'atonce'); }
+      });
+    } catch (e) { box.innerHTML = ''; }
+  };
+  loadSides();
 
   $('famInvite').onclick = async () => {
     // The typed note stays what it always was: something only the family sees,
@@ -10043,6 +10203,24 @@ function showLit(){
   }
 
   const rows = [];
+
+  /* ── WHOSE SIDE THIS IS, WHEN IT IS ONLY A SIDE ────────────────────────
+   *
+   * "...only limited to their part."
+   *
+   * The first thing on the bar and it does not close, because it is not a
+   * state somebody put the app into — it is what this session IS. Eight
+   * people with no explanation reads as a tree that has lost a family; eight
+   * people under "the Mandaba side" reads as the thing it is. And it says
+   * plainly that the rest of the tree exists and is not theirs, because the
+   * alternative is a relative concluding the app has lost their cousins. */
+  if (onBranch){
+    rows.push(
+      `<div class="pill"><b>${esc(onBranch.name || onBranch.anchorName)}</b>` +
+      `<span>You are working on this side of the family. The rest of the tree ` +
+      `is there and is not shown to you — ask whoever sent you the link.</span>` +
+      `</div>`);
+  }
 
   /* While a branch is being worked on, this never leaves the screen. A family
      that has twice thought its tree had disappeared must never be left to
@@ -13867,6 +14045,18 @@ addEventListener('keydown', e => { if (e.key === 'Escape' && !pending && sel){ s
 let store = null, stalledWhy = '', timer = null;
 let treeId = null;          // which family this page is looking at
 let familyKey = null, familyName = '';
+/* ── WHICH SIDE OF THE FAMILY IS ON SCREEN ────────────────────────────────
+ *
+ * "I want to give that family access to only grow that aspect without them
+ *  seeing the full tree, only limited to their part."
+ *
+ * null is the whole family, which is what this page has always been. When it
+ * is set, the tree that arrives IS the whole of what this session may see —
+ * the wall is kept on the server and this page is not asked to enforce
+ * anything. What it is for is honesty: somebody looking at eight people out
+ * of sixty has to be told that is what they are looking at, or the app reads
+ * as a tree with most of a family missing. */
+let onBranch = null;
 let headSeq = 0;            // how far down the change log this page has read
 let synced = null;          // the tree as the server last confirmed it
 let sending = false;        // a batch is in flight
@@ -14041,6 +14231,8 @@ async function adoptViewer(){
     if (!r.ok) return;
     const me = await r.json();
     viewerVia = me.person ? (me.person.via || 'self') : 'self';
+    onBranch = me.branch || null;
+    if (onBranch) render();
     if (me.person && state.people[me.person.id]){
       setMe(me.person.id, { fromServer:true });
     } else if (!me.person && meId){
@@ -14086,8 +14278,20 @@ function adopt(tree){
   // stored. p.root is the family's actual claim ("furthest we can trace"),
   // and a tree has as many of those as it has lines.
   if (!state.people[state.rootId] || state.people[state.rootId].aside){
-    state.rootId = (Object.values(state.people).find(p => !p.aside) || {}).id || null;
+    /* A SIDE OF THE FAMILY COUNTS FROM ITS ANCHOR. The family's own root is
+       never sent to a branch — it may be somebody they are not allowed to see
+       — so the person the side was reckoned from stands in for it. Without
+       this the layout would count generations from whoever happened to be
+       created first, which on one side of a family is nobody in particular. */
+    const held = tree.branch && tree.branch.anchorId;
+    state.rootId = (held && state.people[held] && !state.people[held].aside)
+      ? held
+      : (Object.values(state.people).find(p => !p.aside) || {}).id || null;
   }
+  // And what the page says about itself, from the same answer that carried
+  // the tree — so the bar is right on the very first paint rather than one
+  // round-trip later.
+  if (tree.branch) onBranch = { ...(onBranch || {}), ...tree.branch };
   headSeq = tree.seq;
   synced = copyState();
   if (meId && !state.people[meId]) meId = null;
@@ -14400,6 +14604,20 @@ async function flush(){
      * quietly. Somebody who typed a name and saw the tree shift has to be
      * told what the app did with it, in the same breath, with the way to take
      * it back. See routes/tree.js and ops.splitPeople. */
+    /* ── AND WHAT IS ALREADY IN THE TREE ON THE OTHER SIDE OF THE WALL ───
+     *
+     * "If they should have a duplication, they are told that that person is
+     *  already added to the family tree."
+     *
+     * Only ever sent to a session working on one side of the family, because
+     * only they cannot look for themselves. Said out loud AND written where
+     * it stays, because it arrives in the middle of typing and a line that
+     * has gone by the time somebody looks up has not been said. */
+    if (out.alreadyHereSaid){
+      say(out.alreadyHereSaid, 'atonce');
+      showAlreadyHere(out.alreadyHere || [], out.alreadyHereSaid);
+    }
+
     if (Array.isArray(out.merged) && out.merged.length){
       autoMerged = out.merged.concat(autoMerged).slice(0, 12);
       render();
@@ -14596,6 +14814,38 @@ function showFromOthers(who, n){
   paintHub();
   clearTimeout(showFromOthers.t);
   showFromOthers.t = setTimeout(() => { el.hidden = true; }, 9000);
+}
+
+/* ── SOMEBODY YOU CANNOT SEE IS ALREADY IN THIS TREE ────────────────────
+ *
+ * "If they should have a duplication, they are told that that person is
+ *  already added to the family tree and they are through — whoever is
+ *  available on their side to see."
+ *
+ * A family working on one side of the tree cannot scroll and check, so the
+ * duplicate they are most likely to make is the one they had no way of
+ * knowing about. Where the app is certain it folds the two, and the record
+ * that stays gains what they just recorded — which is how that person comes
+ * INTO their view, and the fold says so in its own words.
+ *
+ * This is everything short of certain. It says the name and stops there: not
+ * whose child that person is, not who they married, not where in the tree
+ * they sit. A side of the family that could ask "is there a Ratidzo?" and be
+ * answered with a household would be a wall with a keyhole in it. A name is
+ * enough to send somebody to ask an elder, which is how a family settles this
+ * anyway — so it says who to ask, too.
+ *
+ * IT DOES NOT TIME OUT. It arrives in the middle of typing, and a line that
+ * has gone by the time somebody looks up has not been said. */
+function showAlreadyHere(who, said){
+  const el = $('others');
+  if (!el) return;
+  el.innerHTML = esc(said) +
+    ` <button type="button" class="linkbtn" id="alreadyOk">All right</button>`;
+  el.hidden = false;
+  clearTimeout(showFromOthers.t);
+  const ok = $('alreadyOk');
+  if (ok) ok.onclick = () => { el.hidden = true; };
 }
 
 function showClash(detail){

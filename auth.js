@@ -322,13 +322,19 @@ function startedPage({ name, passcode, origin = '' } = {}) {
    button, because a link sent through WhatsApp is fetched by WhatsApp before
    any human sees it — and a single-use invitation consumed by a link preview
    is an invitation the relative never gets. */
-function joinPage({ token, message = '', origin = '', spent = false } = {}) {
+function joinPage({ token, message = '', origin = '', spent = false, opens = '' } = {}) {
   return shell('An invitation — The Muwuyu Project', `
 <form class="card" method="POST" action="/join">
   <h1>You have been invited</h1>
-  <p>Somebody in the family has asked you to help build their tree.</p>
+  ${opens
+    ? `<p>Somebody has asked you to help build <b>${esc(opens)}</b> of their
+         family tree.</p>
+       <p class="note">This link opens that side of the family and nothing
+          else. You can read it and add to it; the rest of the tree is not
+          shown to you.</p>`
+    : '<p>Somebody in the family has asked you to help build their tree.</p>'}
   <input type="hidden" name="token" value="${esc(token)}">
-  ${spent ? '' : '<button type="submit">Open the family tree</button>'}
+  ${spent ? '' : `<button type="submit">Open ${opens ? esc(opens) : 'the family tree'}</button>`}
   ${message ? `<p class="msg">${esc(message)}</p>` : ''}
   <p class="note">This link is for you. It works once, and it does not give
      out the family's passcode.</p>
@@ -594,7 +600,24 @@ function gate({
     // single-use invitation before the relative has clicked anything.
     if (req.method === 'GET' && req.path.startsWith('/join/')) {
       const token = decodeURIComponent(req.path.slice('/join/'.length));
-      return res.type('html').send(joinPage({ token, origin }));
+      /* WHAT THIS LINK OPENS, SAID BEFORE IT IS TAKEN UP.
+         A read and not a use — the invitation is still spent by the POST
+         behind the button, so a link preview cannot burn it. Somebody being
+         handed one side of a family should be told that is what it is before
+         they accept it, not discover it afterwards from a tree with most of a
+         family missing. Only the branch's NAME is read, which is a phrase the
+         family chose; the invitation says nothing else about itself here. */
+      let opens = '';
+      try {
+        const { rows } = await pool.query(
+          `SELECT b.name FROM invites i JOIN branches b ON b.id = i.branch_id
+            WHERE i.token_hash = $1 AND i.revoked_at IS NULL
+              AND i.expires_at > clock_timestamp() AND i.uses < i.max_uses
+              AND b.retired_at IS NULL`,
+          [sha256(token).toString('hex')]);
+        if (rows.length) opens = rows[0].name || '';
+      } catch (e) { /* the page still works without it */ }
+      return res.type('html').send(joinPage({ token, origin, opens }));
     }
 
     if (req.method === 'POST' && req.path === '/join') {

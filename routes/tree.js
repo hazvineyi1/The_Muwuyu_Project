@@ -5,7 +5,8 @@
 
 const express = require('express');
 const { applyOps } = require('../db/ops');
-const { bootstrap, fullTree, publicTree, publicPerson, changesSince, search,
+const { bootstrap, fullTree, branchTree, branchChanges,
+        publicTree, publicPerson, changesSince, search,
         setAsideList } = require('../db/reads');
 const { findDuplicates } = require('../db/duplicates');
 const duplicates = require('../db/duplicates');
@@ -14,6 +15,7 @@ const { OpError } = require('../db/errors');
 const { requireOwnTree, limiter, addressOf, limitKeyOf } = require('../auth');
 const access = require('../db/access');
 const audit = require('../db/audit');
+const branchModule = require('../db/branch');
 
 function sendError(res, e) {
   if (e instanceof OpError) {
@@ -26,6 +28,13 @@ function sendError(res, e) {
       // being silently applied.
       ...(e.current ? { current: e.current } : {})
     });
+  }
+  /* An error that already knows what it is and what to say. The access and
+     branch layers throw these — a retired branch, a person who is not in this
+     family — and they were falling through to "something went wrong", which
+     turns an answer somebody could act on into a shrug. */
+  if (Number.isInteger(e?.status) && e.status >= 400 && e.status < 500 && e.code) {
+    return res.status(e.status).json({ error: e.code, message: e.message });
   }
   // Constraint violations are the database enforcing a rule the caller broke,
   // not the server falling over. Report them as such — in particular the
@@ -63,6 +72,37 @@ const actorOf = req => String(req.get('x-muti-actor') || req.body?.by || '').sli
    instead (/family/:key); a blanket r.use() would silently do nothing for
    those three and read as though it had covered them. */
 const own = requireOwnTree('id');
+
+/* ── THE ONE SIDE OF THE FAMILY THIS SESSION WAS GIVEN, OR ALL OF IT ──────
+ *
+ * "I want to give that family access to only grow that aspect without them
+ *  seeing the full tree, only limited to their part."
+ *
+ * Resolved on the request rather than trusted from the cookie, so that
+ * handing a branch back takes effect the moment it is handed back and not
+ * whenever the last relative's session happens to expire.
+ *
+ * null is the whole family, which is what every session in this deployment
+ * already is. A branch session is always NARROWER than a family session and
+ * can only ever be made by somebody who holds the whole family. */
+async function branchOf(pool, req) {
+  const held = await branchModule.forSession(pool, req.muti?.session);
+  if (!held) return null;
+  if (held.retired) {
+    const e = new Error('That part of the family is no longer shared with this link.');
+    e.status = 403; e.code = 'branch_retired';
+    throw e;
+  }
+  return held;
+}
+
+/* Who is in it, and which marriages it may see — read together because every
+   caller needs both and asking twice invites the two to disagree. */
+async function reachOf(pool, treeId, held) {
+  const members = await branchModule.membersOf(pool, treeId, held.anchorId);
+  const unions = await branchModule.unionsOf(pool, treeId, members);
+  return { members, unions };
+}
 
 /* Starting a family is free to ask for and not free to do: a tree, a scrypt
    hash, a session. Two limits rather than one, and the pair is the point.
@@ -106,6 +146,11 @@ module.exports = function treeRoutes(pool, homeTreeId = null) {
     if (!s || s.scope !== 'family') return next();
     if (s.personId) return next();
     try {
+      let held = null;
+      if (s.branchId) {
+        const b = await branchOf(pool, req);
+        if (b) held = { ...b, members: await branchModule.membersOf(pool, s.treeId, b.anchorId) };
+      }
       /* NAMES ONLY, and every name somebody might answer to.
 
          BE SENSITIVE TO MARRIED NAMES. This family records women under their
@@ -136,10 +181,25 @@ module.exports = function treeRoutes(pool, homeTreeId = null) {
                                        AND up2.person_id <> p.id
            LEFT JOIN people q ON q.id = up2.person_id AND q.aside_at IS NULL
           WHERE p.tree_id = $1 AND p.aside_at IS NULL
+            AND ($2::uuid[] IS NULL OR p.id = ANY($2::uuid[]))
           GROUP BY p.id, p.name, p.also_known_as
-          ORDER BY p.name LIMIT 2000`, [s.treeId]);
+          ORDER BY p.name LIMIT 2000`,
+        /* AND ONLY THEIR OWN SIDE, where the link that got them in said so.
+           The roster is a list of names handed to somebody who has not yet
+           said who they are — it is the most tempting thing in this app to
+           forget to narrow, and forgetting would hand the whole family to the
+           one kind of session that is meant to see least of it. */
+        [s.treeId, held ? [...held.members] : null]);
       if (!rows.length) return next();
 
+      /* Which spouses' surnames may be used at all. Read from the branch's own
+         membership by name, because that is what the query above returns. */
+      const partnerInside = new Set();
+      if (held) {
+        const { rows: inside } = await pool.query(
+          'SELECT name FROM people WHERE id = ANY($1::uuid[])', [[...held.members]]);
+        for (const p of inside) partnerInside.add(p.name);
+      }
       const surname = n => String(n || '').trim().split(/\s+/).pop() || '';
       const first   = n => String(n || '').trim().split(/\s+/)[0] || '';
       const people = rows.map(r => {
@@ -147,6 +207,10 @@ module.exports = function treeRoutes(pool, homeTreeId = null) {
         if (r.also_known_as) also.add(r.also_known_as.trim());
         const mine = surname(r.name).toLowerCase();
         for (const partner of r.partner_names || []) {
+          // A married name is worked out from a marriage, and a branch may not
+          // be told about a marriage to somebody outside it — not even by the
+          // surname it would give somebody inside.
+          if (held && !partnerInside.has(partner)) continue;
           const theirs = surname(partner);
           // Only where it would actually be a different name. A woman who
           // married a man of her own surname is not also known as herself.
@@ -221,6 +285,17 @@ module.exports = function treeRoutes(pool, homeTreeId = null) {
      wrong answers rather than missing ones. */
   r.get('/tree/:id/tree', own, viewer, async (req, res) => {
     try {
+      /* A BRANCH IS SERVED BY A DIFFERENT FUNCTION, not by this one with a
+         flag on it — the same care publicTree is written with, and for the
+         same reason: a boolean on a read is one `if` away from handing the
+         whole family to somebody holding one side of it, and that mistake
+         makes no noise. */
+      const held = await branchOf(pool, req);
+      if (held) {
+        const reach = await reachOf(pool, req.params.id, held);
+        return res.json(await branchTree(pool, req.params.id, {
+          ...reach, anchorId: held.anchorId, name: held.name || held.anchorName }));
+      }
       res.json(await fullTree(pool, req.params.id));
     } catch (e) { sendError(res, e); }
   });
@@ -381,8 +456,13 @@ module.exports = function treeRoutes(pool, homeTreeId = null) {
        * writes anything. All three are in a browser, and a rule kept only in
        * a browser is a rule kept only while the browser is the one this
        * project shipped. This is the door every write comes through. */
+      /* AND HELD TO ONE SIDE OF THE FAMILY, where the link that got them in
+         said so. Checked inside the transaction, before and after, so a
+         refusal rolls the whole batch back. See db/branch.js. */
+      const held = await branchOf(pool, req);
       const result = await applyOps(pool, req.params.id, ops, actorOf(req),
-                                    { everyoneJoined: true });
+                                    { everyoneJoined: true,
+                                      within: held ? { anchorId: held.anchorId } : null });
 
       /* ── AND IF THAT JUST DOUBLED SOMEBODY, THE TWO BECOME ONE ───────────
        *
@@ -436,6 +516,55 @@ module.exports = function treeRoutes(pool, homeTreeId = null) {
         }
       } catch (e) { /* the family's edit is saved; a tidy-up is not worth losing it */ }
       if (merged.length) result.merged = merged;
+
+      /* ── AND ACROSS THE WALL, THEY ARE SIMPLY TOLD ───────────────────────
+       *
+       * "If they should have a duplication, they are told that that person is
+       *  already added to the family tree and they are through — whoever is
+       *  available on their side to see."
+       *
+       * A family given one side of the tree cannot see the other side, so the
+       * commonest duplicate they will make is one they had no way of knowing
+       * about: a cousin who married into the other house and was written down
+       * there years ago. Folding those where the app is certain already
+       * happens above and needs nothing here — a fold is a fold whichever
+       * side of a wall it happens on, and the record that stays gains their
+       * links, which is what brings that person into view for them.
+       *
+       * What is left is everything SHORT of certain, which a family working
+       * blind will produce far more of than a family that can see. They are
+       * told, and told the one thing that is theirs to know: the name. Not
+       * whose child that person is, not who they married, not where in the
+       * tree they sit — a branch that could ask "is there a Ratidzo?" and be
+       * answered with a family would be a branch with a keyhole in its wall.
+       * The name alone is enough to send somebody to ask an elder, which is
+       * how a family resolves this anyway.
+       *
+       * ONLY for a session behind a wall. A family that can see the whole
+       * tree already has the duplicates room, which says all of this and
+       * more, and does not need to be told twice on every save. */
+      try {
+        if (held && result?.refs){
+          const made = Object.values(result.refs);
+          const near = made.length
+            ? await duplicates.likelyFor(pool, req.params.id, made,
+                                         { threshold: duplicates.BEHIND_A_WALL }) : [];
+          const folded = new Set(merged.map(m => m.dropped.id));
+          const elsewhere = near
+            .filter(pair => !folded.has(pair.mine.id))
+            .map(pair => ({ name: pair.theirs.name, youWrote: pair.mine.name }));
+          if (elsewhere.length){
+            result.alreadyHere = elsewhere;
+            result.alreadyHereSaid = elsewhere.length === 1
+              ? `${elsewhere[0].name} is already in this family tree. If that is ` +
+                `who you meant, somebody who can see the whole family can join ` +
+                `the two — ask them rather than writing the name again.`
+              : `${elsewhere.length} of those names are already in this family ` +
+                `tree: ${elsewhere.map(e => e.name).join(', ')}. If those are who ` +
+                `you meant, somebody who can see the whole family can join them up.`;
+          }
+        }
+      } catch (e) { /* being told is a kindness, not a guarantee; never fail the write */ }
       /* A merge can move a session's viewer onto the record that stayed (see
          mergePeople). The sessions cache holds who each session is, so it has
          to be told — otherwise the person who just folded away their own
@@ -699,6 +828,12 @@ module.exports = function treeRoutes(pool, homeTreeId = null) {
   // the family, so it should load one corner of the family.
   r.get('/tree/:id/bootstrap', own, async (req, res) => {
     try {
+      const held = await branchOf(pool, req);
+      if (held) {
+        const reach = await reachOf(pool, req.params.id, held);
+        return res.json(await branchTree(pool, req.params.id, {
+          ...reach, anchorId: held.anchorId, name: held.name || held.anchorName }));
+      }
       res.json(await bootstrap(pool, req.params.id, {
         focus: req.query.focus || null,
         depth: req.query.depth ?? 3
@@ -710,13 +845,27 @@ module.exports = function treeRoutes(pool, homeTreeId = null) {
   // rather than re-fetching a tree it already mostly has.
   r.get('/tree/:id/changes', own, async (req, res) => {
     try {
+      const held = await branchOf(pool, req);
+      if (held) {
+        const reach = await reachOf(pool, req.params.id, held);
+        return res.json(await branchChanges(pool, req.params.id, req.query.since,
+                                            req.query.limit, reach));
+      }
       res.json(await changesSince(pool, req.params.id, req.query.since, req.query.limit));
     } catch (e) { sendError(res, e); }
   });
 
   r.get('/tree/:id/search', own, async (req, res) => {
     try {
-      res.json(await search(pool, req.params.id, req.query.q, { limit: req.query.limit }));
+      const found = await search(pool, req.params.id, req.query.q, { limit: req.query.limit });
+      const held = await branchOf(pool, req);
+      if (!held) return res.json(found);
+      /* Searching is reading. A branch that could find somebody by name would
+         be a branch that could enumerate the family one guess at a time, and
+         the family context each hit carries names their parents and their
+         children as well. */
+      const { members } = await reachOf(pool, req.params.id, held);
+      res.json({ ...found, results: (found.results || []).filter(h => members.has(h.id)) });
     } catch (e) { sendError(res, e); }
   });
 

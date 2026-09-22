@@ -11,6 +11,7 @@ const { limiter, addressOf, limitKeyOf } = require('../auth');
 const access = require('../db/access');
 const audit = require('../db/audit');
 const appeals = require('../db/appeals');
+const branchModule = require('../db/branch');
 
 function fail(res, e) {
   if (e && e.status) return res.status(e.status).json({ error: e.code || 'error', message: e.message });
@@ -60,6 +61,9 @@ module.exports = function familyRoutes(pool) {
   r.get('/api/me', async (req, res) => {
     const s = req.muti?.session;
     if (!s) return res.status(401).json({ error: 'not_signed_in' });
+    let held = null;
+    try { held = await branchModule.forSession(pool, s); } catch (e) {}
+    if (held && held.retired) held = null;
     res.json({
       scope: s.scope, treeId: s.treeId || null, treeName: s.treeName || null,
       handle: s.handle || null, via: s.via || '', expiresAt: s.expiresAt || null,
@@ -69,6 +73,16 @@ module.exports = function familyRoutes(pool) {
             // page shows the difference rather than presenting a claim as a
             // fact.
             via: s.personVia || 'self' }
+        : null,
+      /* AND WHICH SIDE OF THE FAMILY, where this session was given one.
+         The page has to know: it opens on the anchor rather than a root it
+         will not be sent, it says plainly whose side is on screen, and it
+         does not offer acts that only make sense holding the whole tree.
+         Absent means the whole family, which is what everything already in
+         this deployment is. */
+      branch: held
+        ? { id: held.id, anchorId: held.anchorId,
+            name: held.name || held.anchorName, anchorName: held.anchorName }
         : null
     });
   });
@@ -90,6 +104,24 @@ module.exports = function familyRoutes(pool) {
       // null clears it: somebody who marked the wrong person should be able to
       // take it back rather than being stuck as their own cousin.
       const personId = raw === null || raw === '' ? null : String(raw);
+
+      /* AND ONLY SOMEBODY ON THEIR OWN SIDE. Who a session says it is decides
+         every word the app produces for it, and those words are reckoned by
+         walking the tree from that person — so a branch session claiming
+         somebody outside its branch would be asking the kinship engine to
+         walk the family it was not given, and be answered. */
+      if (personId) {
+        const held = await branchModule.forSession(pool, req.muti.session);
+        if (held && !held.retired) {
+          const inside = await branchModule.membersOf(pool, req.muti.treeId, held.anchorId);
+          if (!inside.has(personId)) {
+            return res.status(403).json({ error: 'not_your_branch',
+              message: 'That is not somebody on the side of the family you were ' +
+                       'given. Pick a name from the list.' });
+          }
+        }
+      }
+
       const done = await access.identify(pool, req.muti.session.id, personId,
                                          { by: whoami(req) });
       if (!done) return res.status(401).json({ error: 'not_signed_in' });
@@ -126,12 +158,30 @@ module.exports = function familyRoutes(pool) {
       }
       inviteLimit.note(who); invitePerAddress.note(addr);
       const by = whoami(req);
+
+      const branchFromRequest = req.body?.branchId || null;
+      if (branchFromRequest && req.muti?.session?.branchId) {
+        return res.status(403).json({ error: 'not_your_branch',
+          message: 'Only somebody who can see the whole family can share a part ' +
+                   'of it.' });
+      }
       const invite = await access.createInvite(pool, req.muti.treeId, {
         by, note: req.body?.note, days: req.body?.days, uses: req.body?.uses,
         // Naming who a link is for costs the sender one tap and is the only
         // thing in this project that makes "who is viewing" somebody else's
         // word rather than the holder's own.
-        forPersonId: req.body?.forPersonId || null
+        forPersonId: req.body?.forPersonId || null,
+        /* A LINK TO ONE SIDE OF THE FAMILY.
+
+           "I want to give that family access to only grow that aspect without
+            them seeing the full tree, only limited to their part."
+
+           Refused from a session that is itself on a branch, and that refusal
+           is the whole of the rule: access here only ever narrows. Somebody
+           given the Mandaba side can work it and cannot subdivide it, pass it
+           on, or — by naming another branch id — hand out a side of the family
+           they have never seen. */
+        branchId: branchFromRequest
       });
       await audit.record(pool, { ...ctx(req), kind: 'invite.created', ok: true,
         treeId: req.muti.treeId,
@@ -145,12 +195,116 @@ module.exports = function familyRoutes(pool) {
         // A path, not a full URL: the server behind a proxy does not reliably
         // know what it is called from outside, and the page does.
         path: `/join/${invite.token}`,
-        notice: invite.for_person_id
-          ? `This link can only be shown once. It opens as ` +
-            `${invite.forPersonName}, so send it to them and to nobody else — ` +
-            `whoever follows it will be shown the family as they see it.`
-          : 'This link can only be shown once. Send it to the person it is for.'
+        branch: invite.branch_id
+          ? { id: invite.branch_id, name: invite.branchName } : null,
+        notice: invite.branch_id
+          ? `This link can only be shown once. It opens ${invite.branchName || 'that part of the family'} ` +
+            `and nothing else — whoever follows it can read and grow that side ` +
+            `and will not see the rest of the tree.`
+          : invite.for_person_id
+            ? `This link can only be shown once. It opens as ` +
+              `${invite.forPersonName}, so send it to them and to nobody else — ` +
+              `whoever follows it will be shown the family as they see it.`
+            : 'This link can only be shown once. Send it to the person it is for.'
       });
+    } catch (e) { fail(res, e); }
+  });
+
+  /* ── ONE SIDE OF THE FAMILY, NAMED AND GIVEN OUT ──────────────────────────
+   *
+   * "I want to grow my mother's side of the family, Mandaba. I want to give
+   *  that family access to only grow that aspect without them seeing the full
+   *  tree, only limited to their part."
+   *
+   * A branch is one person and the house around them — see db/branch.js for
+   * exactly which people that is and where it stops. It is named here, given
+   * out as an ordinary invitation with the branch on it, and handed back by
+   * retiring it.
+   *
+   * ONLY FROM A SESSION THAT HOLDS THE WHOLE FAMILY. Nobody can carve up a
+   * side of the tree they cannot see, and nobody given one side can subdivide
+   * it or pass it on. Access in this project only ever narrows.
+   */
+  const wholeFamilyOnly = (req, res, next) => {
+    if (req.muti?.session?.branchId) {
+      return res.status(403).json({ error: 'not_your_branch',
+        message: 'Only somebody who can see the whole family can share a part ' +
+                 'of it.' });
+    }
+    next();
+  };
+
+  r.get('/api/branches', familyOnly, wholeFamilyOnly, async (req, res) => {
+    try {
+      const rows = await branchModule.list(pool, req.muti.treeId,
+        { includeRetired: req.query.all === '1' });
+      res.json({ branches: rows.map(b => ({
+        id: b.id, name: b.name, anchor: { id: b.anchor_id, name: b.anchor_name },
+        by: b.created_by, at: b.created_at, openLinks: b.open_links,
+        retiredAt: b.retired_at || null, retiredBy: b.retired_by || '' })) });
+    } catch (e) { fail(res, e); }
+  });
+
+  r.post('/api/branches', familyOnly, wholeFamilyOnly, async (req, res) => {
+    try {
+      const anchorId = String(req.body?.anchorId || '');
+      if (!anchorId) return res.status(400).json({ error: 'no_anchor',
+        message: 'Say whose side of the family this is.' });
+      const made = await branchModule.create(pool, req.muti.treeId, {
+        anchorId, name: req.body?.name, by: whoami(req) });
+      /* SAID BACK IN PEOPLE, not in a count. "The Mandaba side — 14 people,
+         from Nhamo Mandaba down" is something somebody can check before they
+         send it to anybody; "branch created" is something they have to trust. */
+      const inside = await branchModule.membersOf(pool, req.muti.treeId, anchorId);
+      const { rows: names } = await pool.query(
+        `SELECT name FROM people WHERE id = ANY($1::uuid[]) AND aside_at IS NULL
+          ORDER BY name LIMIT 200`, [[...inside]]);
+      await audit.record(pool, { ...ctx(req), kind: 'branch.created', ok: true,
+        treeId: req.muti.treeId,
+        detail: { branchId: made.id, anchorId, name: made.name, size: names.length } });
+      res.status(201).json({
+        id: made.id, name: made.name,
+        anchor: { id: made.anchor_id, name: made.anchorName },
+        people: names.map(n => n.name),
+        size: names.length
+      });
+    } catch (e) { fail(res, e); }
+  });
+
+  /* What a branch would contain, before anybody is given it. Read-only and
+     answering the one question that matters when deciding whether to share a
+     side of the family: who exactly would they be able to see. */
+  r.get('/api/branches/preview', familyOnly, wholeFamilyOnly, async (req, res) => {
+    try {
+      const anchorId = String(req.query.anchorId || '');
+      if (!anchorId) return res.status(400).json({ error: 'no_anchor',
+        message: 'Say whose side of the family to look at.' });
+      const inside = await branchModule.membersOf(pool, req.muti.treeId, anchorId);
+      const { rows } = await pool.query(
+        `SELECT id, name FROM people WHERE id = ANY($1::uuid[]) AND aside_at IS NULL
+          ORDER BY name LIMIT 500`, [[...inside]]);
+      const { rows: all } = await pool.query(
+        `SELECT count(*)::int AS n FROM people WHERE tree_id = $1 AND aside_at IS NULL`,
+        [req.muti.treeId]);
+      res.json({ anchorId, people: rows, size: rows.length, family: all[0].n });
+    } catch (e) { fail(res, e); }
+  });
+
+  /* Giving it back. Every link and every session held to it stops working at
+     once, because a part of the family that is no longer shared is no longer
+     shared — not shared until somebody's cookie happens to run out. */
+  r.post('/api/branches/:id/retire', familyOnly, wholeFamilyOnly, async (req, res) => {
+    try {
+      const done = await branchModule.retire(pool, req.params.id,
+        { treeId: req.muti.treeId, by: whoami(req) });
+      if (!done) return res.status(404).json({ error: 'no_such_branch',
+        message: 'That part of the family is not shared, or was given back already.' });
+      access.forgetTree(req.muti.treeId);
+      await audit.record(pool, { ...ctx(req), kind: 'branch.retired', ok: true,
+        treeId: req.muti.treeId, detail: { branchId: req.params.id, name: done.name } });
+      res.json({ id: done.id, name: done.name,
+                 message: `${done.name || 'That part of the family'} is no longer ` +
+                          `shared. Every link to it has stopped working.` });
     } catch (e) { fail(res, e); }
   });
 
