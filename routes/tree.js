@@ -59,6 +59,14 @@ function sendError(res, e) {
 // family you are in is `own` below.
 const actorOf = req => String(req.get('x-muti-actor') || req.body?.by || '').slice(0, 120);
 
+/* The family's passcode for removing somebody, as this request carries it.
+   A header rather than a field in the batch, so it is never mistaken for
+   part of an op and never written into the change log with one. The key is
+   what the throttle counts against — the session where there is one, so a
+   whole household behind one address is not locked out by one relative's
+   typing. See db/passcode.js. */
+const passcodeOf = req => String(req.get('x-muti-passcode') || req.body?.passcode || '').slice(0, 64);
+
 /* EVERY ROUTE THAT NAMES A TREE IS GUARDED BY THIS.
 
    Getting through the gate says you belong to A family. `own` says you belong
@@ -462,6 +470,8 @@ module.exports = function treeRoutes(pool, homeTreeId = null) {
       const held = await branchOf(pool, req);
       const result = await applyOps(pool, req.params.id, ops, actorOf(req),
                                     { everyoneJoined: true,
+                                      passcode: passcodeOf(req),
+                                      passKey: limitKeyOf(req),
                                       within: held ? { anchorId: held.anchorId } : null });
 
       /* ── AND IF THAT JUST DOUBLED SOMEBODY, THE TWO BECOME ONE ───────────

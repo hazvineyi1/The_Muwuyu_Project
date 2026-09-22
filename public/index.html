@@ -2754,6 +2754,97 @@ const deleteWhy = new Map();
 const DELETE_GRACE = 12000;
 let undoDelete = null, deleteTimer = null;
 
+/* ── THE PASSCODE THAT HAS TO BE TYPED BEFORE ANYBODY IS REMOVED ─────────
+ *
+ * "Deletion of a person should require a passcode. Edits can be made to
+ *  dates and relationships but deletions can only be done with the passcode."
+ *
+ * Held here for as long as this page is open, once the server has said it is
+ * right. It is asked for again on every removal — three digits for an act
+ * that cannot be undone is the whole point — and this is only so the batch
+ * that goes up a few seconds later can carry it.
+ *
+ * A TREE HELD IN THIS BROWSER ALONE IS NOT GATED. store === 'local' is a
+ * static host or a file:// page: there is no server to check a code against
+ * and no shared family record to protect — it is one browser's own copy,
+ * reachable by nobody else. Asking for a passcode there would be asking for
+ * one that nothing could verify, which is theatre. The family's record lives
+ * behind the server, and that is where the gate is. */
+let deletePass = '';
+
+/* Ask, then do. `then` runs only if the server says the code is right, which
+   is what keeps a mistyped digit from taking somebody off the screen and
+   putting them back. */
+function askToDelete(id, then){
+  if (store !== 'shared') return then();
+  openDeletePasscode(id, then);
+}
+
+function openDeletePasscode(id, then){
+  const p = state.people[id] || {};
+  closeForm();
+  pending = { kind:'dupes', anchorId:id };
+
+  const el = document.createElement('div');
+  el.id = 'form';
+  el.innerHTML =
+    `<p class="cap">Remove <b>${esc(p.name || 'them')}</b> for good</p>` +
+    `<p class="covnote">Dates, names and who is married to whom can be put ` +
+      `right by anybody. Taking a person out of the family's record cannot be ` +
+      `put right, so it needs the family's passcode.</p>` +
+    `<p class="lbl">Passcode</p>` +
+    `<input id="dpCode" class="fld" inputmode="numeric" autocomplete="off" ` +
+      `type="password" placeholder="The family's passcode">` +
+    `<p class="roothint" id="dpWhy">Ask whoever keeps this tree if you do not ` +
+      `have it. Set aside takes somebody out of the picture without it, and ` +
+      `anyone can put them back.</p>` +
+    `<div class="row"><button class="btn" id="dpGo">Remove for good</button>` +
+    `<button class="btn ghost" id="dpNo">Cancel</button></div>`;
+  document.body.appendChild(el);
+  placeForm(el);
+  $('dpCode').focus();
+
+  let asking = false;
+  const go = async () => {
+    if (asking) return;
+    const code = $('dpCode').value.trim();
+    if (!code){ $('dpCode').focus(); return; }
+    asking = true;
+    $('dpGo').disabled = true;
+    let ok = false, why = 'The passcode could not be checked — are you online?';
+    try {
+      const r = await fetch('/api/passcode/delete', {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify({ code })
+      });
+      const d = await r.json().catch(() => ({}));
+      ok = !!d.ok;
+      if (!ok) why = d.message || 'That is not the passcode.';
+    } catch (e) {}
+    asking = false;
+    // the panel may have been closed while that was in the air
+    if (!el.isConnected) return;
+    $('dpGo').disabled = false;
+    if (!ok){
+      const w = $('dpWhy');
+      if (w) w.textContent = why + ' Nobody has been removed.';
+      $('dpCode').value = '';
+      $('dpCode').focus();
+      return;
+    }
+    deletePass = code;
+    closeForm();
+    then();
+  };
+  $('dpGo').onclick = go;
+  $('dpNo').onclick = closeForm;
+  el.addEventListener('keydown', e => {
+    if (e.key === 'Enter'){ e.preventDefault(); go(); }
+    if (e.key === 'Escape'){ e.preventDefault(); closeForm(); }
+  });
+}
+
 function deleteInOneTap(id){
   const p = state.people[id];
   if (!p) return false;
@@ -9863,9 +9954,11 @@ function openAside(){
       return;
     }
     const name = p.name;
-    if (!deleteForever(id)){ say('Set them aside first.'); return; }
-    closeForm(); render(); save();
-    say(`${name} has been deleted.`);
+    askToDelete(id, () => {
+      if (!deleteForever(id)){ say('Set them aside first.'); return; }
+      closeForm(); render(); save();
+      say(`${name} has been deleted.`);
+    });
   });
 
   $('asNo').onclick = closeForm;
@@ -11339,10 +11432,15 @@ function openCard(id){
     commit();
     const name = p.name;
     /* The same one tap the ✕ does, and the same way back. It asked for the
-       name to be typed until a family said plainly that it should not. */
-    const wereLoose = adrift().length;
-    if (!deleteInOneTap(id)){ say('That could not be deleted.', 'atonce'); return; }
-    say(`${name} deleted — put them back from the bar.` + setLoose(wereLoose));
+       name to be typed until a family said plainly that it should not — and
+       now asks for the family's passcode instead, which is a thing you either
+       have or do not rather than a thing you can copy off the card in front
+       of you. */
+    askToDelete(id, () => {
+      const wereLoose = adrift().length;
+      if (!deleteInOneTap(id)){ say('That could not be deleted.', 'atonce'); return; }
+      say(`${name} deleted — put them back from the bar.` + setLoose(wereLoose));
+    });
   };
   $('cNo').onclick = closeForm;
   el.querySelectorAll('[data-vis]').forEach(b => b.onclick = () => {
@@ -14112,7 +14210,9 @@ podsEl.addEventListener('click', e => {
   const rm = e.target.closest('.rm');
   if (rm){
     const id = rm.dataset.rm, name = (state.people[id] || {}).name || '';
-    if (deleteInOneTap(id)) say(`${name} deleted — put them back from the bar.`);
+    askToDelete(id, () => {
+      if (deleteInOneTap(id)) say(`${name} deleted — put them back from the bar.`);
+    });
     return;
   }
   const socket = e.target.closest('.socket');
@@ -15076,6 +15176,28 @@ async function flush(){
         return;
       }
     }
+    /* THE PASSCODE WAS NOT ACCEPTED AFTER ALL. The page asks before it takes
+       anybody off the screen, so this is the odd case — a code changed since,
+       or a batch that reached here some other way. Treated exactly like a
+       refused join above: the batch is all-or-nothing, so nothing was
+       recorded, and the only honest screen is the tree the server holds.
+       Roll back to it and say so, rather than stalling the whole tree over
+       one refused act. */
+    if (r.status === 403){
+      let why = '';
+      try {
+        const d = await r.json();
+        if (d.error === 'need_passcode') why = d.message || '';
+      } catch (e) {}
+      if (why){
+        deletePass = '';
+        state = JSON.parse(JSON.stringify(synced));
+        if (!state.people[sel]) sel = null;
+        closeForm(); render();
+        say(why + ' Nothing has been changed here either.', 'atonce');
+        return;
+      }
+    }
     if (!r.ok) throw new Error('the server answered ' + r.status);
 
     const out = await r.json();
@@ -15152,9 +15274,17 @@ async function flush(){
 }
 
 function postOps(ops){
+  const headers = { 'Content-Type':'application/json', 'X-Muti-Actor': meName() };
+  /* ONLY ON A BATCH THAT REMOVES SOMEBODY. The server holds deletePerson and
+     nothing else, so sending the family's passcode alongside every year
+     corrected would be handing it to the network a hundred times a day for
+     no reason at all. */
+  if (deletePass && ops.some(o => o && o.op === 'deletePerson')){
+    headers['X-Muti-Passcode'] = deletePass;
+  }
   return fetch(`/api/tree/${treeId}/ops`, {
     method:'POST',
-    headers:{ 'Content-Type':'application/json', 'X-Muti-Actor': meName() },
+    headers,
     body: JSON.stringify({ ops })
   });
 }

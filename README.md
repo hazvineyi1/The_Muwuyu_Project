@@ -78,6 +78,12 @@ anyone with the link. Don't put sensitive personal information in it.
    this repository is public. Without it the dashboard is off and no
    family passcodes can be issued.
 
+   While you are there, add `MW_DELETE_PASSCODE` too — the short code a
+   relative types before anybody is removed from the tree for good. It is
+   the family's, not yours, and it is meant to be said over the phone.
+   Without it nothing can be deleted at all; see *Access* below for why
+   that is the right way round.
+
 6. **Get a public URL.**
    Open your app service → **Settings → Networking → Public Networking**
    → **Generate Domain**. That's the link you share with family.
@@ -112,6 +118,7 @@ server.js            Express server: headers, the gate, the API, the page
 auth.js              The gate: family passcodes, invitations, the admin door
 security.js          Response headers, and the CSP nonce
 db/access.js         passcodes, sessions, invitations
+db/passcode.js       the code asked for before anybody is removed for good
 db/audit.js          the record of who did what, when and from where
 db/admin.js          what the keeper can see; db/appeals.js what they answer
 db/                  pool, migrations runner, ops, reads, duplicates, crosstree
@@ -178,6 +185,29 @@ until somebody adds one.
 
 The old deployment-wide `APP_PASSPHRASE` still opens the *home* family, so
 nobody was signed out by this change. New families use passcodes.
+
+**The passcode for removing somebody** (`MW_DELETE_PASSCODE`) is a different
+thing again, and it is the smallest of the three. Correcting a year,
+respelling a name, recording a marriage or undoing one, setting somebody
+aside — all of that is the ordinary work of keeping a tree, anybody in the
+family can do it, and every one of them is in the change log where it can be
+read back and put right. Taking a person out of the family's record is the
+one act that cannot be put right, and the one act a relative can perform by
+accident with a single tap. So it asks for this code, every time, and the
+check is on the write path rather than in the browser — see `db/passcode.js`.
+
+Three tries are free; every wrong one after that costs a wait that doubles,
+which is what makes a short code safe to say over the phone to an aunt.
+
+**Without this variable, nobody can be removed at all.** That is on purpose:
+the worst a missing setting can do is make the family ask their keeper, and
+the alternative is deletion quietly becoming free the moment somebody mislays
+an environment variable. Set it in **Variables**, like the others, and never
+in a file — this repository is public.
+
+Merging two records of one person is *not* this act and is not held: nothing
+is lost, the folded record is set aside pointing at the one that stayed, and
+it is how the duplicate the family was just warned about gets cleaned up.
 
 ### What is recorded
 

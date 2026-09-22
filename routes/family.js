@@ -12,6 +12,7 @@ const access = require('../db/access');
 const audit = require('../db/audit');
 const appeals = require('../db/appeals');
 const branchModule = require('../db/branch');
+const passcode = require('../db/passcode');
 
 function fail(res, e) {
   if (e && e.status) return res.status(e.status).json({ error: e.code || 'error', message: e.message });
@@ -326,6 +327,36 @@ module.exports = function familyRoutes(pool) {
 
      Family scope only, and the caller's own session is left out — a page
      telling you that you are here is not news. */
+  /* IS THIS THE PASSCODE? — asked before anybody is taken off the screen.
+   *
+   * The gate itself is in db/ops.js, on the write path, where it holds
+   * whatever is asking. This route exists for one reason: without it the
+   * page has to remove somebody locally, send the batch, be refused, and put
+   * them back — which is a person vanishing and reappearing on everybody's
+   * screen because an aunt mistyped a digit. Asking first makes a wrong code
+   * cost nothing at all.
+   *
+   * It answers yes or no and never the code itself, and it shares one
+   * throttle with the write path, so it cannot be used as an unlimited
+   * oracle to guess at. */
+  r.post('/api/passcode/delete', familyOnly, (req, res) => {
+    const said = passcode.check(limitKeyOf(req), req.body?.code);
+    if (said.ok) return res.json({ ok: true });
+    return res.status(403).json({
+      ok: false,
+      error: 'need_passcode',
+      reason: said.reason,
+      waitMs: said.waitMs || 0,
+      message:
+        said.reason === 'unset'
+          ? 'Removing somebody for good needs a passcode, and this deployment ' +
+            'has not been given one. Ask whoever keeps this family\'s tree.'
+        : said.reason === 'wait'
+          ? `Too many wrong passcodes. Try again in ${Math.ceil(said.waitMs / 1000)} seconds.`
+          : 'That is not the passcode.'
+    });
+  });
+
   r.get('/api/here', familyOnly, async (req, res) => {
     try {
       res.json(await access.whoIsHere(pool, req.muti.treeId, {

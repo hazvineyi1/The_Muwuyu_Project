@@ -43,6 +43,11 @@ const SUITES = [
   { name: 'multifamily',  kind: 'api' },
   { name: 'newcomer',     kind: 'api' },
   { name: 'persistence',  kind: 'api' },
+  /* Removing somebody needs a passcode, and the server is the one that
+     decides — so this suite's server is the only one given one. See
+     db/passcode.js; the value is a test value and means nothing anywhere. */
+  { name: 'removing',     kind: 'api',
+    env: { MW_DELETE_PASSCODE: process.env.MW_DELETE_PASSCODE || 'browser-delete-code' } },
   { name: 'scale',        kind: 'api' },
   { name: 'viewer',       kind: 'api' },
   { name: 'visibility',   kind: 'api', env: { MW_PUBLIC_READ: 'on' } },

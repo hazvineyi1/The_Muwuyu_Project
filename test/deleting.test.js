@@ -293,7 +293,11 @@ section('but somebody already set aside on the server is deleted on its own');
 // ── on the server ──────────────────────────────────────────────────────────
 const pool = await freshPool();
 const tree = await newTree(pool, 'deleting');
-const run = (o, actor) => applyOps(pool, tree, o, actor || 'tester');
+/* Every batch carries the passcode, because removing somebody for good needs
+   one now. What happens without it, and with the wrong one, is
+   passcode.test.js — here it is arrangement, not the thing under test. */
+const run = (o, actor) => applyOps(pool, tree, o, actor || 'tester',
+                                   { passcode: process.env.MW_DELETE_PASSCODE });
 
 section('THE SERVER REFUSES IT TOO, not only the page');
 /* The page's guard is a courtesy; this is the one that matters, because any

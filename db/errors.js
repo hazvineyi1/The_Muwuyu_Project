@@ -34,5 +34,10 @@ const adrift     = (msg, details) => new OpError(422, 'not_joined', msg, details
 // do not exist would make the app lie to relatives rather than keep a wall.
 const outOfBranch = (msg, details) => new OpError(403, 'not_your_branch', msg, details);
 
+/* Removing somebody for good was asked for without the family's passcode, or
+   with the wrong one, or too many times in a row. 403 rather than 401: the
+   family is signed in and known — it is this one act that is held back. */
+const needPasscode = (msg, details) => new OpError(403, 'need_passcode', msg, details);
+
 module.exports = { OpError, ConflictError, badRequest, notFound, cycle, adrift,
-                   outOfBranch };
+                   outOfBranch, needPasscode };

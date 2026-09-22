@@ -11,10 +11,12 @@
 // the same rows, and two people editing the SAME person is detected and
 // reported rather than resolved by whoever happened to save last.
 
-const { ConflictError, badRequest, notFound, cycle, adrift, outOfBranch } = require('./errors');
+const { ConflictError, badRequest, notFound, cycle, adrift, outOfBranch,
+        needPasscode } = require('./errors');
 const graph = require('./graph');
 const joined = require('./joined');
 const branch = require('./branch');
+const passcode = require('./passcode');
 
 // Namespace for this app's advisory locks, so a tree lock can never collide
 // with the migration lock in db/migrate.js.
@@ -1043,6 +1045,44 @@ async function collapseDuplicateUnions(client, treeId, personId) {
 async function applyOps(pool, treeId, ops, actor = '', opts = {}) {
   if (!Array.isArray(ops)) throw badRequest('ops must be an array');
   if (!ops.length) throw badRequest('ops is empty');
+
+  /* ── REMOVING SOMEBODY FOR GOOD NEEDS THE FAMILY'S PASSCODE ──────────────
+   *
+   * "Deletion of a person should require a passcode. Edits can be made to
+   *  dates and relationships but deletions can only be done with the
+   *  passcode."
+   *
+   * Checked here, before the connection is taken and before BEGIN, so a
+   * refusal costs nothing and cannot half-apply.
+   *
+   * ONLY deletePerson. A year corrected, a name respelled, a marriage
+   * recorded or undone, somebody set aside — those are the ordinary work of
+   * keeping a family tree, they happen all day, and every one of them is in
+   * the change log where it can be read back and put right. A person removed
+   * is not: the row is gone and only a line saying somebody of that name was
+   * removed remains.
+   *
+   * NOT mergePeople, which also makes a name disappear from the screen.
+   * Merging two records of one person loses nothing — it is the repair for
+   * the duplicate the family was just warned about, and putting a passcode
+   * in front of it would leave the duplicates standing.
+   *
+   * The page asks for the code before it takes anybody off the screen, but
+   * that is a courtesy so a mistyped code costs nothing. THIS is the gate:
+   * it is the door every write comes through, and it holds whether the
+   * browser asking is the one this project shipped or not. */
+  if (ops.some(o => o && o.op === 'deletePerson')){
+    const said = passcode.check(opts.passKey || 'anon', opts.passcode);
+    if (!said.ok) throw needPasscode(
+      said.reason === 'unset'
+        ? 'Removing somebody for good needs a passcode, and this deployment ' +
+          'has not been given one. Nobody has been removed.'
+      : said.reason === 'wait'
+        ? `Too many wrong passcodes. Try again in ${Math.ceil(said.waitMs / 1000)}` +
+          ' seconds. Nobody has been removed.'
+        : 'That is not the passcode. Nobody has been removed.',
+      { reason: said.reason, waitMs: said.waitMs || 0 });
+  }
 
   const client = await pool.connect();
   try {
