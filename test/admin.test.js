@@ -86,6 +86,31 @@ function client(server) {
 
   await pool.query(`INSERT INTO people (tree_id, name, totem) VALUES ($1,'Sekuru Chenjerai','Nzou')`,
     [nyamhunga.id]);
+
+  /* A MARRIED COUPLE OF TWO SURNAMES, one of whom answers to another name and
+     one of whom does not. This is the shape the roster used to guess at: it
+     handed Ben his wife's surname and Evelyn her husband's, neither of which
+     anybody had written down. Kept in the fixture so the guess cannot come
+     back unnoticed. */
+  const ben = (await pool.query(
+    `INSERT INTO people (tree_id, name) VALUES ($1,'Ben Musoni') RETURNING id`,
+    [nyamhunga.id])).rows[0];
+  const evelyn = (await pool.query(
+    `INSERT INTO people (tree_id, name, also_known_as)
+     VALUES ($1,'Evelyn Marumahoko','Mai Tendai') RETURNING id`,
+    [nyamhunga.id])).rows[0];
+  const wedding = (await pool.query(
+    `INSERT INTO unions (tree_id) VALUES ($1) RETURNING id`, [nyamhunga.id])).rows[0];
+  await pool.query(
+    `INSERT INTO union_partners (union_id, person_id, position) VALUES ($1,$2,0),($1,$3,1)`,
+    [wedding.id, ben.id, evelyn.id]);
+
+  /* How many people the Nyamhunga family has, counted once. Several checks
+     below are "and nobody was added" or "nothing of theirs was deleted", and
+     each of them used to carry its own copy of the number — so growing the
+     fixture by one broke four assertions that had nothing to do with the
+     change and were all still true. */
+  const NYAMHUNGA_PEOPLE = 3;
   await pool.query(`INSERT INTO people (tree_id, name, totem) VALUES ($1,'Mbuya Nyarai','Shava')`,
     [moyo.id]);
 
@@ -171,12 +196,12 @@ function client(server) {
   check('refused', r.status === 404 || r.status === 403, `got ${r.status}`);
   const after = await pool.query('SELECT count(*)::int n FROM people WHERE tree_id=$1',
     [nyamhunga.id]);
-  eq('and nobody was added', after.rows[0].n, 1);
+  eq('and nobody was added', after.rows[0].n, NYAMHUNGA_PEOPLE);
 
   section('what the keeper CAN see is sizes and dates, never names');
   r = await keeper.go(`/api/admin/family/${nyamhunga.id}`);
   eq('the family is described', r.status, 200);
-  eq('with a count', r.body.family.people, 1);
+  eq('with a count', r.body.family.people, NYAMHUNGA_PEOPLE);
   check('and no name from inside the tree', !/Chenjerai/.test(JSON.stringify(r.body)));
 
   // ── a family gets in ─────────────────────────────────────────────────────
@@ -201,16 +226,45 @@ function client(server) {
   eq('and it says which question is being asked', r.body.error, 'who_are_you');
   check('with the names to answer it from', Array.isArray(r.body.people) &&
         r.body.people.some(p => /Chenjerai/.test(p.name)), r.text.slice(0, 200));
-  /* NAMES ONLY — but every name somebody might answer to. `also` carries the
-     other names: one recorded on the card, and the person's own first name
-     with a spouse's surname, so a woman kept under her own house's name is
-     findable by the one she married into. A partner's surname is a name; who
-     is married to whom stays behind the answer, with the dates and the
+  /* NAMES ONLY. `also` carries the other name a person answers to — the one
+     written on their card, and nothing the server worked out for itself.
+     Who is married to whom stays behind the answer, with the dates and the
      mitupo. */
   check('and nothing else about them — no dates, no totem, no marriages',
         r.body.people.every(p =>
           Object.keys(p).every(k => k === 'id' || k === 'name' || k === 'also')),
         Object.keys(r.body.people[0]).join(','));
+
+  /* ── AND NO NAME IS INVENTED ────────────────────────────────────────────
+   *
+   * "What is this also part? These are incorrect — remove all `also` unless
+   *  manually added."
+   *
+   * The roster used to add each person's own first name with their spouse's
+   * surname. It ran on everybody, so a man came back answering to his wife's
+   * surname — a name nobody had ever called him and nobody had entered.
+   *
+   * Asserted from the table rather than against a fixed string, so ANY
+   * future derivation fails here and not in front of a family. */
+  const { rows: written } = await pool.query(
+    `SELECT id, COALESCE(NULLIF(TRIM(also_known_as), ''), '') AS also
+       FROM people WHERE tree_id = $1`, [nyamhunga.id]);
+  const typed = new Map(written.map(w => [w.id, w.also]));
+  check('every other name is one somebody typed, and no other name is invented',
+        r.body.people.every(p =>
+          !p.also || (p.also.length === 1 && p.also[0] === typed.get(p.id))),
+        JSON.stringify(r.body.people));
+
+  const roBen = r.body.people.find(p => /Ben Musoni/.test(p.name));
+  const roEvelyn = r.body.people.find(p => /Evelyn/.test(p.name));
+  check('a husband is not handed his wife\'s surname', roBen && !roBen.also,
+        JSON.stringify(roBen));
+  check('nor a wife her husband\'s',
+        roEvelyn && roEvelyn.also && !roEvelyn.also.some(a => /Musoni/.test(a)),
+        JSON.stringify(roEvelyn));
+  check('while the name she was actually given on her card is still there',
+        roEvelyn && (roEvelyn.also || []).includes('Mai Tendai'),
+        JSON.stringify(roEvelyn));
 
   const chenjerai = r.body.people.find(p => /Chenjerai/.test(p.name));
   r = await one.go('/api/me/person', { method:'POST', json:{ personId: chenjerai.id } });
@@ -438,7 +492,7 @@ function client(server) {
 
   const kept = await pool.query('SELECT count(*)::int n FROM people WHERE tree_id=$1',
     [nyamhunga.id]);
-  eq('NOTHING of theirs was deleted', kept.rows[0].n, 1);
+  eq('NOTHING of theirs was deleted', kept.rows[0].n, NYAMHUNGA_PEOPLE);
 
   section('and reopens it');
   await keeper.go(`/api/admin/family/${nyamhunga.id}/restore`, { method:'POST' });
@@ -499,7 +553,7 @@ function client(server) {
   eq('ending one signs that browser out', r.status, 401);
   const stillThere = await pool.query('SELECT count(*)::int n FROM people WHERE tree_id=$1',
     [nyamhunga.id]);
-  eq('and takes nothing with it', stillThere.rows[0].n, 1);
+  eq('and takes nothing with it', stillThere.rows[0].n, NYAMHUNGA_PEOPLE);
 
   // ── deleting a family ────────────────────────────────────────────────────
   section('DELETING A FAMILY — the one destructive act, and what guards it');

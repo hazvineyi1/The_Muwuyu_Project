@@ -159,38 +159,43 @@ module.exports = function treeRoutes(pool, homeTreeId = null) {
         const b = await branchOf(pool, req);
         if (b) held = { ...b, members: await branchModule.membersOf(pool, s.treeId, b.anchorId) };
       }
-      /* NAMES ONLY, and every name somebody might answer to.
-
-         BE SENSITIVE TO MARRIED NAMES. This family records women under their
-         own house's surname, which is right — a woman keeps her mutupo after
-         marrying, so Evelyn Mandaba stays a Mandaba in a tree full of Musonis.
-         But she has been Mai Musoni for thirty years, and Musoni is what she
-         will type when a screen asks who she is. A roster that only knows the
-         name on the record answers "you are not in this family" to somebody
-         standing in the middle of it.
-
-         So the answer carries the other names too: the one recorded on her
-         card if anybody filled it in, AND — needing nothing filled in at all —
-         her own first name with her husband's surname, worked out from the
-         marriage that is already in the tree. That second one is the whole of
-         the automation: nobody has to have thought of this in advance for it
-         to work for them.
-
-         Still names and nothing else. A partner's surname is a name; who is
-         married to whom stays behind the answer, along with the dates, the
-         mitupo and the rest of the family. */
+      /* NAMES ONLY, AND ONLY NAMES SOMEBODY ACTUALLY TYPED.
+       *
+       * "What is this also part? These are incorrect — remove all `also`
+       *  unless manually added."
+       *
+       * This used to invent one. Alongside the other-name somebody had
+       * written on a card, it worked out each person's own first name with a
+       * spouse's surname and offered that too, on the reasoning that a woman
+       * recorded under her own house's name — Evelyn Mandaba, in a tree full
+       * of Musonis — has been Mai Musoni for thirty years and will type
+       * Musoni when a screen asks who she is.
+       *
+       * The reasoning was sound and the guess was not. It ran on EVERYBODY,
+       * so men were handed their wives' surnames: Ben Musoni came back "also
+       * Ben Marumahoko", which is not a name he has ever been called and not
+       * a name anybody entered. And even where the shape was right it was
+       * still a guess, printed in the same grey as the name a relative had
+       * actually written down, so the tree appeared to hold a record of
+       * something it had only inferred.
+       *
+       * That is the rule this project keeps everywhere else — kinship words
+       * are derived and never stored, and the other-name a person answers to
+       * is stored and never derived — and this was the one place it had been
+       * broken. A name is a fact about a person, not an inference from who
+       * they married. If somebody does go by their spouse's surname, the card
+       * has a field for it and a relative can put it there in a second.
+       *
+       * Nothing was ever written down, so nothing needs undoing: the invented
+       * names existed only in this answer and go with this code.
+       *
+       * Still names and nothing else. The dates, the mitupo, who is married
+       * to whom and the rest of the family stay behind the answer. */
       const { rows } = await pool.query(
-        `SELECT p.id, p.name, p.also_known_as,
-                COALESCE(array_agg(q.name) FILTER (WHERE q.id IS NOT NULL), '{}')
-                  AS partner_names
+        `SELECT p.id, p.name, p.also_known_as
            FROM people p
-           LEFT JOIN union_partners up  ON up.person_id = p.id
-           LEFT JOIN union_partners up2 ON up2.union_id = up.union_id
-                                       AND up2.person_id <> p.id
-           LEFT JOIN people q ON q.id = up2.person_id AND q.aside_at IS NULL
           WHERE p.tree_id = $1 AND p.aside_at IS NULL
             AND ($2::uuid[] IS NULL OR p.id = ANY($2::uuid[]))
-          GROUP BY p.id, p.name, p.also_known_as
           ORDER BY p.name LIMIT 2000`,
         /* AND ONLY THEIR OWN SIDE, where the link that got them in said so.
            The roster is a list of names handed to somebody who has not yet
@@ -200,34 +205,9 @@ module.exports = function treeRoutes(pool, homeTreeId = null) {
         [s.treeId, held ? [...held.members] : null]);
       if (!rows.length) return next();
 
-      /* Which spouses' surnames may be used at all. Read from the branch's own
-         membership by name, because that is what the query above returns. */
-      const partnerInside = new Set();
-      if (held) {
-        const { rows: inside } = await pool.query(
-          'SELECT name FROM people WHERE id = ANY($1::uuid[])', [[...held.members]]);
-        for (const p of inside) partnerInside.add(p.name);
-      }
-      const surname = n => String(n || '').trim().split(/\s+/).pop() || '';
-      const first   = n => String(n || '').trim().split(/\s+/)[0] || '';
       const people = rows.map(r => {
-        const also = new Set();
-        if (r.also_known_as) also.add(r.also_known_as.trim());
-        const mine = surname(r.name).toLowerCase();
-        for (const partner of r.partner_names || []) {
-          // A married name is worked out from a marriage, and a branch may not
-          // be told about a marriage to somebody outside it — not even by the
-          // surname it would give somebody inside.
-          if (held && !partnerInside.has(partner)) continue;
-          const theirs = surname(partner);
-          // Only where it would actually be a different name. A woman who
-          // married a man of her own surname is not also known as herself.
-          if (theirs && theirs.toLowerCase() !== mine && first(r.name)) {
-            also.add(`${first(r.name)} ${theirs}`);
-          }
-        }
-        return { id: r.id, name: r.name,
-                 ...(also.size ? { also: [...also] } : {}) };
+        const also = String(r.also_known_as || '').trim();
+        return { id: r.id, name: r.name, ...(also ? { also: [also] } : {}) };
       });
 
       return res.status(428).json({

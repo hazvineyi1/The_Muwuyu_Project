@@ -251,11 +251,26 @@ const section = t => console.log('\n' + t);
   const blanks = Object.values(back).filter(v => v === '').length;
   is(blanks >= 0, true, `${blanks} card(s) carry no word, and say nothing`);
 
-  // ── married names ────────────────────────────────────────────────────────
-  section('SHE CAN BE FOUND BY THE NAME SHE MARRIED INTO');
-  /* Recorded as Evelyn Mandaba, married to a Musoni, and Musoni is what she
-     will type when a screen asks who she is. Nobody filled anything in for
-     this to work — it is read off the marriage already in the tree. */
+  // ── other names ──────────────────────────────────────────────────────────
+  section('THE ROSTER NEVER INVENTS A NAME SOMEBODY ANSWERS TO');
+  /* IT USED TO, and this suite used to insist on it: Evelyn Mandaba is
+     married to a Musoni, so the roster offered "also Evelyn Musoni" without
+     anybody having filled anything in, on the reasoning that Musoni is what
+     she would type.
+   *
+   * The reasoning was sound and the guess was not. It ran on EVERYBODY, so
+   * men came back answering to their wives' surnames — a family saw "Ben
+   * Musoni, also Ben Marumahoko", which is not a name he has ever been
+   * called and not a name anybody entered. Printed in the same grey as the
+   * other-name a relative HAD written down, it made the tree look like it
+   * held a record of something it had only inferred.
+   *
+   * So the rule is the one the rest of this project keeps: a name is stored
+   * and never derived, the way a kinship word is derived and never stored.
+   * If somebody does go by their spouse's surname, the card has a field for
+   * it. The cost is named here rather than hidden — she is no longer found
+   * by typing Musoni — because that is the trade, and it is the right way
+   * round for a record of who people are. */
   const guest2 = await browser.newContext({ viewport:{ width:1180, height:900 } });
   await guest2.route('**', r => r.request().url().startsWith(BASE) ? r.continue() : r.abort());
   const her = await guest2.newPage();
@@ -269,13 +284,19 @@ const section = t => console.log('\n' + t);
   await her.fill('#whoQ', 'Musoni');
   await her.waitForTimeout(300);
   const found = await her.$$eval('#whoList [data-who]', bs => bs.map(b => b.textContent.trim()));
-  is(found.some(n => /Evelyn/.test(n) && /Mandaba/.test(n)), true,
-     'typing her married surname finds her: ' + found.join(' | '));
-  is(found.some(n => /also Evelyn Musoni/.test(n)), true,
-     'and the row says which name it matched, so it does not look like a slip: ' +
+  is(found.some(n => /also Evelyn Musoni/.test(n)), false,
+     'her husband\'s surname is not offered as a name she answers to: ' +
      found.join(' | '));
 
-  section('and her own name still finds her, which is the one on her card');
+  /* The whole roster, not only her — the guess ran on everybody, and a man
+     handed his wife's surname is the case that made it plainly wrong. */
+  await her.fill('#whoQ', '');
+  await her.waitForTimeout(300);
+  const all = await her.$$eval('#whoList [data-who]', bs => bs.map(b => b.textContent.trim()));
+  is(all.some(n => /also/.test(n)), false,
+     'and nobody in the family is given one: ' + all.join(' | '));
+
+  section('and her own name finds her, which is the one on her card');
   await her.fill('#whoQ', 'Mandaba');
   await her.waitForTimeout(300);
   is((await her.$$eval('#whoList [data-who]', bs => bs.map(b => b.textContent.trim())))
