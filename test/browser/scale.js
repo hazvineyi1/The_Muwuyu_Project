@@ -38,9 +38,21 @@ const { BASE, EXE, openApp, ready, settled, saved } = require('./lib');
 const PEOPLE = 400;
 
 // A redraw happens on every pan, zoom, selection and keystroke, so the budget
-// is a frame's worth of room, not a page load's. Generous against the machine
-// this runs on, and still two orders of magnitude under what it was.
-const RENDER_BUDGET_MS = 400;
+// is a frame's worth of room, not a page load's.
+//
+// IT WAS 400 AND IT WAS TOO LOOSE TO MEAN ANYTHING. A redraw of this tree
+// measured 450–490 ms against it — over, and only just, which is the least
+// useful place for a budget to sit: it flaps with the machine and it catches
+// nothing. The cause was not the machine. unionsOf() and parentUnionOf() read
+// every union in the tree and filtered it, once per question, and the
+// questions are asked once per person — the same quadratic shape as the
+// duplicate scan this whole suite was written about. The drawing indexes the
+// shape once now and a redraw of this tree is 66–111 ms.
+//
+// So the number is what a redraw costs with room for a slower machine, rather
+// than a ceiling nothing could hit. If this goes red, something is reading
+// the whole family per person again.
+const RENDER_BUDGET_MS = 250;
 
 // The planted duplicate and everybody it needs around it: the two records of
 // one woman, the husband they share, and the son recorded under each. See
@@ -207,7 +219,13 @@ function plantedDuplicates(tag) {
     return { ms: performance.now() - t, n };
   });
   console.log(`       the exhaustive scan: ${oldCost.ms.toFixed(0)}ms for ${oldCost.n} pairs`);
-  is(oldCost.ms > median, true,
+  /* AND BY A LONG WAY, which is the half of this that does not depend on how
+     fast the machine is. Both numbers come from the same browser on the same
+     tree in the same second, so the RATIO is a fact about the code — and the
+     thing this suite exists to catch is quadratic work creeping back into a
+     redraw, which would show up here as the gap closing long before any
+     absolute budget noticed. It is ~280× as this is written. */
+  is(oldCost.ms > median * 50, true,
      `it costs ${(oldCost.ms / Math.max(median, 0.01)).toFixed(0)}× a redraw — ` +
      `which is why it is not in one`);
 

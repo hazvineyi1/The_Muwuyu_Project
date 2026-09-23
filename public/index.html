@@ -2022,8 +2022,51 @@ const present = id => {
   return p && !p.aside ? p : null;
 };
 
-const parentUnionOf = id => unions().find(u => u.children.includes(id)) || null;
-const unionsOf = id => unions().filter(u => u.partners.includes(id));
+/* ── WHICH HOUSEHOLDS A PERSON IS IN ─────────────────────────────────────
+ *
+ * Asked constantly — by the layout, by every kinship word, by the buds, by
+ * the bar that counts who is not joined — and answered until now by reading
+ * every union in the tree and filtering it. That is one pass over the whole
+ * family per question, and the questions are asked once per person, so the
+ * cost of drawing grows with the SQUARE of the family. On four hundred people
+ * it was most of a redraw, and a redraw happens on every pan, every zoom,
+ * every selection and every keystroke.
+ *
+ * It is the same shape of mistake the duplicate scan made — see
+ * test/browser/scale.js, which exists because of that one — and it is fixed
+ * the same way: ask once, not once per person.
+ *
+ * ONLY WHILE A DRAWING IS BEING MADE, and that is the whole of why this is
+ * safe. A cache of the tree's shape is only ever wrong because the shape
+ * changed under it, and there are thirty-odd places that change it. Rather
+ * than trust all of them to remember a cache they have never heard of, the
+ * index exists for exactly as long as draw() runs — a stretch of code that
+ * only reads. Outside it, every one of these questions is answered the long
+ * way round, exactly as before, so nothing anywhere else can go stale.
+ *
+ * The lists are handed out copied, because callers append to them. */
+let shapeIx = null;
+
+function indexShape(){
+  const asPartner = new Map(), asChild = new Map();
+  for (const u of Object.values(state.unions)){
+    for (const x of u.partners){
+      const l = asPartner.get(x);
+      if (l) l.push(u); else asPartner.set(x, [u]);
+    }
+    // One set of parents per person is the model's own rule, so the first
+    // union claiming somebody is the only one that can.
+    for (const c of u.children) if (!asChild.has(c)) asChild.set(c, u);
+  }
+  return { asPartner, asChild };
+}
+
+const parentUnionOf = id => shapeIx
+  ? (shapeIx.asChild.get(id) || null)
+  : (unions().find(u => u.children.includes(id)) || null);
+const unionsOf = id => shapeIx
+  ? (shapeIx.asPartner.get(id) || []).slice()
+  : unions().filter(u => u.partners.includes(id));
 const partnersOf = id => unionsOf(id).flatMap(u => u.partners.filter(p => p !== id && present(p)));
 
 /* ── HOW TWO PEOPLE ARE JOINED ────────────────────────────────────────────
@@ -7438,6 +7481,14 @@ let treeInk = '';
 function treeSvg(){ return treeInk; }
 
 function draw(){
+  /* The shape, read once for the whole drawing. Cleared in a finally below,
+     so a draw that throws cannot leave an index behind for the next one to
+     trust. See parentUnionOf. */
+  shapeIx = indexShape();
+  try { return drawing(); } finally { shapeIx = null; }
+}
+
+function drawing(){
   ancestryCache.clear();          // the tree may have changed shape
   forgetHouses();
   forgetLines();                  // a new marriage can make a new family

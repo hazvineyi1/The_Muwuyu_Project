@@ -440,4 +440,67 @@ section('A TREE WITH NO SIDES TO IT IS STILL A TREE');
      Math.round(fe.layoutOf().persons[kid].x));
 }
 
+section('THE DRAWING READS THE SHAPE ONCE, AND READS IT RIGHT');
+/* "The scale test budget should be fixed."
+ *
+ * It was failing at 450–490 ms against a 400 ms budget, and the cause was not
+ * the machine: unionsOf() and parentUnionOf() read EVERY union in the tree
+ * and filtered it, once per question, and those questions are asked once per
+ * person. That is the same quadratic shape as the duplicate scan this
+ * project already took out of the redraw once.
+ *
+ * The drawing indexes the shape once now. The whole risk of that is the
+ * index disagreeing with the scan it replaced — a wrong answer is far worse
+ * than a slow one — so this asserts they agree for every person in a tree
+ * with every shape in it: two marriages, half-brothers, a household with one
+ * partner, and somebody set aside.
+ */
+{
+  const fe = loadFrontend();
+  const gf  = fe.addPerson('Chaitezvi Musoni', 'm', 'Mwendamberi', '1900', '');
+  const gm  = fe.grow('partner', gf, 'Sarah Moyo', 'f', 'Nzou', { born:'1905' });
+  const dad = fe.grow('child', gf, 'Sydney Musoni', 'm', 'Mwendamberi', { born:'1938' });
+  const aunt = fe.grow('child', gf, 'Ruth Musoni', 'f', 'Mwendamberi', { born:'1941' });
+  const w1  = fe.grow('partner', dad, 'Evelyn Mandaba', 'f', 'Moyondizvo', { born:'1954' });
+  const me  = fe.grow('child', dad, 'Musekiwa Musoni', 'm', '', { born:'1968' });
+  // a second marriage, so somebody is a partner in two households
+  const w2  = fe.grow('partner', dad, 'Maria Chirwa', 'f', 'Shava', { born:'1960' });
+  const half = fe.grow('child', dad, 'Bertha Musoni', 'f', '', { born:'1980', share: 'new' });
+  const lone = fe.grow('child', aunt, 'Tapiwa Musoni', 'm', '', { born:'1970' });
+  const gone = fe.grow('child', dad, 'Noel Musoni', 'm', '', { born:'1975' });
+  fe.setAside(gone, 'entered twice');
+  fe.setMe(me);
+
+  const st = fe.getState();
+  const ix = fe.indexShape();
+  const ids = Object.keys(st.people);
+
+  // the long way round, which is what the page still does outside a drawing
+  const scanParent = id =>
+    Object.values(st.unions).find(u => u.children.includes(id)) || null;
+  const scanUnions = id =>
+    Object.values(st.unions).filter(u => u.partners.includes(id));
+
+  let parentsAgree = 0, unionsAgree = 0, wrong = [];
+  for (const id of ids){
+    const a = scanParent(id), b = ix.asChild.get(id) || null;
+    if ((a && a.id) === (b && b.id)) parentsAgree++; else wrong.push('parent of ' + id);
+    const xs = scanUnions(id).map(u => u.id).sort();
+    const ys = (ix.asPartner.get(id) || []).map(u => u.id).sort();
+    if (JSON.stringify(xs) === JSON.stringify(ys)) unionsAgree++;
+    else wrong.push('unions of ' + id + ': ' + xs + ' vs ' + ys);
+  }
+  check('every person is under the same household either way',
+        parentsAgree === ids.length, wrong.join(' | '));
+  check('and is a partner in the same households either way',
+        unionsAgree === ids.length, wrong.join(' | '));
+  check('the tree really does have all the shapes in it',
+        ids.length >= 9 && (ix.asPartner.get(dad) || []).length === 2,
+        `${ids.length} people, ${(ix.asPartner.get(dad) || []).length} marriages for the father`);
+  check('including somebody set aside, who is still in a household',
+        !!(ix.asChild.get(gone)), 'a set-aside person lost their place');
+  check('and somebody whose household has one partner in it',
+        !!(ix.asChild.get(lone)) && !!w1 && !!w2 && !!half && !!gm, '');
+}
+
 report();
