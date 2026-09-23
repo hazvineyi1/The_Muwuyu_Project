@@ -11694,15 +11694,31 @@ function waysToAdd(anchorId){
     daughter: { kind:'child',   sex:'f', what:'daughter' },
     sister:   { kind:'sibling', sex:'f', what:'sister' }
   };
-  const done = (term, gloss, band) => out.push({ term, gloss, band, done:true, preset:{} });
+  /* "The relationship for Musekiwa and Bertha is mother and son, but that
+   *  option is not available."
+   *
+   * It was not available because it was already answered: a mother is
+   * recorded, so Amai was marked done — and done words were dropped from the
+   * join panel entirely, without a word. Every other unavailable row on that
+   * panel says why it cannot be used; this one was simply not there, which
+   * gives a family nothing to think about and nothing to correct.
+   *
+   * A place already held is not the same as a place that cannot be filled.
+   * So the word carries WHO holds it, the panel shows the row, and it can be
+   * corrected from there — which is the whole point, because the commonest
+   * reason to say "she is his mother" about a tree that already names one is
+   * that the one it names is wrong. */
+  const done = (term, gloss, band, held, preset) =>
+    out.push({ term, gloss, band, done:true, held: held || null,
+               preset: preset || {}, kind:'parent' });
 
   /* THE WORDS ARE THE ENGINE'S OWN. Amaiguru, not Maiguru: whichever form
      this app derives is the form it must offer, or a family picks one word
      and is handed back a different one by the card it just made. */
   // ── the row above ──
-  if (father) done('Baba', 'your father', 'up');
+  if (father) done('Baba', 'your father', 'up', father, { sex:'m' });
   else add('Baba', 'your father', 'up', anchorId, 'parent', { sex:'m' });
-  if (mother) done('Amai', 'your mother', 'up');
+  if (mother) done('Amai', 'your mother', 'up', mother, { sex:'f' });
   else add('Amai', 'your mother', 'up', anchorId, 'parent', { sex:'f' });
   add('Babamukuru', "your father's older brother", 'up', father, 'sibling',
       { sex:'m', position:'older' }, father ? null : 'your father', NEED.father);
@@ -11785,15 +11801,38 @@ function waysToAdd(anchorId){
  * AND THE WORD IS STILL WORKED OUT AFTERWARDS. Choosing Mukoma records a
  * brother; whether he comes back Mukoma or Munin'ina is decided by the years,
  * as everywhere else in this app. */
+/* "your father" reads wrong on somebody else's card. Shared, because the
+   list, the panel and the confirm all have to say it the same way. */
+function facingOf(anchorId, words){
+  if (anchorId === meId) return words;
+  const first = ((state.people[anchorId] || {}).name || '').split(' ')[0];
+  return String(words).replace(/\byour\b/g, first + "'s");
+}
+
 function waysToJoin(anchorId, otherId){
   const them = state.people[otherId];
   if (!them || anchorId === otherId) return [];
   const out = [];
   for (const w of waysToAdd(anchorId)){
-    if (w.done || !w.kind) continue;
+    if (!w.kind) continue;
     // A word that says which sex it is for is not for somebody recorded as
     // the other. It stays out of the list rather than standing there refused.
     if (w.preset.sex && them.sex && w.preset.sex !== them.sex) continue;
+
+    /* THE PLACE IS TAKEN — which is a thing to correct, not a thing to hide.
+       Offered as a replacement, with whoever holds it named on the row. */
+    if (w.done){
+      if (!w.held) continue;
+      const loop = ancestry(otherId).up.has(anchorId) || otherId === anchorId;
+      out.push({ ...w, via:anchorId, through:'', move:false, also:null,
+                 replace: w.held,
+                 heldBy: (state.people[w.held] || {}).name || 'somebody',
+                 blocked: w.held === otherId
+                     ? `already recorded as ${facingOf(anchorId, w.gloss)}`
+                   : loop ? 'that would make them their own ancestor'
+                   : null });
+      continue;
+    }
     if (!w.all.length){
       /* A word that has to go through somebody nobody has recorded. It is
          shown rather than dropped: "there is no daughter recorded yet" tells
@@ -12873,6 +12912,145 @@ function askForGoBetween(anchorId, otherId, w){
   });
 }
 
+/* PUTTING SOMEBODY IN A PLACE THAT IS ALREADY HELD.
+ *
+ * "The relationship for Musekiwa and Bertha is mother and son, but that
+ *  option is not available."
+ *
+ * It was not available because the tree already named a mother, so the app
+ * treated the question as answered and dropped the word. But a family saying
+ * "she is his mother" about a tree that already names one is not confused —
+ * they are correcting it, and that is the commonest reason to say it at all.
+ *
+ * WHAT MAKES THIS DIFFERENT FROM EVERY OTHER JOIN is that a parent is shared.
+ * Swapping the mother in a household changes her for every child in it, and
+ * the family may mean that — the wrong woman was entered for all of them —
+ * or they may mean this one child only. Those are different acts on different
+ * numbers of people, and the app must not pick for them. So where there are
+ * other children, both are offered and each says how many it touches.
+ *
+ * WHOEVER COMES OUT IS NOT LEFT FLOATING. The same rule as the marriage
+ * correction: a record with nothing else holding it in the tree is set aside
+ * rather than cut loose, every detail kept, one step back for the whole
+ * thing. */
+function askToReplaceParent(anchorId, otherId, w){
+  closeForm();
+  const a = state.people[anchorId], b = state.people[otherId];
+  const old = state.people[w.replace];
+  const pu = parentUnionOf(anchorId);
+  if (!a || !b || !old || !pu) return;
+  pending = { kind:'dupes', anchorId };
+  const him = (a.name || '').split(' ')[0];
+  /* The bare word — "mother", not "your mother". The gloss is written from
+     the anchor's side ("your mother") and every sentence here already names
+     whose it is, so leaving the possessive on gave "Musekiwa's your mother". */
+  const role = String(w.gloss).replace(/^your\s+/, '');
+  /* The other children of that household — never counting the person being
+     put into it. Bertha was being listed among the children she was about to
+     be offered as mother to, which is how "Bertha is mother to all 3" came
+     to include Bertha. */
+  const others = pu.children.filter(x => x !== anchorId && x !== otherId && present(x));
+
+  /* AND THE WHOLE-HOUSEHOLD OPTION IS NOT ALWAYS THERE TO TAKE. Putting
+     somebody in as the parent of a household they are a CHILD of makes them
+     their own parent, and so does putting them over anybody they are
+     descended from. The one-child option has no such problem: he leaves that
+     household for one of his own. */
+  const wouldLoop = pu.children.includes(otherId) ||
+    pu.children.some(c => c !== otherId && present(c) && ancestry(otherId).up.has(c));
+  const canAll = !wouldLoop;
+
+  const el = document.createElement('div');
+  el.id = 'form';
+  el.innerHTML =
+    `<p class="cap">${esc(b.name)} is <b>${esc(w.term)}</b></p>` +
+    `<p class="covnote">${esc(him)}'s ${esc(role)} is recorded as ` +
+    `<b>${esc(old.name)}</b>. ${esc(b.name)} goes there instead.</p>` +
+    (others.length
+      ? `<p class="covnote">${others.length} other ` +
+        `${others.length === 1 ? 'child is' : 'children are'} recorded in that ` +
+        `household — ${esc(others.slice(0, 3).map(x => (state.people[x].name || '').split(' ')[0]).join(', '))}` +
+        `${others.length > 3 ? ' and more' : ''}. ` +
+        (canAll ? `Say whether their ${esc(role)} changes too.` :
+          `Their ${esc(role)} cannot change — ${esc(b.name.split(' ')[0])} is one of ` +
+          `that household's own, and nobody can be their own ${esc(role)}.`) + `</p>` +
+        (canAll
+          ? `<button class="btn wide" id="rpAll">${esc(b.name.split(' ')[0])} is ` +
+            `${esc(role)} to ${others.length === 1 ? 'both' : `all ${others.length + 1}`}</button>` +
+            `<button class="btn ghost wide" id="rpOne">Only ${esc(him)}</button>`
+          : `<button class="btn wide" id="rpOne">Record ${esc(b.name.split(' ')[0])} ` +
+            `as ${esc(him)}'s ${esc(role)}</button>`)
+      : canAll
+        ? `<div class="row"><button class="btn" id="rpAll">Record ${esc(b.name.split(' ')[0])} ` +
+          `as ${esc(him)}'s ${esc(role)}</button></div>`
+        : `<div class="row"><button class="btn" id="rpOne">Record ${esc(b.name.split(' ')[0])} ` +
+          `as ${esc(him)}'s ${esc(role)}</button></div>`) +
+    `<p class="roothint">${esc(old.name)} stays in the tree unless nothing else ` +
+    `holds them there, and Undo takes the whole thing back.</p>` +
+    `<div class="row"><button class="btn ghost" id="rpNo">Cancel</button></div>`;
+  document.body.appendChild(el);
+  placeForm(el);
+
+  /* THE WHOLE HOUSEHOLD: the woman in it is the wrong one, so she comes out
+     of it and the right one goes in. Every child stays exactly where they
+     are — it is the name above them that changes. */
+  const all = () => {
+    const wereLoose = adrift();
+    snapshot();
+    pu.partners = pu.partners.filter(x => x !== w.replace);
+    if (!pu.partners.includes(otherId)) pu.partners.push(otherId);
+    ancestryCache.clear();
+    settle(wereLoose, `${old.name} is no longer recorded as ${him}'s ${role}`);
+  };
+
+  /* THIS CHILD ONLY: the household is right for its other children, so he
+     moves to one of his own with the right parent in it. The other parent
+     goes with him where there is one — losing a father to correct a mother
+     would be the app quietly answering a question nobody asked. */
+  const one = () => {
+    const wereLoose = adrift();
+    snapshot();
+    const alongside = pu.partners.filter(x => x !== w.replace && present(x));
+    pu.children = pu.children.filter(x => x !== anchorId);
+    addUnion([otherId, ...alongside], [anchorId]);
+    ancestryCache.clear();
+    settle(wereLoose, `${him} is recorded under ${b.name}` +
+      (alongside.length ? ` and ${(state.people[alongside[0]].name || '').split(' ')[0]}` : '') +
+      ` now, and the rest of that household is untouched`);
+  };
+
+  const settle = (wereLoose, what) => {
+    /* Nobody comes out of this floating — the same rule the marriage
+       correction keeps. See keptJoined and db/joined.js. */
+    const stranded = cutLoose(wereLoose);
+    const gone = stranded.includes(w.replace) ? old : null;
+    if (gone){
+      gone.aside = { by: meName(), at: new Date().toISOString(),
+                     why: `Replaced as ${him}'s ${role} by ${b.name}` };
+      if (state.rootId === w.replace) state.rootId = (people()[0] || {}).id || null;
+    }
+    if (!keptJoined(wereLoose, 'That')) return;
+    closeForm(); sel = otherId; render(); save();
+    if (layout.persons[otherId]) focusOn(otherId, Math.max(pos.k, 0.7));
+    const k = kinTerms(anchorId, otherId);
+    const said = k && k.list.length ? k.list.map(t => t.term).join(' · ') : '';
+    say(`${what}${said ? ` — ${b.name} is ${said} to ${him}` : ''}. ` +
+        (gone
+          ? `${old.name} had nothing else holding them in the tree, so they have ` +
+            `been set aside — nothing is deleted, and Set aside in the bar brings ` +
+            `them back.`
+          : `${old.name} is still in the tree.`) +
+        ' Undo takes it back.');
+  };
+
+  if ($('rpAll')) $('rpAll').onclick = all;
+  if ($('rpOne')) $('rpOne').onclick = one;
+  $('rpNo').onclick = () => openJoin(anchorId, otherId);
+  el.addEventListener('keydown', e => {
+    if (e.key === 'Escape'){ e.preventDefault(); closeForm(); }
+  });
+}
+
 /* WHICH RELATION IT IS — asked once, plainly, with the ones that cannot be
    said greyed out and the reason on them. The four are the same four the
    buds offer, because they are the four links this model has. */
@@ -12911,6 +13089,9 @@ function openJoin(anchorId, otherId){
                     `recorded under now</small>` : '') +
           (w.also ? `<small class="alsoneed">needs ${esc(facing(w.also))} too — ` +
                     `you will be asked for the name</small>` : '') +
+          (w.replace && !w.blocked
+            ? `<small class="alsoneed">recorded as ${esc(w.heldBy)} — ` +
+              `this puts ${esc((b.name || '').split(' ')[0])} there instead</small>` : '') +
           (w.blocked ? `<small>${esc(w.blocked)}</small>` : '') +
           `</button>`).join('') + `</div>`;
     }).join('') +
@@ -12922,6 +13103,7 @@ function openJoin(anchorId, otherId){
     const w = ways.filter(x => x.band === band)[Number(i)];
     if (!w) return;
     if (w.need) return askForGoBetween(anchorId, otherId, w);
+    if (w.replace) return askToReplaceParent(anchorId, otherId, w);
     const kind = w.kind, moved = w.move, on = w.via;
     linkExisting(kind, on, otherId);
     closeForm(); sel = otherId; render(); save();

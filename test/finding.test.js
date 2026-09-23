@@ -269,6 +269,86 @@ section('A WORD IS NOT REFUSED JUST BECAUSE THE PERSON IT RUNS THROUGH IS MISSIN
   }
 }
 
+section('A PLACE THAT IS ALREADY HELD IS SHOWN, NOT HIDDEN');
+/* "The relationship for Musekiwa and Bertha is mother and son, but that
+ *  option is not available."
+ *
+ * It was not available because it was already answered: a mother was
+ * recorded, so Amai was marked done — and done words were dropped from the
+ * join panel entirely, without a word. Every other unavailable row on that
+ * panel says why; this one was simply not there.
+ *
+ * A place already held is not the same as a place that cannot be filled, and
+ * the commonest reason to say "she is his mother" of a tree that already
+ * names one is that the one it names is wrong. */
+{
+  const fe = loadFrontend();
+  const gran  = fe.addPerson('Gogo Chiedza', 'f', 'Nzou', '1915', '');
+  const wrong = fe.grow('child', gran, 'Ruvarashe Moyo', 'f', 'Nzou', { born:'1940' });
+  const her   = fe.grow('child', gran, 'Bertha Enia Musoni', 'f', '', { born:'1945' });
+  const me    = fe.grow('child', wrong, 'Musekiwa Mupfunde', 'm', '', { born:'1968' });
+  const kid2  = fe.grow('child', wrong, 'Tapiwa Mupfunde', 'm', '', { born:'1971' });
+  fe.setMe(me);
+
+  const amai = fe.waysToJoin(me, her).find(w => w.term === 'Amai');
+  check('the word is there at all', !!amai, 'Amai was dropped from the list');
+  check('and it is not refused', !!amai && !amai.blocked, JSON.stringify(amai));
+  eq('it names who holds the place', amai.heldBy, 'Ruvarashe Moyo');
+  eq('and who would be replaced', amai.replace, wrong);
+
+  section('and a word already answered by this very person says so');
+  {
+    const already = fe.waysToJoin(me, wrong).find(w => w.term === 'Amai');
+    check('it is refused, with the reason', !!already && /already recorded/.test(already.blocked || ''),
+          JSON.stringify(already));
+  }
+
+  section('the whole household, or the one child — a parent is shared, so it is asked');
+  {
+    /* Swapping the mother in a household changes her for every child in it.
+       The family may mean that, or they may mean this one child. Those are
+       different acts on different numbers of people, so the app must not
+       pick. Both are exercised here on their own copy of the tree. */
+    const one = loadFrontend();
+    const g  = one.addPerson('Gogo Chiedza', 'f', 'Nzou', '1915', '');
+    const w2 = one.grow('child', g, 'Ruvarashe Moyo', 'f', 'Nzou', { born:'1940' });
+    const b2 = one.grow('child', g, 'Bertha Enia Musoni', 'f', '', { born:'1945' });
+    const m2 = one.grow('child', w2, 'Musekiwa Mupfunde', 'm', '', { born:'1968' });
+    const t2 = one.grow('child', w2, 'Tapiwa Mupfunde', 'm', '', { born:'1971' });
+    one.setMe(m2);
+
+    // THIS CHILD ONLY: he leaves that household for one of his own.
+    const pu = one.parentUnionOf(m2);
+    pu.children = pu.children.filter(x => x !== m2);
+    one.addUnion([b2], [m2]);
+    eq('his mother is the right one now', one.parentBySex(m2, 'f'), b2);
+    eq('and his brother is untouched', one.parentBySex(t2, 'f'), w2);
+    eq('with nobody left floating', one.adrift(), []);
+  }
+  {
+    // THE WHOLE HOUSEHOLD: the woman in it is the wrong one.
+    const all = loadFrontend();
+    const g  = all.addPerson('Gogo Chiedza', 'f', 'Nzou', '1915', '');
+    const w3 = all.grow('child', g, 'Ruvarashe Moyo', 'f', 'Nzou', { born:'1940' });
+    const b3 = all.grow('child', g, 'Bertha Enia Musoni', 'f', '', { born:'1945' });
+    const m3 = all.grow('child', w3, 'Musekiwa Mupfunde', 'm', '', { born:'1968' });
+    const t3 = all.grow('child', w3, 'Tapiwa Mupfunde', 'm', '', { born:'1971' });
+    all.setMe(m3);
+
+    const pu = all.parentUnionOf(m3);
+    pu.partners = pu.partners.filter(x => x !== w3);
+    pu.partners.push(b3);
+    eq('both children have the right mother', all.parentBySex(m3, 'f'), b3);
+    eq('and so does the brother', all.parentBySex(t3, 'f'), b3);
+    eq('nobody is floating — the one replaced is still her mother\'s child',
+       all.adrift(), []);
+  }
+
+  check('and the tree the checks started from is unchanged',
+        fe.parentBySex(me, 'f') === wrong && fe.parentBySex(kid2, 'f') === wrong,
+        'the first fixture was mutated');
+}
+
 section('but what is missing is not always a person, and that still waits');
 {
   /* "Mukoma — your older brother or sister" is short of a FACT about the
