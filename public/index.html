@@ -641,7 +641,13 @@ body.carrying .pod{transition:none;}
 /* The bar is a ROW of small things now, not a stack of banners. It only ever
    holds one of each, and a chip is the width of its own word. */
 #litbar{
-  position:fixed; left:50%; bottom:74px; transform:translateX(-50%); z-index:var(--z-frame);
+  /* ABOVE THE TOOLBAR, AND THE TOOLBAR IS NOT ALWAYS THE SAME HEIGHT. It
+     wraps to two rows on a phone, so 74px — the one-row answer — put this
+     line straight on top of Find and Undo. The page measures the bar after
+     every draw and writes it here; the fallback is the one-row number, for
+     the moment before the first measurement. */
+  position:fixed; left:50%; bottom:calc(var(--barh, 60px) + 14px);
+  transform:translateX(-50%); z-index:var(--z-frame);
   display:flex; flex-wrap:wrap; align-items:center; justify-content:center;
   gap:8px; max-width:min(92vw,600px); pointer-events:none;
 }
@@ -1693,6 +1699,32 @@ body.carrying .pod{transition:none;}
   display:flex; align-items:center; gap:2px; padding:6px;
   background:var(--pod); border:1.5px solid var(--pod-edge);
   border-radius:999px; box-shadow:var(--shadow);
+}
+/* ── AND ON A PHONE IT WRAPS RATHER THAN RUNNING OFF THE EDGE ───────────
+ *
+ * It was pinned to the left with no right edge and no width, so it grew to
+ * whatever its words came to — 476px — and simply carried on past the side
+ * of the screen. Every phone lost <b>Look</b>, which is where dark mode, the
+ * palette and how much of the tree live; a 320px screen lost <b>This
+ * family</b> as well, and that one is the door to everything the app can do
+ * that is not adding a person: what the others have done, where it can grow,
+ * kinship, words, mitupo, other families, start again.
+ *
+ * So half the app was behind two buttons that could not be reached, on the
+ * screen most of this family will ever use. Not a subtle fault, and it is
+ * invisible on a laptop, which is where it was being looked at.
+ *
+ * Wrapping rather than scrolling. A bar that scrolls sideways hides the same
+ * buttons behind a gesture nobody is told about; a second row is simply
+ * there. */
+@media (max-width: 620px){
+  #bar{
+    left:10px; right:10px; flex-wrap:wrap; justify-content:center;
+    row-gap:2px; border-radius:22px;
+  }
+  /* A hairline that stretches to the height of its row is a hairline that
+     doubles in length the moment the bar has two rows. */
+  #bar .sep{align-self:center; height:20px;}
 }
 #bar button{
   padding:8px 12px; border-radius:999px; cursor:pointer;
@@ -7966,6 +7998,7 @@ function drawing(){
   // way back to their records, and hiding it would make a reversible act
   // unreversible.
   $('bar').hidden = !people().length && !asidePeople().length;
+  measureBar();
   // The banner appears with the toolbar: before there is anybody in the tree
   // there is no family to name and nobody to be.
   $('top').hidden = $('bar').hidden;
@@ -8306,8 +8339,22 @@ function placeBuds(){
     const wide = Math.max(...out.map(W));
     const tall = out.length * BH + (out.length - 1) * GAP;
 
-    const at = (dir, lift, push) => {
-      const mid = cx + dir * (halfW + 20 + push + wide / 2);
+    /* `held` is the answer to "there is nowhere beside this person that
+       fits". On a 320px screen a pod is 108 wide and this column is 190,
+       and 108 + 20 + 190 is more than the screen — so BOTH sides put every
+       bud off the edge, and the search, finding nothing better, picked one
+       and left all six where nobody could reach them. That is the entire
+       set of things you can do with a person, gone, on the narrowest phones
+       people actually hold.
+     *
+       Held on screen, the column slides in until it fits. It may then sit
+       over the person it belongs to, which costs one apiece in the weighing
+       below and is worth paying: a bud is drawn above the tree and still
+       takes the tap, while a bud past the edge takes nothing. */
+    const at = (dir, lift, push, held) => {
+      let mid = cx + dir * (halfW + 20 + push + wide / 2);
+      if (held) mid = Math.min(Math.max(mid, PAD + wide / 2),
+                               Math.max(PAD + wide / 2, innerWidth - PAD - wide / 2));
       /* Centred on the person, then held on the screen. A list taller than
          the room it has is pinned to the top rather than hanging off it: the
          first thing anybody reads has to be there. */
@@ -8332,12 +8379,17 @@ function placeBuds(){
     for (let d = 40; d <= 400; d += 40) pushes.push(d);
 
     let pick = null;
+    /* Held last, and with a tie-break against it, so it only ever wins by
+       lowering the real cost — which is to say only when the free placement
+       would have put a bud off the screen. Everywhere with room, nothing
+       about this changes. */
+    for (const held of [false, true])
     for (const dir of [1, -1]) for (const push of pushes) for (const lift of lifts){
-      const boxes = at(dir, lift, push);
+      const boxes = at(dir, lift, push, held);
       // The tie-breakers, and all of them are worth less than one bud over a
       // name: the right of somebody before the left, close before far, and
       // their own line before above or below it.
-      const c = cost(boxes) + (dir > 0 ? 0 : 0.5) +
+      const c = cost(boxes) + (dir > 0 ? 0 : 0.5) + (held ? 0.25 : 0) +
                 push / 1000 + Math.abs(lift) / 10000;
       if (!pick || c < pick.c) pick = { boxes, c };
       if (pick.c === 0) break;
@@ -12780,6 +12832,31 @@ function bringIntoView(id){
   if (dx || dy) glideTo({ x: pos.x + dx, y: pos.y + dy, k: pos.k });
 }
 
+/* ── HOW TALL THE TOOLBAR IS, ASKED RATHER THAN ASSUMED ─────────────────
+ *
+ * It is one row on a laptop and two on a phone, where it wraps rather than
+ * running off the side. Two other things are placed against it — the line
+ * that says who is picked, and the pan that keeps a person's buds clear of
+ * the furniture — and both of them held the one-row number, so both of them
+ * were wrong on every phone the moment the bar gained a row.
+ *
+ * placeBuds already had this right: it asks the elements where they are. */
+function barTop(){
+  const el = $('bar');
+  if (!el || el.hidden || typeof el.getBoundingClientRect !== 'function')
+    return innerHeight - 14;
+  const r = el.getBoundingClientRect();
+  return r.height > 0 ? r.top : innerHeight - 74;
+}
+function measureBar(){
+  const el = $('bar');
+  if (!el || typeof el.getBoundingClientRect !== 'function') return;
+  try {
+    const h = el.hidden ? 0 : Math.round(el.getBoundingClientRect().height);
+    document.documentElement.style.setProperty('--barh', (h + 14) + 'px');
+  } catch (e) { /* the tests run this against a stand-in for the browser */ }
+}
+
 /* Measure what actually got drawn and shift the view so the selected person
    and every bud around them are on screen. A choice you can't see is a choice
    you don't have. */
@@ -12799,16 +12876,16 @@ function revealBuds(){
     top:Math.min(a.top, r.top), bottom:Math.max(a.bottom, r.bottom)
   }), { left:Infinity, right:-Infinity, top:Infinity, bottom:-Infinity });
 
-  const pad = 14, barTop = innerHeight - 74;    // keep clear of the toolbar
+  const pad = 14, floor = barTop() - 8;         // keep clear of the toolbar
   const top = pad + TOPBAR;                    // and of the banner
   let dx = 0, dy = 0;
   if (box.right - box.left < innerWidth - pad * 2){
     if (box.left < pad) dx = pad - box.left;
     else if (box.right > innerWidth - pad) dx = innerWidth - pad - box.right;
   }
-  if (box.bottom - box.top < barTop - top){
+  if (box.bottom - box.top < floor - top){
     if (box.top < top) dy = top - box.top;
-    else if (box.bottom > barTop) dy = barTop - box.bottom;
+    else if (box.bottom > floor) dy = floor - box.bottom;
   }
   if (dx || dy) glideTo({ x: pos.x + dx, y: pos.y + dy, k: pos.k });
 }
@@ -16391,6 +16468,93 @@ function save(){
   duplicatesChanged();
 }
 
+/* ── PUTTING BACK WHAT WAS NEVER SENT ───────────────────────────────────
+ *
+ * Used when the server has refused a batch and the page has had to re-read
+ * the tree. `mine` is the tree as this page had it a moment ago; `state` is
+ * now the one the server holds. This grafts the people `mine` had that the
+ * server has never heard of back onto it.
+ *
+ * NEVER HEARD OF IS THE TEST, and mintedYet() is exactly that test: a person
+ * still wearing a provisional id — "p4" — has never been saved, so there is
+ * no version of them to be stale, nobody else can have edited them, and
+ * putting them back cannot clash with anything. Anybody wearing a real id
+ * came from the server and the server's copy is the honest one; those are
+ * left alone whatever `mine` said about them.
+ *
+ * AND THE MARRIAGES THAT HOLD THEM ON, or the join rule would refuse them on
+ * the way back in — quite rightly, since a name grafted back with nothing
+ * holding it is exactly the loose name that rule exists to prevent. A union
+ * the server already has gains our people; a union we invented comes across
+ * whole. Anyone we cannot hold on to anybody is dropped rather than sent
+ * adrift, and the count returned is what actually survived.
+ *
+ * Returns how many people were kept, so the sentence afterwards can say. */
+function regraftUnsaved(mine){
+  if (!mine || !mine.people || !state || !state.people) return 0;
+
+  const ours = Object.values(mine.people)
+    .filter(p => p && p.id && !mintedYet(p.id) && !state.people[p.id]);
+  if (!ours.length) return 0;
+
+  /* PROVISIONAL IDS MUST NOT BE MINTED TWICE. adopt() starts a fresh tree's
+     counter at 1, so without this the next person typed would be handed "p4"
+     while a re-grafted "p4" was still sitting in the tree, and the two would
+     become one person. */
+  state.seq = Math.max(Number(state.seq) || 1, Number(mine.seq) || 1);
+
+  for (const p of ours) state.people[p.id] = { ...p };
+
+  const holding = new Set();
+  for (const u of Object.values(mine.unions || {})){
+    if (!u) continue;
+    const partners = (u.partners || []).filter(x => state.people[x]);
+    const children = (u.children || []).filter(x => state.people[x]);
+    const newcomers = [...partners, ...children].filter(x => !mintedYet(x));
+    if (!newcomers.length) continue;              // nothing of ours is in it
+
+    if (mintedYet(u.id)){
+      // A marriage the server already has. Ours go in; theirs stay as they
+      // are, because the server may have gained children of its own since.
+      const there = state.unions[u.id];
+      if (!there) continue;                       // it has gone; nothing to join to
+      for (const x of partners) if (!there.partners.includes(x)) there.partners.push(x);
+      for (const x of children) if (!there.children.includes(x)) there.children.push(x);
+    } else {
+      // A marriage this page invented, which travels with the people in it.
+      state.unions[u.id] = { id:u.id, partners, children, bond:u.bond || '' };
+    }
+    /* Held only where somebody ELSE is in the union too. A union containing
+       one new name and nothing else is a name in a box, not a join — see
+       db/joined.js, which would refuse the batch for exactly this. */
+    const others = [...partners, ...children].filter(x => mintedYet(x));
+    const holdsEachOther = partners.length + children.length > 1;
+    if (others.length || holdsEachOther) for (const x of newcomers) holding.add(x);
+  }
+
+  /* Anybody left with nothing holding them on goes, and so does the union
+     that was supposed to hold them. Sending them would have the server
+     refuse the whole batch again, and this time there would be nothing left
+     to tell the family about it. */
+  let kept = 0;
+  for (const p of ours){
+    if (holding.has(p.id)){ kept++; continue; }
+    delete state.people[p.id];
+    for (const u of Object.values(state.unions)){
+      if (mintedYet(u.id)){
+        u.partners = u.partners.filter(x => x !== p.id);
+        u.children = u.children.filter(x => x !== p.id);
+      }
+    }
+  }
+  for (const [uid2, u] of Object.entries(state.unions)){
+    if (mintedYet(uid2)) continue;
+    if (!u.partners.length && !u.children.length) delete state.unions[uid2];
+  }
+  if (sel && !state.people[sel]) sel = null;
+  return kept;
+}
+
 async function flush(){
   if (store === 'local'){
     try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
@@ -16416,15 +16580,62 @@ async function flush(){
     const r = await postOps(ops);
 
     if (r.status === 409){
-      // Somebody else changed one of these records while this page was
-      // holding an older copy of it. The batch was NOT applied — which is
-      // the point. Take their version and say what happened, rather than
-      // letting either edit silently win.
-      let who = '';
-      try { const d = await r.json(); who = d.message || ''; } catch (e) {}
+      /* Somebody else changed one of these records while this page was
+         holding an older copy of it. The batch was NOT applied — which is
+         the point. Take their version rather than letting either edit
+         silently win.
+       *
+       * AND KEEP THE WORK THAT DID NOT CLASH, which is the whole of this.
+       *
+       * "I am adding a name and it is not showing up."
+       *
+       * A batch is everything this page has not sent yet. Four names typed
+       * into four buds and one date corrected on a card go to the server
+       * together, and if the date clashes the server refuses all five — that
+       * is right, because a batch that half-applies is worse. What was wrong
+       * was here: the page then re-read the tree, which threw the four names
+       * away with the date, and said "please make it again" as though one
+       * small thing had been lost. Four relatives had been typed in and were
+       * simply gone, with no list of what they were.
+       *
+       * A name that has never been saved cannot clash with anybody — it has
+       * no version to be stale, and the server has never heard of it. So the
+       * tree is re-read and those names are put straight back on top of it
+       * and sent again. Only the edit to a record somebody else had touched
+       * is lost, and that one is named. */
+      let who = '', clashed = null;
+      try {
+        const d = await r.json();
+        who = d.message || '';
+        clashed = d.current && d.current.id ? d.current.id : null;
+      } catch (e) {}
+      const theirName = clashed && state.people[clashed]
+        ? state.people[clashed].name : '';
+      const mine = copyState();
       await refresh();
+      const kept = regraftUnsaved(mine);
+      if (kept){
+        render();
+        save();
+        const said =
+          (theirName
+            ? `Somebody else was editing ${theirName} at the same time, so that ` +
+              `one change was not saved.`
+            : `Somebody else was editing the same person at the same time, so ` +
+              `that one change was not saved.`) +
+          ` The ${kept === 1 ? 'name' : kept + ' names'} you added ` +
+          `${kept === 1 ? 'is' : 'are'} still here and ${kept === 1 ? 'has' : 'have'} ` +
+          `been sent.`;
+        say(said, 'atonce');
+        showRefused(said);
+        return;
+      }
+      /* LOUD, like every other refusal. It was quiet, and only by accident:
+         the sentence is built from two strings and "was not saved" falls
+         across the join, so the check that catches a politely-announced
+         refusal could not see it. */
       say('Somebody else was editing at the same time, so that change was not ' +
-          'saved. The tree has been refreshed — please make it again.');
+          'saved. The tree has been refreshed — please make it again.', 'atonce');
       showClash(who);
       return;
     }

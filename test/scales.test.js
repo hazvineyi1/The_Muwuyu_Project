@@ -466,8 +466,14 @@ section('TWO LOUDNESSES, AND THE SECOND IS FOR WHAT DID NOT HAPPEN');
   check('say takes a loudness', /function say\(m, how\)/.test(js), 'say has not changed');
   check('quiet is the default', /how === 'atonce' \? 'assertive' : 'polite'/.test(body), body);
   const loud = (js.match(/'atonce'/g) || []).length - 1;   // one is the test in say itself
+  /* Seventeen of a hundred and three say() calls. The number moves when a
+     refusal is added, and it moved twice here: a batch that half-clashes now
+     says which person it was and what was kept, and the older clash sentence
+     was quiet only because "was not saved" fell across a string join where
+     the check below could not see it. Raise it for a refusal, never for a
+     confirmation — the ratio is the point, not the number. */
   check('and a handful of places are loud, not most of them',
-        loud >= 4 && loud <= 15, String(loud));
+        loud >= 4 && loud <= 17, String(loud));
 }
 
 section('and nothing that failed is announced politely');

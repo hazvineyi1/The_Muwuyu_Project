@@ -107,6 +107,45 @@ async function looseAfter(client, treeId, addedIds) {
   return added.filter(id => !grounded.has(id));
 }
 
+/* ── AND WHETHER THEY ARE ALONE OR MERELY APART ──────────────────────────
+ *
+ * looseAfter answers "did this batch reach the tree". It does not say HOW it
+ * failed, and the two ways are different faults with different remedies:
+ *
+ *   ALONE    a name in no union with anybody. Every one of them needs
+ *            joining to somebody.
+ *   APART    names joined to each other and to nobody already here — an
+ *            island. Joining ONE of them to a relative already in the tree
+ *            brings the whole group with it.
+ *
+ * The refusal said "have nobody on the other end" for both, which for an
+ * island is simply untrue — they have each other — and sends a family
+ * looking for a missing link on every name instead of on one.
+ *
+ * Returns true when at least one of them is holding on to somebody, which is
+ * what makes the group an island rather than a scatter of lone names. */
+async function apartNotAlone(client, loose) {
+  const ids = [...new Set(loose)].filter(Boolean);
+  if (ids.length < 2) return false;
+  const { rows } = await client.query(
+    `WITH theirs AS (
+       SELECT union_id FROM union_partners WHERE person_id = ANY($1::uuid[])
+       UNION
+       SELECT union_id FROM union_children WHERE person_id = ANY($1::uuid[])
+     )
+     SELECT t.union_id, count(*)::int AS n
+       FROM theirs t
+       JOIN (SELECT union_id, person_id FROM union_partners
+             UNION ALL
+             SELECT union_id, person_id FROM union_children) m
+         ON m.union_id = t.union_id
+      GROUP BY t.union_id
+     HAVING count(*) > 1
+      LIMIT 1`,
+    [ids]);
+  return rows.length > 0;
+}
+
 /* ── AND NOBODY IS EVER CUT LOOSE ─────────────────────────────────────────
  *
  * "3 names are recorded but not joined to anybody yet. This needs to be
@@ -268,4 +307,4 @@ const CUTS = new Set(['removePartner', 'removeChild', 'setAside', 'deletePerson'
 
 const mayCut = ops => (ops || []).some(o => o && CUTS.has(o.op));
 
-module.exports = { looseAfter, adriftNow, mayCut, CUTS };
+module.exports = { looseAfter, apartNotAlone, adriftNow, mayCut, CUTS };

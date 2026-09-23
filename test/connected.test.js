@@ -168,6 +168,36 @@ const http = require('http');
           /Chipo Moyo/.test(body.message || '') && /Garikai Moyo/.test(body.message || ''),
           body.message);
     eq('and the tree is exactly as it was', await heads(treeId), 2);
+
+    /* AND IT SAYS WHICH FAULT IT IS. "Garikai Moyo, Chipo Moyo have nobody on
+       the other end" is not true of these two — they have each other — and it
+       sends a family looking for a missing link on both of them when one join
+       brings the pair in. Two failures, two remedies, and the wording was the
+       same for both. */
+    check('it does not claim they are joined to nobody, because they are joined to each other',
+          !/nobody on the other end/.test(body.message || ''), body.message);
+    check('it says they are apart from this tree rather than alone',
+          /joined to each other but to nobody already in this tree/.test(body.message || ''),
+          body.message);
+    check('and asks for ONE join rather than one each',
+          /join one of them/.test(body.message || ''), body.message);
+    eq('and the answer carries which fault it was, for anything reading it',
+       body.apart, true);
+  }
+
+  section('and a name joined to nothing at all is still told so');
+  /* The other fault, and the one the old wording was written for. Both are
+     refused; they are not the same thing and do not have the same answer. */
+  {
+    const { treeId } = await family();
+    const { status, body } = await post(treeId, [
+      { op:'addPerson', ref:'$lone', name:'Nobody Attached', sex:'f' }
+    ]);
+    eq('refused', status, 422);
+    check('and this one really does have nobody on the other end',
+          /has nobody on the other end/.test(body.message || ''), body.message);
+    check('so it is not described as an island',
+          !body.apart, body.message);
   }
 
   section('THE FIRST NAME IN AN EMPTY TREE IS ALLOWED TO STAND ALONE');

@@ -38,6 +38,7 @@ const ROOT = path.join(__dirname, '..', '..');
  * than failed. A suite that is skipped has not passed. */
 const SUITES = [
   { name: 'calling',      kind: 'api' },
+  { name: 'clashing',     kind: 'api' },
   { name: 'concurrent',   kind: 'api' },
   { name: 'connection',   kind: 'api' },
   { name: 'families',     kind: 'api' },
@@ -59,6 +60,7 @@ const SUITES = [
   { name: 'correcting',   kind: 'static' },
   { name: 'lines',        kind: 'static' },
   { name: 'look',         kind: 'static' },
+  { name: 'reach',        kind: 'static' },
   { name: 'roots',        kind: 'static' },
   { name: 'setaside',     kind: 'static' },
   { name: 'showing',      kind: 'static' }

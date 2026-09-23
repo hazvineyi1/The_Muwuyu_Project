@@ -1196,15 +1196,32 @@ async function applyOps(pool, treeId, ops, actor = '', opts = {}) {
         const { rows: names } = await client.query(
           'SELECT name FROM people WHERE id = ANY($1::uuid[]) ORDER BY name', [loose]);
         const said = names.map(r => r.name).filter(Boolean);
+        /* A LIST, NOT A RECITAL. Seven names inside one sentence is a
+           paragraph to read before the remedy arrives, and the remedy is the
+           part somebody needs. */
+        const few = said.length > 3
+          ? `${said.slice(0, 3).join(', ')} and ${said.length - 3} ` +
+            `${said.length - 3 === 1 ? 'other' : 'others'}`
+          : said.join(', ');
+        /* WHICH FAULT IT IS — see apartNotAlone. An island is not a scatter
+           of lone names and does not have the same answer: one join brings
+           the whole group in, and telling a family to find a relative for
+           each of seven people who are plainly already joined to each other
+           reads as the app not understanding what it is looking at. */
+        const apart = await joined.apartNotAlone(client, loose);
         throw adrift(
           'Everybody in this tree is joined to somebody. ' +
-          (said.length === 1
+          (apart
+            ? `${few} are joined to each other but to nobody already in this ` +
+              `tree — join one of them to a relative who is already here, and ` +
+              `the rest come in with them.`
+            : said.length === 1
             ? `${said[0]} has nobody on the other end — pick the relative ` +
               `they belong to and add them from there.`
-            : `${said.join(', ')} have nobody on the other end — pick the ` +
+            : `${few} have nobody on the other end — pick the ` +
               `relatives they belong to and add them from there.`) +
           ' Nothing has been changed.',
-          { people: loose, names: said });
+          { people: loose, names: said, apart });
       }
     }
 
