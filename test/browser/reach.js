@@ -82,6 +82,29 @@ const FAMILY = JSON.stringify({
     await page.waitForFunction(() => { try { return people().length === 5; } catch(e){ return false; } });
     await page.waitForTimeout(500);
 
+    /* ── the top bar ────────────────────────────────────────────────────
+     *
+     * Which family this is, who is looking, and the way out. Four things
+     * were sharing 292 pixels at 320 — those three and the project's own
+     * name — and every one of them was cut: "The Muwuyu P…", "The Baobab
+     * Proj…", "You: Muse…", "Sign…". Three of the four are facts somebody
+     * needs; the fourth is a masthead, and it is the one that gives way. */
+    await page.evaluate(() => { familyName = 'The Baobab Project'; updateWho(); });
+    await page.waitForTimeout(250);
+    const top = await page.evaluate(() => {
+      const cut = el => el && !el.hidden && el.getBoundingClientRect().width > 0 &&
+                        el.scrollWidth > el.clientWidth + 1
+                        ? (el.textContent || '').trim() : null;
+      const t = document.getElementById('top');
+      return { cut: ['family', 'who', 'signout'].map(k => cut(document.getElementById(k)))
+                      .filter(Boolean),
+               measured: TOPBAR,
+               real: Math.round(t.getBoundingClientRect().height) + 14 };
+    });
+    is(top.cut, [], 'nothing in the top bar is cut off mid-word');
+    is(top.measured, top.real,
+       `and the tree is told how tall it really is (${top.real}px)`);
+
     // ── the toolbar ─────────────────────────────────────────────────────
     const bar = await page.evaluate(() => {
       const el = document.getElementById('bar');

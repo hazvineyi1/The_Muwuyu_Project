@@ -18,6 +18,7 @@
 
 const { spawn } = require('child_process');
 const http = require('http');
+const net = require('net');
 const fs = require('fs');
 const path = require('path');
 const { Client } = require('pg');
@@ -114,6 +115,19 @@ async function waitForServer(port, { seconds = 30 } = {}) {
   }
 }
 
+/* Is anything answering on this port already? Asked by binding rather than
+   by connecting: a socket that binds is a port nobody holds, which is the
+   question, and a connection that is refused could also be a server still
+   starting up. */
+function portBusy(port) {
+  return new Promise(resolve => {
+    const probe = net.createServer();
+    probe.once('error', e => resolve(e.code === 'EADDRINUSE'));
+    probe.once('listening', () => probe.close(() => resolve(false)));
+    probe.listen(port, '127.0.0.1');
+  });
+}
+
 async function freshDatabase(admin, name) {
   const url = new URL(admin);
   const root = new Client({ connectionString: new URL('/postgres', url).href });
@@ -177,6 +191,27 @@ function runSuite(name, extraEnv) {
 
     let server = null, child = null;
     try {
+      /* NOBODY ELSE ON THIS PORT.
+       *
+       * Every suite here serves its own page and its own database on one
+       * port, and waitForServer only asks whether SOMETHING answers. So a
+       * server left behind by an earlier run — an orphaned runner, a probe
+       * somebody forgot — takes the port, this suite's own server fails to
+       * bind in silence (its output is discarded), and the suite runs
+       * happily against a stranger's database. That does not fail loudly.
+       * It fails as a wrong answer: assertions about a family this suite
+       * planted, checked against a family it has never seen, and the run
+       * reports whichever it happens to be.
+       *
+       * It has cost this project two red runs that were not regressions and
+       * one green one that proved nothing. A port already answering is a
+       * broken environment and is reported as one. */
+      if (await portBusy(PORT)) {
+        throw new Error(
+          `something is already listening on ${PORT}. A suite that shares a ` +
+          `port shares a database with it — stop the other server and run ` +
+          `again.`);
+      }
       if (suite.kind === 'static') {
         server = await serveStatic(PORT);
       } else {

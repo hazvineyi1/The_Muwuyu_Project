@@ -1671,6 +1671,25 @@ body.carrying .pod{transition:none;}
   color:var(--ink); letter-spacing:.01em; white-space:nowrap;
 }
 #top .brand em{font-style:italic; color:var(--leaf);}
+/* ── AND ON A PHONE THE PROJECT'S OWN NAME GIVES WAY ────────────────────
+ *
+ * Four things were sharing 292 pixels: this, the family's name, who is
+ * looking, and the way out. Every one of them was cut — "The Muwuyu P…",
+ * "The Baobab Proj…", "You: Muse…", "Sign…" — and of the four, three are
+ * facts somebody needs and this one is the masthead. Which family this is
+ * and who you are is what every Shona word on the screen is reckoned from;
+ * what the app is called is in the tab, in the door, and on the page they
+ * signed in from. */
+@media (max-width: 480px){
+  #top .brand{display:none;}
+  #top .set{max-width:100%;}
+}
+/* And narrower still, the three of them take two rows rather than each
+   losing its last few letters. "Sign…" is not a way out anybody can read.
+   TOPBAR is measured, so the tree keeps clear of whichever shape this is. */
+@media (max-width: 380px){
+  #top .set{flex-wrap:wrap; justify-content:flex-end; row-gap:2px; border-radius:20px;}
+}
 #top .set{
   margin-left:auto; pointer-events:auto;
   display:flex; align-items:center; gap:2px; padding:6px;
@@ -2033,8 +2052,15 @@ const POD_W = 132, POD_H = 48;
 /* How much of the top of the screen the banner occupies. Everything that
    places something on screen — fitting the tree, laying out the buds, nudging
    a selected person into view — has to know, or the first row of a family
-   ends up underneath the bar naming it. */
-const TOPBAR = 58;
+   ends up underneath the bar naming it.
+ *
+   A NUMBER UNTIL THE PAGE CAN BE ASKED. It is one row on a laptop and two on
+   a narrow phone, where the family's name, who is looking and the way out no
+   longer fit across 292 pixels and wrap instead — so a constant is right for
+   the first paint and wrong from the second. measureChrome() replaces it
+   after every draw; 58 is what one row comes to, and what the headless tests
+   get, since they have no page to measure. */
+let TOPBAR = 58;
 const COUPLE_GAP = 30;     // between two partners
 const SIB_GAP = 46;        // between sibling families
 const LEVEL = 200;         // between generations, at the ground
@@ -7998,7 +8024,7 @@ function drawing(){
   // way back to their records, and hiding it would make a reversible act
   // unreversible.
   $('bar').hidden = !people().length && !asidePeople().length;
-  measureBar();
+  measureChrome();
   // The banner appears with the toolbar: before there is anybody in the tree
   // there is no family to name and nobody to be.
   $('top').hidden = $('bar').hidden;
@@ -12848,12 +12874,18 @@ function barTop(){
   const r = el.getBoundingClientRect();
   return r.height > 0 ? r.top : innerHeight - 74;
 }
-function measureBar(){
-  const el = $('bar');
-  if (!el || typeof el.getBoundingClientRect !== 'function') return;
+function measureChrome(){
   try {
-    const h = el.hidden ? 0 : Math.round(el.getBoundingClientRect().height);
-    document.documentElement.style.setProperty('--barh', (h + 14) + 'px');
+    const bar = $('bar');
+    if (bar && typeof bar.getBoundingClientRect === 'function'){
+      const h = bar.hidden ? 0 : Math.round(bar.getBoundingClientRect().height);
+      document.documentElement.style.setProperty('--barh', (h + 14) + 'px');
+    }
+    const top = $('top');
+    if (top && typeof top.getBoundingClientRect === 'function' && !top.hidden){
+      const h = Math.round(top.getBoundingClientRect().height);
+      if (h > 0) TOPBAR = h + 14;          // it sits 14px down from the edge
+    }
   } catch (e) { /* the tests run this against a stand-in for the browser */ }
 }
 
@@ -16630,13 +16662,25 @@ async function flush(){
         showRefused(said);
         return;
       }
-      /* LOUD, like every other refusal. It was quiet, and only by accident:
-         the sentence is built from two strings and "was not saved" falls
-         across the join, so the check that catches a politely-announced
+      /* NOTHING OF OURS WAS NEW, so the batch was an edit and only an edit —
+         a date, a name, a totem, on somebody another relative was correcting
+         at the same moment. There is nothing to put back and the change does
+         have to be made again. It can at least say on whom, and what the
+         tree now holds instead, rather than "the same person" and a shrug.
+       *
+         LOUD, like every other refusal. It was quiet, and only by accident:
+         the sentence was built from two strings and "was not saved" fell
+         across the join, where the check that catches a politely-announced
          refusal could not see it. */
-      say('Somebody else was editing at the same time, so that change was not ' +
-          'saved. The tree has been refreshed — please make it again.', 'atonce');
-      showClash(who);
+      const refused = theirName
+        ? `Somebody else was editing ${theirName} at the same time, so your ` +
+          `change to them was not saved. Their version is on the tree now — ` +
+          `have a look before making it again.`
+        : 'Somebody else was editing at the same time, so that change was not ' +
+          'saved. The tree has been refreshed — please make it again.';
+      say(refused, 'atonce');
+      showRefused(refused);
+      if (!theirName) showClash(who);
       return;
     }
     /* ── A NAME WITH NOBODY ON THE OTHER END OF IT ────────────────────────
@@ -16953,6 +16997,54 @@ async function refresh({ quiet = false } = {}){
    only when something has. Re-reading rather than replaying each op means the
    page cannot drift out of step with the server by mis-applying one: the
    server's answer is always the whole truth, not a patch on top of a guess. */
+/* ── THIS PAGE IS OLDER THAN THE APP ────────────────────────────────────
+ *
+ * "This is still a problem" — sent with a photograph of a fault that had
+ * been fixed and deployed twenty minutes earlier.
+ *
+ * Both were true. The server had the fix; the tab in the photograph did not,
+ * because a page is HTML and JavaScript fetched once and that tab had been
+ * open since before the deploy. Nothing about an old tab looks old. It has
+ * the family's tree in it, it saves, it polls, it is in every way working —
+ * it is simply running last week's code against this week's server.
+ *
+ * That is not a rare corner. This app is for a family filling in a tree over
+ * weeks, on a phone that never closes a tab, and "reload the page" is not
+ * something anybody thinks to do about a bug. So the page is told, once,
+ * plainly, with the button to do it.
+ *
+ * IT DOES NOT TIME OUT and it does not repeat. A line that has gone by the
+ * time somebody looks up has not been said, and one said every four seconds
+ * is a page shouting at somebody who is trying to type a name.
+ *
+ * NOTHING IS LOST BY RELOADING, and the sentence says so, because that is
+ * the first thing anybody with half a family typed in will want to know: a
+ * reload only re-fetches the page, and everything on screen is already on
+ * the server — the page holds nothing back except during a save, and this
+ * cannot be shown mid-save because the poll that carries it stands down
+ * while there is unsent work. */
+let buildSaid = false;
+function noticeNewBuild(theirs){
+  if (buildSaid) return;
+  // No build on either side means a page opened off disk or a server too old
+  // to say — neither is a reason to tell anybody anything.
+  if (!BUILD || !theirs || theirs === BUILD) return;
+  buildSaid = true;
+  const el = $('others');
+  if (!el) return;
+  el.innerHTML =
+    'This page has been open since before the app was updated, so it is still ' +
+    'running the older one. Reload to get the new version — nothing on screen ' +
+    'is lost, it is all on the server already. ' +
+    '<button type="button" class="linkbtn" id="buildGo">Reload</button>';
+  el.hidden = false;
+  clearTimeout(showFromOthers.t);
+  const go = $('buildGo');
+  if (go) go.onclick = () => location.reload();
+  say('This page is running an older version of the app. Reload to get the ' +
+      'new one; nothing on screen is lost.');
+}
+
 function startPolling(){
   clearInterval(poller);
   poller = setInterval(async () => {
@@ -16964,6 +17056,7 @@ function startPolling(){
                             { headers:{ Accept:'application/json' } });
       if (!r.ok) return;
       const d = await r.json();
+      noticeNewBuild(d.build);
       if (!d.changes || !d.changes.length){ paintHub(); return; }
       const others = d.changes.filter(c => (c.by || '') !== meName());
       /* Whatever arrived is now behind the door, so the door says so. Our

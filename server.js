@@ -392,6 +392,11 @@ const BUILD = ((process.env.RAILWAY_GIT_COMMIT_SHA || '').slice(0, 7)) ||
     catch (e) { return 'dev'; }
   })();
 
+/* And the same string the page is stamped with, where a page that has been
+   open for days can find it. See /tree/:id/changes, which every open tab asks
+   for every few seconds anyway. */
+app.set('mw:build', BUILD);
+
 app.get(['/', '/index.html'], (req, res, next) => {
   try {
     if (pageHtml === null) pageHtml = require('fs').readFileSync(INDEX, 'utf8');

@@ -833,15 +833,29 @@ module.exports = function treeRoutes(pool, homeTreeId = null) {
 
   // Incremental sync. The client holds a seq and asks for what it is missing,
   // rather than re-fetching a tree it already mostly has.
+  /* WHICH BUILD IS ANSWERING, on the one request every open tab already
+     makes every few seconds.
+   *
+     A page is HTML and JavaScript that was fetched once. Deploy a fix and
+     the server has it immediately; a tab that has been open since before
+     the deploy does not, and there is nothing about it to see. So a family
+     told that something is mended goes on meeting the thing that was
+     mended, and the app that told them looks like it is lying.
+   *
+     It rides here rather than on a request of its own because a request of
+     its own is a request that would have to be justified: this costs a
+     dozen characters on a poll that is already happening. */
   r.get('/tree/:id/changes', own, async (req, res) => {
     try {
+      const build = req.app.get('mw:build') || '';
       const held = await branchOf(pool, req);
       if (held) {
         const reach = await reachOf(pool, req.params.id, held);
-        return res.json(await branchChanges(pool, req.params.id, req.query.since,
-                                            req.query.limit, reach));
+        return res.json({ ...(await branchChanges(pool, req.params.id, req.query.since,
+                                                  req.query.limit, reach)), build });
       }
-      res.json(await changesSince(pool, req.params.id, req.query.since, req.query.limit));
+      res.json({ ...(await changesSince(pool, req.params.id, req.query.since,
+                                        req.query.limit)), build });
     } catch (e) { sendError(res, e); }
   });
 

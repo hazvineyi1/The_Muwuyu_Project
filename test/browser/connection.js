@@ -30,6 +30,7 @@ let pass = 0, fail = 0;
 const ok  = m => { pass++; console.log('  ok   ' + m); };
 const bad = (m, d) => { fail++; console.log('  FAIL ' + m + (d ? '  — ' + d : '')); };
 const is  = (a, b, m) => a === b ? ok(m) : bad(m, `expected ${JSON.stringify(b)}, got ${JSON.stringify(a)}`);
+const check = (c, m, d) => c ? ok(m) : bad(m, d ? String(d) : '');
 const section = t => console.log('\n' + t);
 
 (async () => {
@@ -138,6 +139,57 @@ const section = t => console.log('\n' + t);
     is(stalled.store, 'stalled', 'a server that answers badly does stall the page');
     is(/could not be saved/i.test(stalled.says), true, 'and says so plainly');
     await ctx.unroute('**/ops');
+  }
+
+  /* ── AND A PAGE OLDER THAN THE APP IT IS TALKING TO ──────────────────
+   *
+   * "This is still a problem" — sent with a photograph of a fault that had
+   * been fixed and deployed twenty minutes earlier. Both were true: the
+   * server had the fix and the tab in the photograph did not, because a page
+   * is HTML and JavaScript fetched once.
+   *
+   * Nothing about an old tab looks old. It holds the family's tree, it
+   * saves, it polls, it is in every way working — it is running last week's
+   * code against this week's server. On a phone that never closes a tab and
+   * a family filling in a tree over weeks, that is not a corner case, and
+   * "reload the page" is not what anybody thinks to do about a bug. */
+  section('A PAGE THAT HAS BEEN OPEN SINCE BEFORE THE APP WAS UPDATED');
+  {
+    const poll = await page.evaluate(async () => {
+      const r = await fetch(`/api/tree/${treeId}/changes?since=0`,
+                            { headers:{ Accept:'application/json' } });
+      const d = await r.json();
+      return { build:d.build || '', mine:BUILD };
+    });
+    check(!!poll.build, 'the poll every open tab already makes carries the build');
+    is(poll.build, poll.mine, 'and on a page just loaded the two agree');
+
+    await page.evaluate(() => { const e = document.getElementById('others');
+                                if (e) e.hidden = true; });
+    await page.evaluate(() => noticeNewBuild('0000000'));
+    await page.waitForTimeout(250);
+    const said = await page.evaluate(() => {
+      const e = document.getElementById('others');
+      return e && !e.hidden ? e.textContent.replace(/\s+/g,' ').trim() : null;
+    });
+    check(!!said, 'a server running something else is said out loud');
+    check(said && /reload/i.test(said), 'with the word somebody needs: ' + JSON.stringify(said));
+    check(said && /nothing on screen is lost/i.test(said),
+          'and the answer to what that costs, which is the first thing anybody asks');
+    check(await page.$('#buildGo') !== null, 'and a button rather than an instruction');
+
+    /* Once. A line repeated every four seconds is a page shouting at
+       somebody who is trying to type a name. */
+    await page.evaluate(() => { document.getElementById('others').hidden = true;
+                                noticeNewBuild('0000000'); });
+    await page.waitForTimeout(200);
+    is(await page.evaluate(() => !document.getElementById('others').hidden), false,
+       'and only once, however many polls go by');
+
+    await page.evaluate(() => { buildSaid = false; noticeNewBuild(BUILD); });
+    await page.waitForTimeout(150);
+    is(await page.evaluate(() => !document.getElementById('others').hidden), false,
+       'while a server running the same build says nothing at all');
   }
 
   await ctx.close();
