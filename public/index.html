@@ -602,6 +602,23 @@ body.carrying .pod{transition:none;}
   white-space:nowrap; max-width:100%; overflow:hidden; text-overflow:ellipsis;
 }
 .pod.sprout{animation:pop var(--m-far) var(--ease-pop) backwards;}
+/* AND A MARK THAT OUTLASTS THE POP.
+   .sprout is a third of a second of animation, and fresh is cleared at the
+   end of the render that drew it — so by the time somebody has finished
+   reading the line telling them who was added, there is nothing left on the
+   tree pointing at them. This stays for as long as that line does, so the
+   answer to "where" is somewhere to look, not somewhere to hunt. */
+.pod.landed{box-shadow:0 0 0 3px var(--gold), 0 6px 18px rgba(0,0,0,.28);}
+/* ON THE STYLESHEET'S OWN NUMBERS: the longest duration it has, twice, on
+   the settling curve. Not the pop curve — that spring belongs to a person
+   arriving and to nothing else, which is what makes it mean anything. */
+@media (prefers-reduced-motion: no-preference){
+  .pod.landed{animation:landed var(--m-draw) var(--ease) 2;}
+}
+@keyframes landed{
+  0%,100%{box-shadow:0 0 0 3px var(--gold), 0 6px 18px rgba(0,0,0,.28);}
+  50%{box-shadow:0 0 0 7px var(--gold-soft), 0 6px 18px rgba(0,0,0,.28);}
+}
 /* WHEN ONE WORD IS BEING SHOWN. Everybody the word reaches is lifted and the
    rest are set back — not hidden, because the answer to "who are my Baba" is
    only worth anything if you can still see where they stand among everybody
@@ -645,9 +662,28 @@ body.carrying .pod{transition:none;}
   font-weight:700; color:var(--gold); letter-spacing:.04em;
 }
 /* The picked chip carries a sentence rather than a count, so it is allowed
-   to be wider than a word and its tail is quieter than the name. */
-#litbar .chip.picked{max-width:min(88vw,460px);}
-#litbar .chip.picked i{color:var(--muted); font-weight:600; letter-spacing:.02em;}
+   to be wider than a word and its tail is quieter than the name.
+
+   AND ON A PHONE THE SENTENCE TAKES ITS OWN LINE. A name that may not wrap,
+   a sentence, and a button do not fit across 343 pixels, and a flex row with
+   nowhere to go squeezes the one thing that can be squeezed: the sentence
+   became a column one word wide and seven words tall, which is how "picked —
+   every word is from here" came out reading down the screen beside the name.
+   Wrapping lets it drop to a second line whole. */
+#litbar .chip.picked{max-width:min(88vw,460px); flex-wrap:wrap; padding-right:8px;}
+#litbar .chip.picked b{min-width:0; overflow:hidden; text-overflow:ellipsis;}
+#litbar .chip.picked i{color:var(--muted); font-weight:600; letter-spacing:.02em;
+  min-width:0;}
+/* On a phone the two lines are settled rather than left to fall out of the
+   wrapping: the name and the way out on the first, the sentence under them
+   on the second. Left to itself the button wrapped onto a third line of its
+   own, under the left edge of a sentence, which reads as a stray mark rather
+   than as the ✕ belonging to this chip. */
+@media (max-width: 560px){
+  #litbar .chip.picked b{order:1;}
+  #litbar .chip.picked button{order:2; margin-left:auto;}
+  #litbar .chip.picked i{order:3; flex:1 0 100%;}
+}
 #litbar .chip button{
   width:22px; height:22px; padding:0; border-radius:50%;
   display:flex; align-items:center; justify-content:center;
@@ -1978,11 +2014,18 @@ let pending = null;
 let pos = { x:0, y:0, k:1 };
 let layout = { persons:{}, blocks:[], links:[] };
 let fresh = new Set();
+/* The one person just added, held past the render that drew them so the tree
+   itself can say where they went. Cleared on a timer, and by the next thing
+   the family does — see markLanded(). */
+let landedId = null, landedTimer = null;
 let budSig = '';                    // which buds are currently on screen
 /* How wide each one actually came out, read off the page once per set of buds
    and kept for the pans that follow. The columns are aligned from these, so a
    guess is enough to lay out with and not enough to line up with. */
 let budSize = {};
+/* Where the buds actually are, in screen pixels, as the placing worked it
+   out. See apply() in placeBuds — and revealBuds, which is the only reader. */
+let budsBox = null;
 let meId = null;                    // who is looking — this device only
 let pickingMe = false;
 
@@ -7793,6 +7836,7 @@ function drawing(){
     }).join('');
     html.push(
       `<div class="pod${sel === p.id ? ' sel' : ''}${fresh.has(p.id) ? ' sprout' : ''}` +
+      `${landedId === p.id ? ' landed' : ''}` +
       `${p.root ? ' taproot' : ''}${meId === p.id ? ' you' : ''}` +
       `${lost.has(p.id) ? ' adrift' : ''}` +
       `${growing && gaps.has(p.id) ? ' gap' : ''}` +
@@ -7994,7 +8038,7 @@ function budWords(id){
 function placeBuds(){
   const layer = $('buds');
   if (!layer) return;
-  if (!sel || !layout.persons[sel]){ layer.innerHTML = ''; budSig = ''; return; }
+  if (!sel || !layout.persons[sel]){ layer.innerHTML = ''; budSig = ''; budsBox = null; return; }
 
   const id = sel, at = layout.persons[id];
   const sx = q => q.x * pos.k + pos.x, sy = q => q.y * pos.k + pos.y;
@@ -8258,6 +8302,23 @@ function placeBuds(){
       // is what makes the two edges of the column straight.
       el.style.minWidth = Math.round(o.w) + 'px';
     }
+    /* AND THE BOX THEY OCCUPY, WRITTEN DOWN WHERE IT CAN BE TRUSTED.
+     *
+     * Every one of these numbers is already in screen pixels — that is what
+     * the placing works in — so this is the true box, and it is the only
+     * true box. Reading it back off the page with getBoundingClientRect is
+     * not the same thing: a bud pops in from scale(.4), and a rectangle
+     * measured mid-pop is 40% of the one that will be there a moment later.
+     * That is not a rounding difference. It read a column as 76 pixels wide
+     * when it was 179, so the pan that was meant to bring the last bud onto
+     * a phone left it 43 pixels past the edge — an offer nobody could see or
+     * take, and the code that put it there believed it had just fixed that. */
+    budsBox = placed.length ? {
+      left:   Math.min(...placed.map(b => b.l)),
+      right:  Math.max(...placed.map(b => b.r)),
+      top:    Math.min(...placed.map(b => b.t)),
+      bottom: Math.max(...placed.map(b => b.b))
+    } : null;
   };
 
   // Panning re-runs this on every frame. Rebuilding the markup each time would
@@ -8291,6 +8352,23 @@ function placeBuds(){
   }
   if (learnt) lay();
   apply();
+
+  /* AND IF THIS SET OF BUDS BELONGS TO SOMEBODY JUST ADDED, PUT THEM ON SCREEN.
+   *
+   * The reveal used to be a single call made the moment the view stopped
+   * moving, and it was measuring a row of buds that had not finished
+   * settling: the widths are re-learnt from the page, the save comes back
+   * and renames the person, and each of those lays the row out again. So the
+   * pan was computed against a right edge of 400 and the row ended up at
+   * 433 — thirty pixels past the edge of a phone, which is a choice nobody
+   * can see or take.
+   *
+   * This is the only honest place to do it: the buds have just been built and
+   * measured, so the row is where it is going to be. It fires only while the
+   * new person is still marked and still the one selected — a few seconds —
+   * and only on a REBUILD, so panning and zooming never trigger it and the
+   * view never fights the hand holding it. */
+  if (landedId && sel === landedId) revealBuds();
 }
 
 /* The buds of the last draw, so a test can read the offers the page actually
@@ -12449,19 +12527,42 @@ function submitForm(){
   });
   closeForm();
   sel = id;
+  markLanded(id);
   render();
-  keepSteady(anchorId, before);           // the person you grew from stays put
-  bringIntoView(id);                      // …and the new one is never off-screen
-  revealBuds();                           // …nor are the choices around them
+  /* ON SCREEN IS NOT THE SAME AS VISIBLE.
+   *
+   * bringIntoView only ever PANS. On a tree drawn small enough to fit — which
+   * is what fit() leaves you on, and what a phone is on most of the time — a
+   * pod is thirty-five pixels wide, and panning a thirty-five pixel smudge to
+   * the edge of the screen is not showing anybody their new relative. Worse,
+   * revealBuds then pans again to fit the buds, which can push the new person
+   * back out to the margin they were just brought in from.
+   *
+   * So when the drawing is too small to read a name on, the view goes to the
+   * new person at a size that can be read. Above that, the old behaviour is
+   * the right one and is kept: the person you grew FROM stays exactly where
+   * they were, and the tree appears to grow around them rather than jump. */
+  if (pos.k < READABLE_K){
+    // Go to them at a readable size, then put their own choices on screen —
+    // once the view has stopped, because a page measured mid-glide is a page
+    // nobody is looking at yet.
+    focusOn(id, 0.78, revealBuds);
+  } else {
+    keepSteady(anchorId, before);         // the person you grew from stays put
+    bringIntoView(id);                    // …and the new one is never off-screen
+    revealBuds();                         // …nor are the choices around them
+  }
   save();
   // For a sibling, say WHOSE child — the whole point of asking was that the
   // answer is not obvious, so it is worth confirming what went in.
   const share = pick('fWhose', 'share');
   const chosenLabel = share
     ? (parentageOptions(anchorId).find(o => o.key === share) || {}).label : null;
-  say(chosenLabel && kind === 'sibling'
+  const done = chosenLabel && kind === 'sibling'
     ? `${name} added as ${LABEL[kind]} ${state.people[anchorId].name} — ${chosenLabel.toLowerCase()}.`
-    : `${name} added as ${LABEL[kind]} ${state.people[anchorId].name}.`);
+    : `${name} added as ${LABEL[kind]} ${state.people[anchorId].name}.`;
+  say(done);
+  showDone(done);
 }
 
 /* Growing re-flows the whole tree. Pin the person you grew from to the same
@@ -12470,6 +12571,31 @@ function screenOf(id){
   const at = layout.persons[id];
   return at ? { x:at.x * pos.k + pos.x, y:at.y * pos.k + pos.y } : null;
 }
+/* ── AND THE TREE ITSELF SAYS WHERE ─────────────────────────────────────
+ *
+ * The banner says who was added and whose they are; this is the other half
+ * of the same answer. A ring round the new pod for as long as the banner is
+ * up, so somebody can look from the words to the place without searching a
+ * hundred names for the one that is new.
+ *
+ * It is not selection. Selection means "this is the person the buds and the
+ * card belong to" and it survives until you pick somebody else; this means
+ * "this one is new" and it is over in a few seconds. On the ordinary path
+ * they are the same person and the ring simply sits on top of the selection
+ * — which is the point, because the eye is drawn to the ring long before it
+ * reads the thin gold border that selection draws. */
+function markLanded(id){
+  landedId = id;
+  clearTimeout(landedTimer);
+  landedTimer = setTimeout(() => {
+    landedId = null;
+    // Only repaint if the page is still showing the mark — render() is not
+    // cheap on a big tree and a timer has no business costing a frame drop
+    // on a tree nobody is looking at.
+    if (podsEl && podsEl.querySelector('.pod.landed')) render();
+  }, 7000);
+}
+
 /* Selecting somebody near the edge shouldn't hide their own buds — nudge the
    view just enough to give them room, which matters most on a phone. */
 function bringIntoView(id){
@@ -12490,7 +12616,14 @@ function bringIntoView(id){
 function revealBuds(){
   const pod = podsEl.querySelector('.pod.sel');
   if (!pod) return;
-  const parts = [pod, ...$('buds').querySelectorAll('.bud')].map(el => el.getBoundingClientRect());
+  /* THE POD IS MEASURED AND THE BUDS ARE NOT, and the difference is which of
+     them is in the middle of an animation. The pod is drawn once and sits
+     still; the buds pop in from scale(.4), so a rectangle read off the page
+     while that is running is a rectangle nobody will ever see. budsBox is
+     what the placing worked out, in the same screen pixels, before anything
+     animated — see apply() in placeBuds. */
+  const parts = [pod.getBoundingClientRect()];
+  if (budsBox) parts.push(budsBox);
   const box = parts.reduce((a, r) => ({
     left:Math.min(a.left, r.left), right:Math.max(a.right, r.right),
     top:Math.min(a.top, r.top), bottom:Math.max(a.bottom, r.bottom)
@@ -15196,6 +15329,10 @@ stage.addEventListener('wheel', e => {
  * both edges. On a big family that reads as most of the tree having vanished,
  * and the button that should rescue you is the one that cannot. */
 const ZOOM_MIN = 0.25, ZOOM_MAX = 2.4;
+/* Below this a pod is under eighty pixels wide and its name is a grey smear,
+   so "it is on the screen" stops being the same as "you can see it". POD_W is
+   132; the fit() a phone lands on is often nearer 0.27. */
+const READABLE_K = 0.6;
 
 /* WHERE TO LAND WHEN THE TREE IS FIRST DRAWN.
  *
@@ -15316,9 +15453,13 @@ function stopGlide(){
 /* Take the view to `to` over --m-far. Lands exactly on it, always: the last
    frame is assigned rather than interpolated, so a journey never leaves the
    view a pixel short of where it was sent. */
-function glideTo(to, ms){
+/* `then` runs once the view has ARRIVED. Anything that measures the page and
+   then moves it — revealBuds is the one — reads garbage mid-flight, because
+   half a glide is a position nothing is at yet. */
+function glideTo(to, ms, then){
   stopGlide();
-  const land = () => { pos.x = to.x; pos.y = to.y; pos.k = to.k; applyTransform(); };
+  const land = () => { pos.x = to.x; pos.y = to.y; pos.k = to.k; applyTransform();
+                       if (then) then(); };
   if (stillness() || typeof requestAnimationFrame !== 'function' ||
       typeof performance === 'undefined'){ land(); return; }
   const from = { x:pos.x, y:pos.y, k:pos.k };
@@ -15340,13 +15481,13 @@ function glideTo(to, ms){
   gliding = { raf: requestAnimationFrame(step) };
 }
 
-function focusOn(id, k){
+function focusOn(id, k, then){
   const at = layout.persons[id];
   if (!at) return;
   const want = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, k || 0.78));
   glideTo({ k: want,
             x: innerWidth/2 - at.x * want,
-            y: (innerHeight + TOPBAR)/2 - at.y * want });
+            y: (innerHeight + TOPBAR)/2 - at.y * want }, null, then);
 }
 
 function fit(){
@@ -16297,6 +16438,7 @@ function remapId(from, to){
   }
   if (sel === from) sel = to;
   if (fresh.has(from)){ fresh.delete(from); fresh.add(to); }
+  if (landedId === from) landedId = to;   // …and so must the ring
 
   /* AND ANYTHING ON SCREEN THAT IS HOLDING AN ID.
 
@@ -16521,6 +16663,30 @@ function showRefused(message){
   el.hidden = false;
   clearTimeout(showFromOthers.t);
   showFromOthers.t = setTimeout(() => { el.hidden = true; }, 20000);
+}
+
+/* ── AND A CONFIRMATION SOMEBODY CAN SEE ────────────────────────────────
+ *
+ * "Adding a person, and not being able to see that the person has been
+ *  added or where they have been added."
+ *
+ * The app said it every time — "Anotenda Musoni added as child of Musekiwa
+ * Musoni" — into #live, which is an aria-live region one pixel square and
+ * clipped to nothing. Heard by a screen reader, seen by nobody.
+ *
+ * Not every sentence this app says needs a banner; most of them describe
+ * something that is now plainly on the screen. Adding a person is the one
+ * that does not, because a new pod on a big tree is a small thing in a
+ * crowd, and it is also the thing people do all day. So the commonest act
+ * in the app gets the plainest confirmation: who went in, and whose they
+ * are. */
+function showDone(message){
+  const el = $('others');
+  if (!el) return;
+  el.textContent = message;
+  el.hidden = false;
+  clearTimeout(showFromOthers.t);
+  showFromOthers.t = setTimeout(() => { el.hidden = true; }, 7000);
 }
 
 function showClash(detail){

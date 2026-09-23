@@ -59,7 +59,8 @@ const SUITES = [
   { name: 'lines',        kind: 'static' },
   { name: 'look',         kind: 'static' },
   { name: 'roots',        kind: 'static' },
-  { name: 'setaside',     kind: 'static' }
+  { name: 'setaside',     kind: 'static' },
+  { name: 'showing',      kind: 'static' }
 ];
 
 const PORT = Number(process.env.MW_TEST_PORT || 3940);
