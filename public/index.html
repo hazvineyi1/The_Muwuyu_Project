@@ -3345,11 +3345,44 @@ function adrift(){
  * and the person who did it is the one who can still put it back. So it is
  * said at the moment it happens rather than left to be noticed later on the
  * bar. Called with the count from BEFORE the change. */
-function setLoose(before){
-  const made = adrift().length - before;
-  if (made <= 0) return '';
-  return ` ${made} ${made === 1 ? 'name is' : 'names are'} now joined to nothing — ` +
-         `the bar says who, and Undo puts it back.`;
+/* ── NOBODY IS CUT LOOSE ─────────────────────────────────────────────────
+ *
+ * "3 names are recorded but not joined to anybody yet. This needs to be
+ *  impossible."
+ *
+ * This used to be setLoose(), and it NARRATED. It counted the names the act
+ * had just cut off from the family, said "2 names are now joined to nothing —
+ * the bar says who, and Undo puts it back", and then saved anyway. The bar in
+ * the screenshot is that sentence's accumulated work: the app knew, every
+ * time, and told somebody instead of stopping.
+ *
+ * So it stops. The act has already been applied to `state` and snapshot() has
+ * already been taken, so refusing is one step back — and the family is told
+ * WHO would have been cut loose, by name, because that is the only part of
+ * this they can do anything about.
+ *
+ * The same rule is kept at the write door, in db/joined.js, and that one is
+ * the one that matters: this is a courtesy so a refusal costs nothing and the
+ * tree never flickers. */
+function cutLoose(before){
+  const was = new Set(before);
+  return adrift().filter(id => !was.has(id));
+}
+
+function keptJoined(before, what){
+  const cut = cutLoose(before);
+  if (!cut.length) return true;
+  // One step back: the act's own snapshot is the top of the history.
+  if (history.length) state = JSON.parse(history.pop());
+  ancestryCache.clear();
+  closeForm(); render();
+  const names = cut.slice(0, 3).map(id => (state.people[id] || {}).name || 'somebody');
+  const more = cut.length - names.length;
+  say(`${what} would leave ${names.join(', ')}` +
+      `${more > 0 ? ` and ${more} other${more === 1 ? '' : 's'}` : ''} joined to ` +
+      `nobody, so it has not been done. Join them to somebody else first, or ` +
+      `take them out as well.`, 'atonce');
+  return false;
 }
 
 function mayAlreadyBe(id){
@@ -9961,7 +9994,9 @@ function openAside(){
     }
     const name = p.name;
     askToDelete(id, () => {
+      const wereLoose = adrift();
       if (!deleteForever(id)){ say('Set them aside first.'); return; }
+      if (!keptJoined(wereLoose, `Removing ${name}`)) return;
       closeForm(); render(); save();
       say(`${name} has been deleted.`);
     });
@@ -10027,7 +10062,13 @@ function openSetAside(id){
       say('A reason is needed before anyone can be set aside.');
       return;
     }
+    /* SET ASIDE CANNOT STRAND ANYBODY EITHER. It is the reversible door and
+       that is not the same as the harmless one: somebody set aside is off the
+       screen, so a family who were held on only through them is off the
+       screen with them, which is exactly what a relative would see. */
+    const wereLoose = adrift();
     setAside(id, why);
+    if (!keptJoined(wereLoose, `Setting ${p.name} aside`)) return;
     sel = null; closeForm(); render(); save();
     say(`${p.name} set aside. ${author ? author + ' will see why.' : ''} ` +
         `Nothing was deleted — Set aside in the bar brings them back.`);
@@ -11459,28 +11500,30 @@ function openCard(id){
     const drop = b.dataset.drop;
     const gone = (state.people[drop] || {}).name || '';
     const mine = drop === id;
-    const wereLoose = adrift().length;
+    const wereLoose = adrift();
     if (unlinkPartner(b.dataset.unmarry, drop)){
+      if (!keptJoined(wereLoose, 'Taking that marriage out')) return;
       closeForm(); render(); save();
-      say((mine
+      say(mine
         ? `That marriage has been taken out. ${p.name} is still in the tree.`
         : `${p.name} and ${gone} are no longer recorded as married. Both are ` +
-          `still in the tree, and the children of it stay with ${p.name}.`)
-        + setLoose(wereLoose));
+          `still in the tree, and the children of it stay with ${p.name}.`);
     } else { closeForm(); }
   });
   el.querySelectorAll('[data-parents]').forEach(b => b.onclick = () => {
     commit();
     const label = b.textContent.trim();
-    const wereLoose = adrift().length;
+    const wereLoose = adrift();
     if (setParentage(id, b.dataset.parents)){
+      if (!keptJoined(wereLoose, b.dataset.parents === 'none'
+            ? `Taking ${p.name} off their parents`
+            : 'That')) return;
       closeForm(); render(); save();
       say((b.dataset.parents === 'none'
         ? `${p.name} is no longer recorded as anybody's child. They are still ` +
           `in the tree.`
         : `${p.name} is now recorded as ${label.toLowerCase()}.`)
-        + (setLoose(wereLoose) ||
-           (b.dataset.parents === 'none' ? ` Undo puts it back.` : '')));
+        + (b.dataset.parents === 'none' ? ` Undo puts it back.` : ''));
     } else { closeForm(); }
   });
   if ($('cJoin')) $('cJoin').onclick = () => { commit(); openFind(id); };
@@ -11494,9 +11537,17 @@ function openCard(id){
        have or do not rather than a thing you can copy off the card in front
        of you. */
     askToDelete(id, () => {
-      const wereLoose = adrift().length;
+      const wereLoose = adrift();
       if (!deleteInOneTap(id)){ say('That could not be deleted.', 'atonce'); return; }
-      say(`${name} deleted — put them back from the bar.` + setLoose(wereLoose));
+      /* The delete is held for a few seconds before it is sent, so winding it
+         back costs nothing at all — and the offer to put them back has to go
+         with it, or the bar would be offering to undo something that never
+         happened. */
+      if (cutLoose(wereLoose).length){
+        undoDelete = null; clearTimeout(deleteTimer);
+        if (!keptJoined(wereLoose, `Removing ${name}`)) return;
+      }
+      say(`${name} deleted — put them back from the bar.`);
     });
   };
   $('cNo').onclick = closeForm;
@@ -12661,13 +12712,38 @@ function openRejoin(mineId, unionId, wasId){
 
   const take = pick => {
     if (why(pick)) return;
-    const wereLoose = adrift().length;
+    const wereLoose = adrift();
     snapshot();
     const live = state.unions[unionId];
     if (!live){ closeForm(); return; }        // it went while the panel was open
     if (wasId) live.partners = live.partners.filter(x => x !== wasId);
     if (!live.partners.includes(pick)) live.partners.push(pick);
     ancestryCache.clear();
+
+    /* ── AND THE ONE WHO CAME OUT IS NOT LEFT FLOATING ────────────────────
+     *
+     * This is the case the correction exists for: Mary Chikwanha was entered
+     * ONLY as this man's wife, the family says it was Mary Moyo all along,
+     * and swapping the name leaves the first Mary holding on to nothing.
+     *
+     * Refusing the swap would be refusing the commonest correction there is,
+     * in exactly the case it is for. Allowing it and shrugging is how the
+     * tree filled up with floating names in the first place. So the app does
+     * what the family means: a record whose only reason for existing has just
+     * been taken away is set aside — off the picture, every detail kept, and
+     * in the bar for anybody to bring back. One snapshot covers both halves,
+     * so a single Undo puts the whole correction back.
+     *
+     * Only when they are actually left with nothing. A Mary with children, or
+     * with parents recorded, stays exactly where she is. */
+    const stranded = cutLoose(wereLoose);
+    const wrongOne = wasId && stranded.includes(wasId) ? state.people[wasId] : null;
+    if (wrongOne){
+      wrongOne.aside = { by: meName(), at: new Date().toISOString(),
+                         why: `Replaced in a marriage by ${(state.people[pick] || {}).name || 'somebody else'}` };
+      if (state.rootId === wasId) state.rootId = (people()[0] || {}).id || null;
+    }
+    if (!keptJoined(wereLoose, 'Putting somebody else in that join')) return;
     closeForm(); render(); save();
     const now = (state.people[pick] || {}).name || 'them';
     say((was
@@ -12676,7 +12752,11 @@ function openRejoin(mineId, unionId, wasId){
         `${was.name} is still in the tree.`
       : `${me.name} and ${now} are recorded as joined` +
         `${kids ? `, with the ${kids} ${kids === 1 ? 'child' : 'children'} already there` : ''}.`)
-      + setLoose(wereLoose));
+      + (wrongOne
+          ? ` ${wrongOne.name} had nothing else holding them in the tree, so they ` +
+            `have been set aside — nothing is deleted, and Set aside in the bar ` +
+            `brings them back.`
+          : ''));
   };
 
   draw();
@@ -14268,7 +14348,13 @@ podsEl.addEventListener('click', e => {
   if (rm){
     const id = rm.dataset.rm, name = (state.people[id] || {}).name || '';
     askToDelete(id, () => {
-      if (deleteInOneTap(id)) say(`${name} deleted — put them back from the bar.`);
+      const wereLoose = adrift();
+      if (!deleteInOneTap(id)) return;
+      if (cutLoose(wereLoose).length){
+        undoDelete = null; clearTimeout(deleteTimer);
+        if (!keptJoined(wereLoose, `Removing ${name}`)) return;
+      }
+      say(`${name} deleted — put them back from the bar.`);
     });
     return;
   }

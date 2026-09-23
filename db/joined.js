@@ -107,4 +107,165 @@ async function looseAfter(client, treeId, addedIds) {
   return added.filter(id => !grounded.has(id));
 }
 
-module.exports = { looseAfter };
+/* ── AND NOBODY IS EVER CUT LOOSE ─────────────────────────────────────────
+ *
+ * "3 names are recorded but not joined to anybody yet. This needs to be
+ *  impossible."
+ *
+ * looseAfter above guards the door: a name cannot COME IN on its own. It says
+ * so itself — "this only refuses to make new ones" — and that turned out to
+ * be half a rule, because a name does not have to arrive adrift to end up
+ * adrift. It can be cut loose afterwards, by the very corrections this app
+ * offers in one tap: take a marriage out, answer "nobody yet" to whose child,
+ * set somebody aside, remove them for good. Every one of those can be the
+ * last thread holding somebody to the family, and nothing checked.
+ *
+ * Worse, the page KNEW. It counted the names it had just set loose and
+ * narrated them — "2 names are now joined to nothing, the bar says who" — and
+ * then saved anyway. The bar in the screenshot is that sentence's accumulated
+ * work.
+ *
+ * WHAT ADRIFT MEANS, and it is not "in no union with anybody". Two names
+ * married to each other and to nobody else are joined to each other and
+ * adrift from the family: an island. The page has always read it this way —
+ * the bar walks out from whoever is looking — and the server had no opinion
+ * at all. So this is reachability.
+ *
+ * SET ASIDE PEOPLE ARE NOT IN IT AND CANNOT CARRY A CONNECTION. Somebody set
+ * aside is off the screen, so a family they were the only link to is off the
+ * screen with them, which is exactly what the family would see.
+ *
+ * THE GROUND IS THE BIGGEST ISLAND. Not the root, which a family may never
+ * have marked and may have marked on a twig; not whoever is looking, which
+ * the server does not know. The biggest island is the family, and everybody
+ * outside it is adrift from it. Ties go to the lowest id so that the answer
+ * is the same twice running.
+ *
+ * WHAT THIS STILL DOES NOT DO, deliberately, and for the same reason as
+ * above: it does not demand the past be tidy. Trees already carry names cut
+ * loose before this existed. Those are found in the room built for them. This
+ * refuses to make the number GROW — it compares the adrift before a batch
+ * with the adrift after, so a family correcting one loose name is never
+ * refused because the name was loose. */
+async function adriftNow(client, treeId, anchor) {
+  /* Oldest first, and is_root carried, because both are needed to settle a
+     tie — see the ground below. */
+  const { rows: ppl } = await client.query(
+    `SELECT id, is_root FROM people
+      WHERE tree_id = $1 AND aside_at IS NULL
+      ORDER BY created_at, id`, [treeId]);
+  const present = ppl.map(r => r.id);
+  const rooted = new Set(ppl.filter(r => r.is_root).map(r => r.id));
+  const age = new Map(present.map((id, i) => [id, i]));   // 0 is the oldest record
+  if (present.length < 2) return { loose: new Set(), ground: new Set(present) };
+
+  const { rows: mem } = await client.query(
+    `SELECT m.union_id, m.person_id
+       FROM (SELECT union_id, person_id FROM union_partners
+             UNION ALL
+             SELECT union_id, person_id FROM union_children) m
+       JOIN people p ON p.id = m.person_id
+      WHERE p.tree_id = $1 AND p.aside_at IS NULL`, [treeId]);
+
+  /* Union-find rather than a walk: one pass over the memberships, no
+     recursion to blow a stack on a deep line, and it stays flat on the five
+     thousand people the scale suite builds. */
+  const up = new Map(present.map(id => [id, id]));
+  const find = x => {
+    let r = x;
+    while (up.get(r) !== r) r = up.get(r);
+    while (up.get(x) !== r) { const n = up.get(x); up.set(x, r); x = n; }
+    return r;
+  };
+  const tie = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) up.set(ra, rb); };
+
+  // Everybody in one union is on one island — tie each member to the first.
+  const firstIn = new Map();
+  for (const r of mem) {
+    if (!up.has(r.person_id)) continue;
+    const seen = firstIn.get(r.union_id);
+    if (seen === undefined) firstIn.set(r.union_id, r.person_id);
+    else tie(seen, r.person_id);
+  }
+
+  const groups = new Map();                        // island root -> [ids]
+  for (const id of present) {
+    const root = find(id);
+    if (!groups.has(root)) groups.set(root, []);
+    groups.get(root).push(id);
+  }
+
+  /* WHICH ISLAND IS THE FAMILY.
+   *
+   * Recomputing "the biggest one" independently before and after is the
+   * mistake this function was first written with, and it is not a small one:
+   * take a man out of his marriage and the tree becomes two islands of two,
+   * the tie is settled by whichever id happens to sort first, and the app
+   * refuses or allows the same act depending on a coin. It also reports the
+   * wrong half — "that would leave his father joined to nobody" when what is
+   * actually floating off is his wife and child.
+   *
+   * So the family is carried across: the caller hands in the island the
+   * family was on BEFORE the batch, and the ground afterwards is whichever
+   * island still holds most of those people. Only the very first call, with
+   * nothing to carry, falls back to the biggest. Ties go to the lowest id so
+   * that the answer is the same twice running. */
+  /* AND WHEN THE TWO HALVES ARE THE SAME SIZE, which a tree torn cleanly down
+     the middle always is, the trunk decides. First whichever half holds a
+     person the family has MARKED as the furthest they can trace, and then
+     whichever holds the oldest record in the tree — the name somebody wrote
+     first, which is where the family started.
+     Settled by id as a last resort only so the answer is the same twice
+     running. Without this the winner was whichever id happened to sort first,
+     and the refusal named the wrong half: "that would leave the patriarch
+     joined to nobody" when what is actually floating off is a wife and
+     child. */
+  const scoreOf = ids => {
+    let anchored = 0, root = 0, oldest = Infinity, low = null;
+    for (const id of ids) {
+      if (anchor && anchor.has(id)) anchored++;
+      if (rooted.has(id)) root = 1;
+      const a = age.get(id);
+      if (a < oldest) oldest = a;
+      if (low === null || String(id) < low) low = String(id);
+    }
+    return [anchor ? anchored : ids.length, ids.length, root, -oldest, low];
+  };
+  const beats = (a, b) => {
+    for (let i = 0; i < 4; i++) if (a[i] !== b[i]) return a[i] > b[i];
+    return a[4] < b[4];                       // lowest id, purely for repeatability
+  };
+  let ground = null, best = null;
+  for (const [root, ids] of groups) {
+    const sc = scoreOf(ids);
+    if (best === null || beats(sc, best)) { best = sc; ground = root; }
+  }
+
+  /* A FAMILY OF ONE IS NOT A FAMILY. Without this, one name out of five
+     standing entirely alone would be picked as the ground and the other four
+     counted adrift from it — or, worse, a tree torn cleanly in half would
+     excuse whichever single name sorted first. If the biggest thing left
+     standing is one person, then nobody is joined to anybody and all of them
+     are adrift. */
+  const on = groups.get(ground) || [];
+  if (on.length < 2) return { loose: new Set(present), ground: new Set() };
+
+  const keep = new Set(on);
+  const loose = new Set();
+  for (const id of present) if (!keep.has(id)) loose.add(id);
+  return { loose, ground: keep };
+}
+
+/* The ops that can take a thread away. Everything else only ever adds one, so
+   the check — two passes over the whole tree — is paid on the rare write and
+   never on a family typing names in.
+
+   setAside is in it because somebody set aside is off the screen, and a
+   family cut off behind them is off the screen too. mergePeople is in it
+   because it moves memberships, and moving is removing somewhere. */
+const CUTS = new Set(['removePartner', 'removeChild', 'setAside', 'deletePerson',
+                      'mergePeople']);
+
+const mayCut = ops => (ops || []).some(o => o && CUTS.has(o.op));
+
+module.exports = { looseAfter, adriftNow, mayCut, CUTS };

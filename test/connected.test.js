@@ -311,6 +311,175 @@ const http = require('http');
           /That change has been undone here too\.', 'atonce'/.test(html));
   }
 
+  /* ── AND NOBODY IS EVER CUT LOOSE ───────────────────────────────────────
+   *
+   * "3 names are recorded but not joined to anybody yet. This needs to be
+   *  impossible."
+   *
+   * Everything above is the door. A name does not have to arrive adrift to
+   * end up adrift — it can be cut loose later by the corrections this app
+   * offers in one tap, and until now nothing checked. These are those taps.
+   */
+  section('TAKING OUT THE LAST THREAD IS REFUSED TOO');
+  {
+    // Chaitezvi and Thomas, father and son, and nothing else holds Thomas on.
+    const { treeId, gf, t, u } = await family();
+    const { status, body } = await post(treeId, [
+      { op:'removeChild', unionId: u, personId: t }
+    ]);
+    eq('refused', status, 422);
+    eq('and says which rule', body.error, 'not_joined');
+    /* BOTH of them, because a family of one is not a family. With the only
+       join gone there are two names and nothing holding either, and excusing
+       whichever id sorted first would have reported half the truth. */
+    check('naming who would have been left floating',
+          /Thomas Musoni/.test(body.message || '') &&
+          /Chaitezvi Musoni/.test(body.message || ''), body.message);
+    check('and saying what to do instead',
+          /join them to somebody else|take them out as well/i.test(body.message || ''),
+          body.message);
+    eq('both are still in the tree', await heads(treeId), 2);
+    const { rows } = await pool.query(
+      'SELECT count(*)::int AS n FROM union_children WHERE union_id = $1', [u]);
+    eq('and the join is still there — the whole batch went back', rows[0].n, 1);
+    check('nothing about the father either', !!gf, 'no father');
+  }
+
+  section('setting aside a bridge is refused, because they go off screen with it');
+  {
+    /* Set aside is the reversible door and it still cannot strand anybody:
+       somebody set aside is off the screen, so a family behind them is off
+       the screen too, which is exactly what the family would see.
+
+       Thomas is the bridge — his father on one side, his own wife and child
+       on the other — so this is the shape that matters, not a tree of two. */
+    const { treeId, t } = await family();
+    const made = await post(treeId, [
+      { op:'addPerson', ref:'$w', name:'Evelyn Mandaba', sex:'f' },
+      { op:'addUnion', ref:'$m' },
+      { op:'addPartner', unionId:'$m', personId: t },
+      { op:'addPartner', unionId:'$m', personId:'$w' }
+    ]);
+    eq('his marriage goes in', made.status, 200);
+
+    const { status, body } = await post(treeId, [
+      { op:'setAside', id: t, why:'entered twice' }
+    ]);
+    eq('refused', status, 422);
+    check('naming the wife it would have stranded',
+          /Evelyn Mandaba/.test(body.message || ''), body.message);
+    eq('and nobody is set aside', await heads(treeId), 3);
+  }
+
+  section('a marriage can be taken out when it is not the last thread');
+  {
+    /* The rule refuses to make loose names, not to make corrections. Thomas
+       is his father's son whether or not his marriage stands. */
+    const { treeId, t } = await family();
+    const made = await post(treeId, [
+      { op:'addPerson', ref:'$w', name:'Evelyn Mandaba', sex:'f' },
+      { op:'addUnion', ref:'$m' },
+      { op:'addPartner', unionId:'$m', personId: t },
+      { op:'addPartner', unionId:'$m', personId:'$w' },
+      { op:'addPerson', ref:'$k', name:'Tendai Musoni', sex:'m' },
+      { op:'addChild', unionId:'$m', personId:'$k' }
+    ]);
+    eq('the marriage and a child of it go in', made.status, 200);
+    const marriage = made.body.refs.$m, wife = made.body.refs.$w, kid = made.body.refs.$k;
+
+    /* Evelyn is held on by the marriage alone, so taking her out of it would
+       strand her — and that is refused. */
+    const her = await post(treeId, [{ op:'removePartner', unionId: marriage, personId: wife }]);
+    eq('taking the wife out of her only marriage is refused', her.status, 422);
+    check('naming her', /Evelyn Mandaba/.test(her.body.message || ''), her.body.message);
+
+    /* AND SO IS TAKING THE HUSBAND OUT, which is the half of this I had
+       backwards when I wrote it. Thomas is held on by his father, so he
+       survives the act — but he is also the only thing holding his wife and
+       their child to the Musonis, and pulling him out of the marriage floats
+       the pair of them off. The rule is about who is left joined to nobody,
+       not about who is doing the leaving. */
+    const him = await post(treeId, [{ op:'removePartner', unionId: marriage, personId: t }]);
+    eq('taking the husband out is refused — it floats his wife and child off',
+       him.status, 422);
+    /* AND NAMING THE RIGHT HALF. The tree tears into two pieces of two, so
+       size cannot settle which piece is the family — the trunk does, and the
+       trunk is where the family started. Told the wrong way round this reads
+       "that would leave the patriarch joined to nobody", which is nonsense to
+       anybody looking at the screen. */
+    check('naming the pair that would have floated off',
+          /Evelyn Mandaba/.test(him.body.message || '') &&
+          /Tendai Musoni/.test(him.body.message || ''), him.body.message);
+    check('and not the side the family started from',
+          !/Chaitezvi/.test(him.body.message || ''), him.body.message);
+    eq('and everybody is still in the tree', await heads(treeId), 4);
+
+    check('and the child is still recorded', !!kid, 'no child');
+  }
+
+  section('and MOVING somebody still works, which is the act this must not break');
+  {
+    /* "Whose child" sends a removeChild and an addChild in one batch — the
+       only order a move can succeed in, since a person carries one set of
+       parents. Both halves are inside one transaction, so the person is never
+       actually loose, and a rule that looked at the removal alone would have
+       broken the commonest correction in the app. */
+    const { treeId, gf, t, u } = await family();
+    const second = await post(treeId, [
+      { op:'addPerson', ref:'$w2', name:'Maria Chirwa', sex:'f' },
+      { op:'addUnion', ref:'$u2' },
+      { op:'addPartner', unionId:'$u2', personId: gf },
+      { op:'addPartner', unionId:'$u2', personId:'$w2' }
+    ]);
+    eq('a second marriage for the father goes in', second.status, 200);
+
+    const moved = await post(treeId, [
+      { op:'removeChild', unionId: u, personId: t },
+      { op:'addChild', unionId: second.body.refs.$u2, personId: t }
+    ]);
+    eq('the son can be moved from one of his father\'s marriages to the other',
+       moved.status, 200);
+    const { rows } = await pool.query(
+      'SELECT union_id FROM union_children WHERE person_id = $1', [t]);
+    eq('and he is under the second one now', rows[0].union_id, second.body.refs.$u2);
+    eq('with nobody adrift', await heads(treeId), 3);
+  }
+
+  section('and an already-loose name is never a reason to refuse a repair');
+  {
+    /* Trees carry names cut loose before any of this existed. A rule that
+       also demanded the past be tidy would refuse a family's correction to a
+       loose name BECAUSE the name was loose. The primitive is used directly
+       here to make the mess the door would not let in. */
+    const { treeId, gf, u } = await family();
+    // One more Musoni, so the family is plainly the bigger island. Two islands
+    // of equal size have no principled winner and a real tree does not have
+    // that problem.
+    await applyOps(pool, treeId, [
+      { op:'addPerson', ref:'$b', name:'Bertha Musoni', sex:'f' },
+      { op:'addChild', unionId: u, personId:'$b' }
+    ], 'the first relative');
+    const stray = await applyOps(pool, treeId, [
+      { op:'addPerson', ref:'$x', name:'Nyarai Moyo', sex:'f' },
+      { op:'addPerson', ref:'$y', name:'Rudo Moyo', sex:'f' },
+      { op:'addUnion', ref:'$v' },
+      { op:'addPartner', unionId:'$v', personId:'$x' },
+      { op:'addChild',   unionId:'$v', personId:'$y' }
+    ], 'before the rule existed');
+    const x = stray.refs.$x, y = stray.refs.$y;
+
+    // An island of two, adrift from the Musonis. Now repair it, which means
+    // taking Rudo off her floating mother and hanging her on the family.
+    const fix = await post(treeId, [
+      { op:'removeChild', unionId: stray.refs.$v, personId: y },
+      { op:'addChild', unionId: null, parentId: gf, personId: y }
+    ].filter(o => o.op !== 'addChild'));
+    /* The removal alone would leave Rudo adrift — but she was adrift already,
+       out on the island, so the number does not grow and it is allowed. */
+    eq('a repair that touches a name already adrift is not refused', fix.status, 200);
+    check('and Nyarai is still there to be dealt with', !!x, 'no stray');
+  }
+
   server.close();
   await pool.end();
   report();

@@ -279,26 +279,41 @@ section('AND ONCE JOINED ON, THEY STOP BEING ADRIFT');
   eq('and no pod is marked', (html.match(/class="pod[^"]*adrift/g) || []).length, 0);
 }
 
-section('AND TAKING A LINK OUT SAYS WHAT IT LEFT LOOSE');
-/* The one kind of act that can set a name floating. Allowed, often right,
-   and never silent — the person who did it is the one who can put it back. */
+section('AND TAKING A LINK OUT NAMES WHO IT WOULD CUT LOOSE');
+/* THIS USED TO BE A SENTENCE AND IS NOW A REFUSAL.
+ *
+ * "3 names are recorded but not joined to anybody yet. This needs to be
+ *  impossible."
+ *
+ * The old reading was "allowed, often right, and never silent": the app
+ * counted the names an act had just cut off, said so, and saved anyway. That
+ * is how a tree comes to carry a bar reading "3 not joined" — every one of
+ * them announced at the moment it happened, and every one of them kept.
+ *
+ * So the count became a list of WHO, which is the part a refusal has to be
+ * able to say out loud, and the acts that produce it wind themselves back.
+ * The refusal itself lives at the write door in db/joined.js, where it holds
+ * whatever is asking; this is the page knowing before it sends. */
 {
   const t = split();
-  const before = t.fe.adrift().length;
-  eq('two are floating to begin with', before, 2);
+  const before = t.fe.adrift();
+  eq('two are floating to begin with', before.length, 2);
   // His father taken off his grandfather: the grandfather is now joined to
   // nobody the tree can be walked to from where you stand.
   t.fe.unlinkParents(t.thomas);
-  const said = t.fe.setLoose(before);
-  check('the one it left loose is counted',
-        /1 name is now joined to nothing/.test(said), said);
-  check('and the way back goes with it', /Undo puts it back/.test(said), said);
+  const cut = t.fe.cutLoose(before);
+  eq('one more comes loose', cut.length, 1);
+  check('and it is named rather than counted, because a refusal has to say who',
+        typeof cut[0] === 'string' && !!t.fe.getState().people[cut[0]],
+        JSON.stringify(cut));
+  check('and the ones that were already floating are not blamed on this act',
+        !cut.some(id => before.includes(id)), JSON.stringify(cut));
 }
 
-section('and says nothing when nothing came loose');
+section('and nobody when nothing came loose');
 {
   const t = split();
-  eq('no clause at all', t.fe.setLoose(t.fe.adrift().length), '');
+  eq('no names at all', t.fe.cutLoose(t.fe.adrift()), []);
 }
 
 section('A TREE WITH ONE PERSON IN IT HAS NOBODY ADRIFT');

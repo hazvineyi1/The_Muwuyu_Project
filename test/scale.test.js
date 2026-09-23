@@ -13,6 +13,7 @@ const { seed } = require('../scripts/seed');
 const { bootstrap, search, changesSince } = require('../db/reads');
 const { findDuplicates } = require('../db/duplicates');
 const { applyOps } = require('../db/ops');
+const joined = require('../db/joined');
 
 const TARGET_PEOPLE = Number(process.env.MW_SCALE_PEOPLE || 5000);
 const GENERATIONS = 10;
@@ -92,6 +93,30 @@ const under = (label, t, limit) =>
   under('a single-op batch', await median(() =>
     applyOps(pool, tree, [{ op: 'addPerson', name: 'Load Test' }], 'scale'), 10), 200);
   under('changes since=0', await median(() => changesSince(pool, tree, 0)), 200);
+
+  /* ── AND THE PRICE OF "NOBODY IS EVER CUT LOOSE" ────────────────────────
+   *
+   * The check is a walk over the whole tree, so it is the one rule in this
+   * project whose cost grows with the family. Two things keep it honest and
+   * both are asserted here rather than assumed.
+   *
+   * It is only paid by a batch that can take a thread away — removing a join,
+   * setting somebody aside, deleting them. A family typing names in never
+   * touches it, which is why the single-op batch above is still milliseconds.
+   *
+   * And one pass is one pass. Two queries and a union-find, no walking and no
+   * recursion, so a tree ten times this size is ten times this and not a
+   * hundred. See db/joined.js. */
+  const c = await pool.connect();
+  try {
+    under('one pass of the joined-up check', await median(
+      () => joined.adriftNow(c, tree), 10), 400);
+    check('and an ordinary write never pays for it',
+          !joined.mayCut([{ op:'addPerson' }, { op:'addUnion' }, { op:'addChild' }]),
+          'adding names would run the whole-tree check');
+    check('while taking a join out does',
+          joined.mayCut([{ op:'removePartner' }]), 'a severing batch skips the check');
+  } finally { c.release(); }
 
   section('the guarantees still hold at this size');
   eq('nobody has two sets of parents',

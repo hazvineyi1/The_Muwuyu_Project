@@ -115,6 +115,27 @@ const rows = page => page.$$eval('#cMarriages .join', els => els.map(e => ({
     is(u2.partners, ['Mary Moyo','Mutapa Mandaba'], 'the join now names the right Mary');
     is(await page.evaluate(() => !!state.people.r1), true, 'and the wrong one is still in the tree');
     is(await page.evaluate(() => Object.keys(state.unions).length), 3, 'no new marriage was made');
+
+    /* ── AND SHE IS NOT LEFT FLOATING ───────────────────────────────────
+     *
+     * "3 names are recorded but not joined to anybody yet. This needs to be
+     *  impossible."
+     *
+     * This is the case the correction exists for and the case that used to
+     * make a loose name: Mary Chikwanha was in the tree ONLY as his wife, so
+     * swapping the name leaves her holding on to nothing. The app does what
+     * the family means rather than shrugging — a record whose only reason to
+     * exist has just been taken away is set aside, which keeps every detail
+     * and is one tap to undo. */
+    is(await page.evaluate(() => !!(state.people.r1.aside || {}).why), true,
+       'she is set aside rather than left joined to nobody');
+    is(await page.evaluate(() => /Replaced in a marriage/.test(state.people.r1.aside.why)), true,
+       'with the reason saying what happened to her');
+    is(await page.evaluate(() => adrift().includes('r1')), false,
+       'so the bar does not count her as floating');
+    await page.waitForTimeout(200);          // say() writes on a short timer
+    is(/set aside/.test(await page.evaluate(() => (document.getElementById('live') || {}).textContent || '')),
+       true, 'and the family is told, in the same breath as the correction');
   }
 
   section('AND THE EMPTY ONE CAN BE FILLED, WITH ITS CHILD WHERE IT WAS');

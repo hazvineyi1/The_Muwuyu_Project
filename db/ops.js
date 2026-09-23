@@ -1113,6 +1113,22 @@ async function applyOps(pool, treeId, ops, actor = '', opts = {}) {
     const { rowCount } = await client.query('SELECT 1 FROM trees WHERE id = $1', [treeId]);
     if (!rowCount) throw notFound(`tree ${treeId} does not exist`);
 
+    /* ── BEFORE: WHO WAS ALREADY ADRIFT ───────────────────────────────────
+     *
+     * Read now, before a single op runs, because the question at the end is
+     * not "is anybody adrift" — trees carry names cut loose before any of
+     * this existed — but "did this batch cut anybody loose". The difference
+     * between the two is what lets a family repair a floating name without
+     * being refused for having one. See db/joined.js.
+     *
+     * Only for a batch that could take a thread away. Everything else adds
+     * threads, and a family typing names in should not pay for two passes
+     * over their whole tree. */
+    let wasAdrift = null;
+    if (opts.everyoneJoined && joined.mayCut(ops)) {
+      wasAdrift = await joined.adriftNow(client, treeId);
+    }
+
     /* ── BEFORE: EVERY RECORD THIS BATCH NAMES IS ALREADY INSIDE ──────────
      *
      * Read before a single op runs, so a refusal costs nothing and cannot
@@ -1182,6 +1198,39 @@ async function applyOps(pool, treeId, ops, actor = '', opts = {}) {
               `relatives they belong to and add them from there.`) +
           ' Nothing has been changed.',
           { people: loose, names: said });
+      }
+    }
+
+    /* ── AND NOBODY WAS CUT LOOSE ─────────────────────────────────────────
+     *
+     * "3 names are recorded but not joined to anybody yet. This needs to be
+     *  impossible."
+     *
+     * The check above guards the door and this one guards the room. A name
+     * does not have to arrive adrift to end up adrift: taking a marriage out,
+     * answering "nobody yet" to whose child, setting somebody aside or
+     * removing them can each be the last thread holding a person — or a whole
+     * branch below them — to the family.
+     *
+     * Compared against what was adrift BEFORE, so this refuses to make the
+     * number grow and never refuses a repair. Inside the transaction and
+     * before the commit, so a refusal rolls the whole batch back. */
+    if (wasAdrift) {
+      const now = await joined.adriftNow(client, treeId, wasAdrift.ground);
+      const cut = [...now.loose].filter(id => !wasAdrift.loose.has(id));
+      if (cut.length) {
+        const { rows: names } = await client.query(
+          'SELECT name FROM people WHERE id = ANY($1::uuid[]) ORDER BY name LIMIT 3',
+          [cut]);
+        const said = names.map(r => r.name).filter(Boolean);
+        const more = cut.length - said.length;
+        const who = said.length
+          ? said.join(', ') + (more > 0 ? ` and ${more} other${more === 1 ? '' : 's'}` : '')
+          : `${cut.length} ${cut.length === 1 ? 'person' : 'people'}`;
+        throw adrift(
+          `That would leave ${who} joined to nobody, so it has not been done. ` +
+          'Join them to somebody else first, or take them out as well.',
+          { people: cut, names: said, count: cut.length });
       }
     }
 
