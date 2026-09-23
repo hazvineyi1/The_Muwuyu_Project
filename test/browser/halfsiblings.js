@@ -80,14 +80,15 @@ const section = t => console.log('\n' + t);
   await page.evaluate(id => { sel = id; render(); openForm('sibling', id); }, bertha);
   await page.waitForSelector('#fWhose', { timeout: 10000 });
   const offered = await page.$$eval('#fWhose button', bs => bs.map(b => b.textContent.trim()));
-  is(offered[0], 'Same mother and father', 'the first answer is the one it used to assume');
-  is(offered.some(o => /by another mother/.test(o)), true,
+  is(/^Sydney .* and Evelyn /.test(offered[0]) || /Sydney/.test(offered[0]), true,
+     'the first answer names the household she is already in: ' + offered[0]);
+  is(offered.some(o => /by a mother not recorded yet/.test(o)), true,
      'and a different mother is offerable: ' + offered.join(' | '));
 
   section('choosing it records a different mother — not the one nobody named');
   await page.fill('#fName', 'Munyaradzi ' + TAG);
   await page.click('#fSex button[data-sex="m"]');   // no sex, no sibling word
-  await page.click(`#fWhose button:has-text("by another mother")`);
+  await page.click(`#fWhose button:has-text("by a mother not recorded yet")`);
   await page.fill('#fBorn', '1990');
   await page.click('#fGo');
   await saved(page);
@@ -131,11 +132,22 @@ const section = t => console.log('\n' + t);
   section('the card offers the correction');
   await page.evaluate(id => { sel = id; render(); openCard(id); }, ida);
   await page.waitForSelector('#cParents', { timeout: 10000 });
-  is(await page.$eval('#cParents button[aria-pressed="true"]', b => b.textContent.trim()),
-     'Same mother and father', 'and shows what the tree says now');
+  /* THE PRESSED ANSWER NAMES THE PARENTS, rather than comparing her to
+     somebody. "Same mother and father" was a phrase written for the form
+     that adds a brother, and on a person's own card its one-parent form came
+     out as "Same as Stanley" about a man who was the father. */
+  {
+    const pressed = await page.$eval('#cParents button[aria-pressed="true"]',
+                                     b => b.textContent.trim());
+    const parents = await page.evaluate(
+      id => parentsOf(id).map(x => (state.people[x].name || '').split(' ')[0]), ida);
+    is(parents.length > 0 && parents.every(n => pressed.includes(n)), true,
+       `and shows what the tree says now by naming them: "${pressed}" vs ${parents.join(' + ')}`);
+    is(/^Same\b/.test(pressed), false, 'not as a comparison with somebody else');
+  }
 
   section('MAKING IT — and the move surviving the one-set-of-parents rule');
-  await page.click(`#cParents button:has-text("by another mother")`);
+  await page.click(`#cParents button:has-text("by a mother not recorded yet")`);
   await saved(page);
   is(await page.evaluate(([a, b]) => parentUnionOf(a).id !== parentUnionOf(b).id,
                          [ida, bertha]), true,
@@ -197,10 +209,10 @@ const section = t => console.log('\n' + t);
   is(!!asked, true, 'the question is there');
   const simpleOffered = await simple.page.$$eval('#fWhose button',
     bs => bs.map(b => b.textContent.trim()));
-  is(simpleOffered[0], 'Same mother and father',
+  is(/Sydney|and/.test(simpleOffered[0]), true,
      'with the obvious answer already chosen, so it costs nothing: ' +
      simpleOffered.join(' | '));
-  is(simpleOffered.some(o => /by another mother/.test(o)), true,
+  is(simpleOffered.some(o => /by a mother not recorded yet/.test(o)), true,
      'and the wife nobody has entered yet is still offerable');
   await simple.ctx.close();
 

@@ -135,17 +135,45 @@ const whyOf = (fe, a, b) => {
     const { fe, older, father, second } = twoWives();
     const opts = fe.parentageOptions(older);
     const labels = opts.map(o => o.label);
-    check('the first is the marriage she is already in',
-          labels[0] === 'Same mother and father', labels.join(' | '));
+    /* EVERY ANSWER NAMES THE PARENTS. It used to say "Same mother and
+       father", which is a comparison rather than an answer — and on a
+       person's own card, where this same list is the "Whose child" control,
+       the one-parent form of it came out as "Same as Stanley" about a man
+       who was the father. A family read that as "Stanley is his brother".
+       See parentageOptions. */
+    check('the first is the household she is already in, named',
+          labels[0] === 'Sydney and Evelyn', labels.join(' | '));
     check('the father\'s other marriage is offered by both names',
           labels.some(l => /Sydney and Rudo/.test(l)), labels.join(' | '));
     check('and so is a marriage nobody has named yet',
-          labels.some(l => /Sydney, by another mother/.test(l)), labels.join(' | '));
+          labels.some(l => /Sydney, by a mother not recorded yet/.test(l)), labels.join(' | '));
     check('the mother\'s side too',
-          labels.some(l => /Evelyn, by another father/.test(l)), labels.join(' | '));
+          labels.some(l => /Evelyn, by a father not recorded yet/.test(l)), labels.join(' | '));
+    check('and not one of them is relative to somebody else',
+          !labels.some(l => /^Same\b/.test(l)), labels.join(' | '));
   }
 
-  section('with NO parents recorded there is nothing to assume, so nothing is asked');
+  section('AND WITH ONE PARENT RECORDED, THE SAME HOUSEHOLD IS NOT OFFERED TWICE');
+{
+  /* "I have recorded Tinashe as Stanley's child, so this questioning is
+   *  confusing."
+   *
+   * Under a lone father, "Stanley, by a mother not recorded yet" and
+   * "Stanley" are the same household described twice — a second button that
+   * changes nothing, under a heading asking which is true. */
+  const fe = loadFrontend();
+  const stanley = fe.addPerson('Stanley Chihwayi', 'm', 'Shava', '1940', '');
+  const tinashe = fe.grow('child', stanley, 'Tinashe Chihwayi', 'm', '', { born:'1968' });
+  const labels = fe.parentageOptions(tinashe).map(o => o.label);
+  eq('one answer, and it is his father by name', labels, ['Stanley']);
+  check('the card asks the question in full rather than leaving it hanging',
+        /is recorded as the child of/.test(fe.parentageBlock(tinashe)),
+        fe.parentageBlock(tinashe).slice(0, 160));
+  check('and names him in it', new RegExp('Tinashe is recorded').test(fe.parentageBlock(tinashe)),
+        fe.parentageBlock(tinashe).slice(0, 160));
+}
+
+section('with NO parents recorded there is nothing to assume, so nothing is asked');
   {
     const fe = loadFrontend();
     const a = fe.addPerson('Bertha', 'f', 'Nzou', '1975', '');

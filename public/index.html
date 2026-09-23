@@ -2492,11 +2492,28 @@ function parentageOptions(anchorId){
   const named = pu.partners.filter(x => state.people[x] && present(x));
   if (!named.length) return [];
 
+  /* ── EVERY ANSWER NAMES THE PARENTS ──────────────────────────────────
+   *
+   * "I have recorded Tinashe as Stanley's child, so this questioning is
+   *  confusing."
+   *
+   * It was. The question is "whose child", and the answer on offer was
+   * "Same as Stanley" — which says Stanley is somebody you share parents
+   * WITH, when Stanley is the father. The phrase was written for the other
+   * place this list is used, the form that adds a brother or sister, where
+   * "same mother and father" means the same as the person you are adding
+   * them beside. On a person's own card it is not merely vague, it is the
+   * wrong relationship, printed under the word that says so.
+   *
+   * So no option is relative to anybody any more. Each one is the set of
+   * parents it stands for, named — "Stanley", "Stanley and Ruth" — which
+   * answers "whose child" in the words a family would use, and reads the
+   * same whichever of the two questions is being asked. */
   const first = id => (state.people[id].name || '').split(' ')[0] || 'them';
   const out = [{
     key: 'u:' + pu.id,
-    label: named.length > 1 ? 'Same mother and father' : `Same as ${first(named[0])}`,
-    why: 'the marriage this person is already a child of'
+    label: named.map(first).join(' and '),
+    why: 'the household this person is already recorded in'
   }];
 
   // Other marriages either parent is in. Named by the two people in them,
@@ -2513,13 +2530,17 @@ function parentageOptions(anchorId){
     }
   }
 
-  // And a parent by somebody not yet in the tree.
-  for (const parent of named){
+  /* AND A PARENT BY SOMEBODY NOT YET IN THE TREE — which is only a
+     different answer when the tree currently names the other one.
+     With a lone father recorded, "Stanley, by a mother not recorded yet" and
+     "Stanley" are the same household described twice, and offering both
+     under "whose child" is most of why the question read as a riddle. */
+  for (const parent of (named.length > 1 ? named : [])){
     const p = state.people[parent];
     const otherSide = p.sex === 'm' ? 'mother' : p.sex === 'f' ? 'father' : 'parent';
     out.push({
       key: 'p:' + parent,
-      label: `${first(parent)}, by another ${otherSide}`,
+      label: `${first(parent)}, by a ${otherSide} not recorded yet`,
       why: `a marriage of ${first(parent)}'s that is not recorded yet`
     });
   }
@@ -8851,7 +8872,15 @@ function parentageBlock(id){
      case it could not fix. "Nobody yet" is the answer it was missing. */
   if (!options.length) return '';
   const now = parentageOf(id);
-  return `<p class="lbl">Whose child</p><div class="seg col" id="cParents">` +
+  const them = ((state.people[id] || {}).name || '').split(' ')[0] || 'They';
+  /* THE QUESTION, IN FULL. "Whose child" over a list of names is a heading
+     the reader has to finish in their own head, and they were finishing it
+     wrongly. Said whole — "Tinashe is recorded as the child of" — the
+     pressed button is plainly an answer, rather than a comparison with
+     whoever it happens to name. */
+  return `<p class="lbl">Whose child</p>` +
+    `<p class="roothint">${esc(them)} is recorded as the child of:</p>` +
+    `<div class="seg col" id="cParents">` +
     options.map(o =>
       `<button type="button" data-parents="${esc(o.key)}" ` +
       `aria-pressed="${o.key === now}" title="${esc(o.why)}">${esc(o.label)}</button>`
