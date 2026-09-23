@@ -1489,6 +1489,12 @@ body.carrying .pod{transition:none;}
   display:block; margin-top:2px; font-size:var(--t-note); letter-spacing:.06em;
   text-transform:uppercase; color:var(--muted); font-weight:600;
 }
+/* AN OFFER THAT WILL ASK ONE MORE QUESTION, not a refusal. Every other
+   small on these rows is a reason the row cannot be used, and they are all
+   the same muted grey — so "needs your father too" would have read exactly
+   like "your father is not recorded yet", which is the sentence this whole
+   change exists to stop being a dead end. */
+.seg.col button small.alsoneed{color:var(--gold); text-transform:none; letter-spacing:.01em;}
 .seg.col button:hover small{color:var(--gold);}
 .row{display:flex; gap:8px;}
 .btn{
@@ -11656,10 +11662,37 @@ function waysToAdd(anchorId){
      JOINING somebody already in the tree has to say which sister, or the
      offer is a guess dressed as a question. So both are carried: `on` for
      the add, `all` for the join. */
-  const add = (term, gloss, band, on, kind, preset, missing) => {
+  /* `missing` says WHAT is not recorded; `need` says how to record it.
+   *
+   * "Why is this limiting relationships?"
+   *
+   * Because half these words run through somebody — Tete is your FATHER's
+   * sister — and a word whose go-between is not in the tree had nowhere to
+   * put anybody. The list said so plainly enough ("your father is not
+   * recorded yet") and then greyed the row out, which reads as the app
+   * deciding the relationship is not allowed rather than the app being one
+   * name short of being able to record it.
+   *
+   * A family saying "Bertha is his Tete" is telling you two things, not one:
+   * that Bertha is his father's sister, and therefore that he HAS a father.
+   * The second is news to the tree. So the word carries the shape of the
+   * person it needs, the panel asks for that one name, and both go in
+   * together. Nothing is invented — the family types the go-between's name
+   * like any other. */
+  const add = (term, gloss, band, on, kind, preset, missing, need) => {
     const list = (Array.isArray(on) ? on : [on]).filter(Boolean);
     out.push({ term, gloss, band, on:list[0] || null, all:list, kind,
-               preset:preset || {}, missing:missing || null, done:false });
+               preset:preset || {}, missing:missing || null,
+               need: list.length ? null : (need || null), done:false });
+  };
+
+  // The go-betweens, each said the way the panel will ask for them.
+  const NEED = {
+    father:   { kind:'parent',  sex:'m', what:'father' },
+    mother:   { kind:'parent',  sex:'f', what:'mother' },
+    son:      { kind:'child',   sex:'m', what:'son' },
+    daughter: { kind:'child',   sex:'f', what:'daughter' },
+    sister:   { kind:'sibling', sex:'f', what:'sister' }
   };
   const done = (term, gloss, band) => out.push({ term, gloss, band, done:true, preset:{} });
 
@@ -11672,25 +11705,25 @@ function waysToAdd(anchorId){
   if (mother) done('Amai', 'your mother', 'up');
   else add('Amai', 'your mother', 'up', anchorId, 'parent', { sex:'f' });
   add('Babamukuru', "your father's older brother", 'up', father, 'sibling',
-      { sex:'m', position:'older' }, father ? null : 'your father');
+      { sex:'m', position:'older' }, father ? null : 'your father', NEED.father);
   add('Babamudiki', "your father's younger brother", 'up', father, 'sibling',
-      { sex:'m', position:'younger' }, father ? null : 'your father');
+      { sex:'m', position:'younger' }, father ? null : 'your father', NEED.father);
   add('Tete', "your father's sister", 'up', father, 'sibling',
-      { sex:'f' }, father ? null : 'your father');
+      { sex:'f' }, father ? null : 'your father', NEED.father);
   add('Amaiguru', "your mother's older sister", 'up', mother, 'sibling',
-      { sex:'f', position:'older' }, mother ? null : 'your mother');
+      { sex:'f', position:'older' }, mother ? null : 'your mother', NEED.mother);
   add('Amainini', "your mother's younger sister", 'up', mother, 'sibling',
-      { sex:'f', position:'younger' }, mother ? null : 'your mother');
+      { sex:'f', position:'younger' }, mother ? null : 'your mother', NEED.mother);
   add('Sekuru', "your mother's brother", 'up', mother, 'sibling',
-      { sex:'m' }, mother ? null : 'your mother');
+      { sex:'m' }, mother ? null : 'your mother', NEED.mother);
   add('Sekuru', "your father's father", 'up', father, 'parent',
-      { sex:'m' }, father ? null : 'your father');
+      { sex:'m' }, father ? null : 'your father', NEED.father);
   add('Ambuya', "your father's mother", 'up', father, 'parent',
-      { sex:'f' }, father ? null : 'your father');
+      { sex:'f' }, father ? null : 'your father', NEED.father);
   add('Sekuru', "your mother's father", 'up', mother, 'parent',
-      { sex:'m' }, mother ? null : 'your mother');
+      { sex:'m' }, mother ? null : 'your mother', NEED.mother);
   add('Ambuya', "your mother's mother", 'up', mother, 'parent',
-      { sex:'f' }, mother ? null : 'your mother');
+      { sex:'f' }, mother ? null : 'your mother', NEED.mother);
 
   // ── your own row ──
   /* Mukoma and Munin'ina are the same-sex pair, so they cannot be offered to
@@ -11715,15 +11748,15 @@ function waysToAdd(anchorId){
   add('Mwanakomana', 'your son', 'down', anchorId, 'child', { sex:'m' });
   add('Mwanasikana', 'your daughter', 'down', anchorId, 'child', { sex:'f' });
   add('Muroora', "your son's wife", 'down', sons, 'partner',
-      { sex:'f' }, sons.length ? null : 'a son');
+      { sex:'f' }, sons.length ? null : 'a son', NEED.son);
   add('Mukwasha', "your daughter's husband", 'down', daughters, 'partner',
-      { sex:'m' }, daughters.length ? null : 'a daughter');
+      { sex:'m' }, daughters.length ? null : 'a daughter', NEED.daughter);
   add('Muzukuru', "your son's child", 'down', sons, 'child',
-      {}, sons.length ? null : 'a son');
+      {}, sons.length ? null : 'a son', NEED.son);
   add('Muzukuru', "your daughter's child", 'down', daughters, 'child',
-      {}, daughters.length ? null : 'a daughter');
+      {}, daughters.length ? null : 'a daughter', NEED.daughter);
   add('Muzukuru', "your sister's child", 'down', sisters, 'child',
-      {}, sisters.length ? null : 'a sister');
+      {}, sisters.length ? null : 'a sister', NEED.sister);
 
   return out.map(w => ({ ...w, ready: !w.done && !w.missing && !!w.on }));
 }
@@ -11769,8 +11802,15 @@ function waysToJoin(anchorId, otherId){
          daughter", "your father" — so the sentence has to be built round
          each shape rather than bolted in front of both. */
       const need = w.missing;
+      /* OFFERED, NOT REFUSED, where the app knows how to record the person
+         the word runs through. The row says what it will also need, and
+         picking it asks for that one name. Only a word with no shape for its
+         go-between — "whether this person is a he or a she", which is a fact
+         about the anchor and not a person at all — is still a dead end. */
       out.push({ ...w, via:null, through:'', move:false,
-                 blocked: !need ? 'there is nobody for this word to go through'
+                 also: w.need ? (/^your /.test(need) ? need : need.replace(/^an? /, 'a ')) : null,
+                 blocked: w.need ? null
+                   : !need ? 'there is nobody for this word to go through'
                    : /^your /.test(need) ? `${need} is not recorded yet`
                    : `no ${need.replace(/^an? /, '')} is recorded yet` });
       continue;
@@ -12765,6 +12805,74 @@ function openRejoin(mineId, unionId, wasId){
   });
 }
 
+/* THE ONE NAME THE WORD STILL NEEDS.
+ *
+ * "Why is this limiting relationships?"
+ *
+ * Tete is your father's sister. Saying it of somebody tells the tree two
+ * things — who she is, and that there is a father — and the second was being
+ * treated as a reason to refuse the first. The word is offered now, and this
+ * is what it opens: one field for the go-between's name.
+ *
+ * NOTHING IS INVENTED. The family types the father's name the way they type
+ * every other name, and he goes in as a person like any other, joined to the
+ * anchor by the link the word implies. If they do not know it, Cancel leaves
+ * the tree exactly as it was.
+ *
+ * BOTH IN ONE ACT. The go-between and the join are made together and share
+ * one step back, so a single Undo takes the whole thing out rather than
+ * leaving a father nobody asked for standing on his own. */
+function askForGoBetween(anchorId, otherId, w){
+  closeForm();
+  const a = state.people[anchorId], b = state.people[otherId];
+  if (!a || !b) return;
+  pending = { kind:'dupes', anchorId };
+  const mine = anchorId === meId;
+  const theirs = (a.name || '').split(' ')[0];
+  const whose = mine ? 'your' : `${theirs}'s`;
+  const el = document.createElement('div');
+  el.id = 'form';
+  el.innerHTML =
+    `<p class="cap">${esc(b.name)} is <b>${esc(w.term)}</b></p>` +
+    `<p class="covnote">${esc(w.gloss.replace(/^your\b/, whose))} — so ${esc(whose)} ` +
+    `<b>${esc(w.need.what)}</b> belongs in the tree too, and is not there yet. ` +
+    `Give the name and both go in together.</p>` +
+    `<p class="lbl">${esc(whose)} ${esc(w.need.what)}</p>` +
+    `<input id="gbName" class="fld" placeholder="Their name" autocomplete="off">` +
+    `<p class="roothint">${esc(b.name)} is then recorded as ` +
+    `${esc(w.gloss.replace(/^your\b/, whose))}. Nothing else changes, and Undo ` +
+    `takes both back out.</p>` +
+    `<div class="row"><button class="btn" id="gbGo">Add both</button>` +
+    `<button class="btn ghost" id="gbNo">Cancel</button></div>`;
+  document.body.appendChild(el);
+  placeForm(el);
+  $('gbName').focus();
+
+  const go = () => {
+    const name = $('gbName').value.trim();
+    if (!name){ $('gbName').focus(); return; }
+    const mark = history.length;
+    const via = grow(w.need.kind, anchorId, name, w.need.sex || '', '', {});
+    if (!via){ say('That could not be added.', 'atonce'); return; }
+    linkExisting(w.kind, via, otherId);
+    /* One step back for the pair. grow and linkExisting each took their own,
+       and two Undos to reverse one answer is two chances to stop halfway. */
+    while (history.length > mark + 1) history.splice(history.length - 1, 1);
+    closeForm(); sel = otherId; render(); save();
+    if (layout.persons[otherId]) focusOn(otherId, Math.max(pos.k, 0.7));
+    const k = kinTerms(anchorId, otherId);
+    const said = k && k.list.length ? k.list.map(t => t.term).join(' · ') : '';
+    say(`${name} is recorded as ${whose} ${w.need.what}, and ${b.name} is joined ` +
+        `on through them${said ? ` — ${said} to ${theirs}` : ''}. Undo takes both back out.`);
+  };
+  $('gbGo').onclick = go;
+  $('gbNo').onclick = () => openJoin(anchorId, otherId);
+  el.addEventListener('keydown', e => {
+    if (e.key === 'Enter'){ e.preventDefault(); go(); }
+    if (e.key === 'Escape'){ e.preventDefault(); closeForm(); }
+  });
+}
+
 /* WHICH RELATION IT IS — asked once, plainly, with the ones that cannot be
    said greyed out and the reason on them. The four are the same four the
    buds offer, because they are the four links this model has. */
@@ -12777,6 +12885,9 @@ function openJoin(anchorId, otherId){
   el.id = 'form';
   document.body.appendChild(el);
   const first = x => (x.name || '').split(' ')[0];
+  // "your father" reads wrong when the card is somebody else's — see openWays.
+  const mine = anchorId === meId;
+  const facing = t => mine ? t : String(t).replace(/\byour\b/g, first(a) + "'s");
 
   const ways = waysToJoin(anchorId, otherId);
   const open = ways.filter(w => !w.blocked);
@@ -12798,6 +12909,8 @@ function openJoin(anchorId, otherId){
           (w.through ? `<small>through ${esc(w.through)}</small>` : '') +
           (w.move ? `<small>moves them out of the household they are ` +
                     `recorded under now</small>` : '') +
+          (w.also ? `<small class="alsoneed">needs ${esc(facing(w.also))} too — ` +
+                    `you will be asked for the name</small>` : '') +
           (w.blocked ? `<small>${esc(w.blocked)}</small>` : '') +
           `</button>`).join('') + `</div>`;
     }).join('') +
@@ -12808,6 +12921,7 @@ function openJoin(anchorId, otherId){
     const [band, i] = btn.dataset.way.split(':');
     const w = ways.filter(x => x.band === band)[Number(i)];
     if (!w) return;
+    if (w.need) return askForGoBetween(anchorId, otherId, w);
     const kind = w.kind, moved = w.move, on = w.via;
     linkExisting(kind, on, otherId);
     closeForm(); sel = otherId; render(); save();

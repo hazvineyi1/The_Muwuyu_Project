@@ -218,4 +218,81 @@ section('a word for the other sex is not offered at all, rather than refused');
         ways.map(w => w.term).join(', '));
 }
 
+section('A WORD IS NOT REFUSED JUST BECAUSE THE PERSON IT RUNS THROUGH IS MISSING');
+/* "Why is this limiting relationships?"
+ *
+ * Tete is your FATHER's sister. Half these words run through somebody, and a
+ * word whose go-between was not in the tree had nowhere to put anybody — so
+ * the row was greyed out with "your father is not recorded yet" under it.
+ * That reads as the app deciding the relationship is not allowed, when what
+ * is actually true is that the app is one name short of being able to record
+ * it.
+ *
+ * A family saying "Bertha is his Tete" is telling you two things: that she is
+ * his father's sister, and therefore that he HAS a father. The second is news
+ * to the tree, and asking for it is one field. */
+{
+  const fe = loadFrontend();
+  // A mother recorded, no father — which is most half-filled trees.
+  const mum = fe.addPerson('Ruvarashe Moyo', 'f', 'Nzou', '1940', '');
+  const me  = fe.grow('child', mum, 'Musekiwa Musoni', 'm', 'Mwendamberi', { born:'1968' });
+  fe.setMe(me);
+  const her = fe.addPerson('Bertha Enia Musoni', 'f', 'Mwendamberi', '1965', '');
+
+  const ways = fe.waysToJoin(me, her);
+  const tete = ways.find(w => w.term === 'Tete');
+  check('Tete is offered even with no father recorded', !!tete && !tete.blocked,
+        JSON.stringify(tete));
+  check('and it says the father is wanted too', !!tete && /father/.test(tete.also || ''),
+        JSON.stringify(tete));
+  eq('with the shape of the person to ask for', tete.need && tete.need.kind, 'parent');
+  eq('and which of the two he is', tete.need && tete.need.sex, 'm');
+
+  /* EVERY word that runs through somebody, not only this one — a son's wife,
+     a daughter's child, a sister's child. */
+  const needing = ways.filter(w => w.need);
+  check('every word with a missing go-between is offered the same way',
+        needing.length >= 5 && needing.every(w => !w.blocked && w.need.kind && w.also),
+        JSON.stringify(needing.map(w => w.term + ':' + w.also)));
+
+  section('and the two go in together, with the word worked out afterwards');
+  {
+    const dad = fe.grow(tete.need.kind, me, 'Tapiwa Musoni', tete.need.sex, '', {});
+    fe.linkExisting(tete.kind, dad, her);
+    const k = fe.kinTerms(me, her);
+    const said = (k && k.list.length) ? k.list.map(x => x.term) : [];
+    check('she comes back Tete, read off the tree rather than off the button',
+          said.includes('Tete'), said.join(' + ') || 'no word');
+    check('and the father the family named is a person like any other',
+          fe.getState().people[dad].name === 'Tapiwa Musoni', 'no father');
+    eq('with nobody left floating', fe.adrift(), []);
+  }
+}
+
+section('but what is missing is not always a person, and that still waits');
+{
+  /* "Mukoma — your older brother or sister" is short of a FACT about the
+     anchor rather than short of a person: which of the two words it is
+     depends on whether they are a he or a she, and there is nobody to add to
+     settle that. So it stays waiting in the add panel, with the reason, and
+     no name is asked for — the difference this whole change turns on is
+     between a missing person, which can be given, and a missing answer,
+     which cannot. */
+  const fe = loadFrontend();
+  const a = fe.addPerson('No sex recorded', '', 'Nzou', '1950', '');
+  const ways = fe.waysToAdd(a);
+  const mukoma = ways.find(w => w.term === 'Mukoma');
+  check('it is not ready', !!mukoma && !mukoma.ready, JSON.stringify(mukoma));
+  check('and what is wanted is an answer, not somebody to add',
+        !!mukoma && !mukoma.need && /he or a she/.test(mukoma.missing || ''),
+        JSON.stringify(mukoma));
+
+  /* And the other half of the same distinction: a word short of a PERSON
+     carries the shape of them, so the panel can ask. */
+  const someone = fe.addPerson('A woman', 'f', 'Shava', '1955', '');
+  const tete = fe.waysToJoin(a, someone).find(w => w.term === 'Tete');
+  check('while a word short of a person carries how to make them',
+        !!tete && !tete.blocked && !!tete.need, JSON.stringify(tete));
+}
+
 report();
