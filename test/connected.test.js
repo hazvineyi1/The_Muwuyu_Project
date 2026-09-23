@@ -308,7 +308,27 @@ const http = require('http');
     check('a refused batch is taken back on screen too',
           /d\.error === 'not_joined'/.test(html));
     check('and said at once rather than queued behind a confirmation',
-          /That change has been undone here too\.', 'atonce'/.test(html));
+          /say\(undone, 'atonce'\)/.test(html));
+
+    /* ── AND SAID WHERE SOMEBODY CAN SEE IT ────────────────────────────
+     *
+     * say() writes into #live, which is one pixel square and clipped: an
+     * announcement for a screen reader, and nothing a sighted relative will
+     * ever read. That was the whole of the feedback on a refused batch — so
+     * three names appeared, vanished a second later, and nothing on the
+     * screen said why. It looks exactly like losing work for no reason, and
+     * the reason was sitting right there.
+     *
+     * Everywhere else the app has something to show, it shows it: a clash
+     * paints #others, a stall paints #stalled. A refusal does now too. */
+    check('the live region really is invisible, which is why this matters',
+          /\.sr\{position:absolute; width:1px/.test(html));
+    check('a refused batch is written where it can be read',
+          /showRefused\(undone\)/.test(html));
+    check('by a function that puts it on the screen and leaves it there',
+          /function showRefused\(message\)\{[\s\S]{0,240}el\.hidden = false/.test(html));
+    check('and the passcode refusal is written up the same way',
+          /showRefused\(refused\)/.test(html));
   }
 
   /* ── AND NOBODY IS EVER CUT LOOSE ───────────────────────────────────────

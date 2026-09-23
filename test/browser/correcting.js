@@ -177,6 +177,58 @@ const rows = page => page.$$eval('#cMarriages .join', els => els.map(e => ({
     is(/ancestor or a descendant/.test(offered[0].why), true, 'with the reason on the row');
   }
 
+  section('ESCAPE CLOSES WHAT IS OPEN, WHEREVER THE FOCUS IS');
+  /* Thirty-odd panels each listened for Escape on THEMSELVES, which works
+     only while the focus is inside them. A panel opened by tapping leaves
+     the focus on the button that opened it, and that button is then removed
+     with the screen behind — so the focus lands on the body and Escape
+     reaches nobody. Nothing was stranded, every panel has a Close button;
+     it was the key everyone tries first doing nothing at all, on almost
+     every panel in the app. */
+  {
+    const me = 'm';
+    for (const [name, call] of [
+      ['everyone around them', 'openRelatives'],
+      ['add by the word',      'openWays'],
+      ['the card',             'openCard'],
+    ]){
+      await page.evaluate(([fn, id]) => {
+        closeForm();
+        window[fn](id);
+        document.body.focus();               // nobody is typing in it
+      }, [call, me]);
+      await page.waitForTimeout(150);
+      is(await page.evaluate(() => !!document.getElementById('form')), true,
+         `${name} is open`);
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(200);
+      is(await page.evaluate(() => !!document.getElementById('form')), false,
+         `${name} closes on Escape with the focus on the body`);
+    }
+
+    /* AND A PANEL THAT WANTS ESCAPE FOR SOMETHING ELSE KEEPS IT. The rejoin
+       panel goes back to the card rather than closing outright — one step
+       back, not all the way out — and calls preventDefault to say so. */
+    await page.evaluate(() => {
+      closeForm();
+      openRejoin('m', unionsOf('m')[0].id, null);
+      document.body.focus();
+    });
+    await page.waitForTimeout(200);
+    const asked = await page.evaluate(() =>
+      (document.querySelector('#form .cap') || {}).textContent || '');
+    is(/joined to here/i.test(asked), true, 'the rejoin panel is open: ' + asked);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(250);
+    const now = await page.evaluate(() => ({
+      open: !!document.getElementById('form'),
+      cap: (document.querySelector('#form .cap') || {}).textContent || ''
+    }));
+    is(now.open, true, 'Escape does not slam it shut');
+    is(/joined to here/i.test(now.cap), false,
+       'it steps back to the card instead: ' + now.cap);
+  }
+
   await browser.close();
   console.log(`\n  ${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

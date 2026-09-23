@@ -12466,6 +12466,31 @@ function keepSteady(id, before){
 
 let suggestTimer = null;
 
+/* ── ESCAPE CLOSES WHATEVER IS OPEN, WHEREVER THE FOCUS IS ───────────────
+ *
+ * Thirty-odd panels each listen for Escape on themselves, which works only
+ * while the focus is inside them. A panel opened by TAPPING leaves the focus
+ * on the button that opened it — and that button is then removed with the
+ * screen behind, so the focus lands on the body and Escape reaches nobody.
+ * Every panel still has a Close button, so this strands nobody; it is the
+ * key everyone tries first doing nothing at all, on almost every panel in
+ * the app.
+ *
+ * Here rather than in each panel: one listener, on the document, after the
+ * panel's own has had its turn. A panel that wants to do something else with
+ * Escape — going back a step rather than closing outright — calls
+ * preventDefault, and this leaves it alone. */
+/* The headless loader that the node suites read this file with stubs a
+   `document` with no listeners on it, so the method is what to ask for
+   rather than the object. */
+if (typeof document !== 'undefined' && typeof document.addEventListener === 'function'){
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape' || e.defaultPrevented) return;
+    if (!document.getElementById('form')) return;
+    closeForm();
+  });
+}
+
 function closeForm(){
   clearTimeout(suggestTimer);
   const f = $('form');
@@ -16034,7 +16059,9 @@ async function flush(){
         state = JSON.parse(JSON.stringify(synced));
         if (!state.people[sel]) sel = null;
         closeForm(); render();
-        say(why + ' That change has been undone here too.', 'atonce');
+        const undone = why + ' That change has been undone here too.';
+        say(undone, 'atonce');
+        showRefused(undone);          // and where somebody can read it
         return;
       }
     }
@@ -16056,7 +16083,9 @@ async function flush(){
         state = JSON.parse(JSON.stringify(synced));
         if (!state.people[sel]) sel = null;
         closeForm(); render();
-        say(why + ' Nothing has been changed here either.', 'atonce');
+        const refused = why + ' Nothing has been changed here either.';
+        say(refused, 'atonce');
+        showRefused(refused);
         return;
       }
     }
@@ -16400,6 +16429,33 @@ function showAlreadyHere(who, said){
   clearTimeout(showFromOthers.t);
   const ok = $('alreadyOk');
   if (ok) ok.onclick = () => { el.hidden = true; };
+}
+
+/* ── A REFUSAL THAT CAN BE SEEN, NOT ONLY HEARD ──────────────────────────
+ *
+ * say() writes into #live, which is an aria-live region one pixel square and
+ * clipped to nothing: it is an announcement, and by design it is the only
+ * thing a screen reader needs. Everywhere the app also has something to SHOW
+ * it shows it — a clash paints #others, a stall paints #stalled, a duplicate
+ * paints its own line.
+ *
+ * Two paths had nothing. When the server refuses a batch, the page winds the
+ * work back — correctly, because the batch is all-or-nothing and the tree on
+ * screen must match the tree that exists — and said why into the clipped
+ * element. So a relative typed three names, watched them appear, watched them
+ * vanish a second later, and was told nothing at all. That is the worst thing
+ * this app can do: it looks exactly like losing work for no reason, and the
+ * reason was sitting right there.
+ *
+ * It goes where the clash goes, and stays longer, because it asks the family
+ * to do something rather than just telling them what happened. */
+function showRefused(message){
+  const el = $('others');
+  if (!el) return;
+  el.textContent = message;
+  el.hidden = false;
+  clearTimeout(showFromOthers.t);
+  showFromOthers.t = setTimeout(() => { el.hidden = true; }, 20000);
 }
 
 function showClash(detail){
