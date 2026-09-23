@@ -4236,7 +4236,70 @@ function derive(who, tid, byBloodOnly){
     const myLink = state.people[best.myLink], tgLink = state.people[best.tgLink];
     const genDiff = best.myUp - best.tgUp;            // >0 means they are above me
     const known = myLink.sex && tgLink.sex;
-    const cross = best.myUp >= 1 && known && myLink.sex !== tgLink.sex;
+    /* ── WHERE THE LINE CROSSES, ALL THE WAY DOWN ─────────────────────
+     *
+     * "This is an incorrect reading of the relationship to me."
+     *
+     * This asked one question: are the two children of the shared marriage
+     * the same sex? For a first cousin that is the whole of the rule and it
+     * is right — your father's BROTHER's children are your brothers and
+     * sisters, your father's SISTER's children are not.
+     *
+     * But it was the ONLY question asked, and both lines can be deeper than
+     * one step. Take a common great-grandfather, my line down through sons,
+     * theirs down through a son and then HIS DAUGHTER: the pair at the top
+     * are two brothers, so this said parallel, and the app called somebody
+     * on a crossed line "a brother or sister to you, not a cousin". The
+     * woman the line actually crosses at was four rows below the only place
+     * it was looking.
+     *
+     * The doctrine at the top of this section already says what to do —
+     * "the skew runs on down their lines" — so a crossing found anywhere
+     * below counts the same as one at the top. A line that passes through a
+     * daughter has left the house it started in, at whatever depth it does
+     * so.
+     *
+     * Each family can still say otherwise: every word here is keyed on a
+     * shape the lexicon can override, and this changes which shape is
+     * reached, not whether a family gets the last word. */
+    const crossesBelow = (from, link) => {      // the daughter it crosses at, or null
+      // the people between them, each one the parent of the next
+      const prev = new Map([[from, null]]);
+      let frontier = [from], found = false;
+      while (frontier.length && !found){
+        const next = [];
+        for (const x of frontier){
+          if (x === link){ found = true; break; }
+          for (const par of parentsOf(x)){
+            if (prev.has(par)) continue;
+            prev.set(par, x);
+            next.push(par);
+          }
+        }
+        frontier = next;
+      }
+      if (!prev.has(link)) return false;
+      // walk down from the link; every step but the last has a parent in it
+      let at = prev.get(link);                       // the link's child on this path
+      while (at && at !== from){
+        const p = state.people[at];
+        if (p && p.sex === 'f') return p;             // descent through a daughter
+        at = prev.get(at);
+      }
+      return null;
+    };
+    const crossedAt = crossesBelow(tid, best.tgLink) || crossesBelow(who, best.myLink);
+    const cross = best.myUp >= 1 && known &&
+      (myLink.sex !== tgLink.sex || !!crossedAt);
+
+    /* AND THE SENTENCE NAMES THE WOMAN IT CROSSES AT. Without this the app
+       says "descended from your ancestor Sydney's sister" about a line whose
+       crossing is four rows further down at somebody else entirely — which
+       is the app showing working that does not match its answer, and is
+       worse than showing none. */
+    const crossWhy = crossedAt
+      ? `the line turns at ${crossedAt.name.split(' ')[0]}, a daughter of it`
+      : null;
     const senior = olderThan(best.tgLink, best.myLink);   // two siblings: always answerable
     /* WHOSE SIDE THE LINK RUNS THROUGH.
 
@@ -4291,15 +4354,17 @@ function derive(who, tid, byBloodOnly){
          word nobody said is worse than no word. So where the sex decides the
          word and the sex is not recorded, there is no word, and whyNotNamed
          says which fact is missing and offers the one tap that supplies it. */
+      const from = crossWhy ? `${via} family — ${crossWhy}` : `${via} sister`;
       return motherBrother
         ? { term: them.sex === 'm' ? 'Sekuru' : them.sex === 'f' ? 'Sekuru' : null,
             why: them.sex
-              ? `descended from ${via} brother — that line stays Sekuru`
+              ? `descended from ${crossWhy ? `${via} family — ${crossWhy}` : `${via} brother`}` +
+                ` — that line stays Sekuru`
               : `descended from ${via} brother — but that line is Sekuru for a ` +
                 `man and Amainini for a woman`,
             shape: shapeOf('mothers-brothers-line-below', me.sex, them.sex),
             plain:"somebody down your mother's brother's line" }
-        : { term:'Muzukuru', why:`descended from ${via} sister — that line stays Muzukuru`,
+        : { term:'Muzukuru', why:`descended from ${from} — that line stays Muzukuru`,
             shape: shapeOf('fathers-sisters-line-below', me.sex, them.sex),
             plain:"somebody down your father's sister's line" };
     }

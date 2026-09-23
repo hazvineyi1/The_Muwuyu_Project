@@ -528,4 +528,65 @@ section('and the stamp notices every fact a word can turn on');
   check('and a word this family has taught', fe.treeStamp() !== withUnion);
 }
 
+section('AND THE LINE CAN CROSS FURTHER DOWN THAN THE FIRST STEP');
+/* "This is an incorrect reading of the relationship to me."
+ *
+ * The cross/parallel test asked one question — are the two children of the
+ * shared marriage the same sex? For a FIRST cousin that is the whole of the
+ * rule, and every row above proves it right. But it was the ONLY question
+ * asked, and both lines can be deeper than one step.
+ *
+ * Two brothers at the top, my line down through sons, theirs down through a
+ * son and then HIS DAUGHTER: the pair at the top are the same sex, so the
+ * old test said parallel, and the app called somebody on a crossed line "a
+ * brother or sister to you, not a cousin". The woman the line actually
+ * crosses at was rows below the only place it was looking.
+ *
+ * The doctrine at the head of the engine already says what to do — "the skew
+ * runs on down their lines" — so a crossing found anywhere below counts the
+ * same as one at the top. */
+{
+  const fe = loadFrontend();
+  const top = fe.addPerson('Chaitezvi', 'm', 'Mwendamberi', '1900', '');
+
+  // my line: sons all the way down
+  const sydney  = fe.grow('child', top,     'Sydney',    'm', '', { born:'1930' });
+  const stanley = fe.grow('child', sydney,  'Stanley',   'm', '', { born:'1955' });
+  const me      = fe.grow('child', stanley, 'Musekiwa',  'm', '', { born:'1980' });
+  fe.setMe(me);
+
+  // their line: a brother of Sydney's, then HIS DAUGHTER, then her child
+  const noel  = fe.grow('child', top,   'Noel',    'm', '', { born:'1935' });
+  const ruth  = fe.grow('child', noel,  'Ruth',    'f', '', { born:'1958' });
+  const tin   = fe.grow('child', ruth,  'Tinashe', 'f', '', { born:'1982' });
+
+  // and a line of the same depth that stays in sons, for the comparison
+  const alex  = fe.grow('child', noel,  'Alex',    'm', '', { born:'1960' });
+  const kuda  = fe.grow('child', alex,  'Kudakwashe', 'f', '', { born:'1983' });
+
+  const word = id => { const r = fe.relationship(me, id); return r ? (r.term || r.choice || null) : null; };
+  const why  = id => { const r = fe.relationship(me, id); return r ? r.why : ''; };
+
+  eq('a line that turns at a daughter is crossed, however deep it turns',
+     word(tin), 'Muzukuru');
+  check('and the sentence names the woman it turns at, not somebody else',
+        /turns at Ruth/.test(why(tin)), why(tin));
+  check('rather than claiming she is a sister of somebody she is not',
+        !/Sydney's sister/.test(why(tin)), why(tin));
+
+  eq('while the same depth through sons is still a brother or sister',
+     word(kuda), 'Hanzvadzi');
+  check('and says so', /not a cousin/.test(why(kuda)), why(kuda));
+
+  section('and the first-cousin rules above are untouched by it');
+  {
+    const sis = fe.grow('child', sydney, 'Tete Grace', 'f', '', { born:'1958' });
+    const her = fe.grow('child', sis, 'Farai', 'f', '', { born:'1981' });
+    eq("my father's sister's child is still Muzukuru", word(her), 'Muzukuru');
+    const bro = fe.grow('child', sydney, 'Uncle Ben', 'm', '', { born:'1957' });
+    const his = fe.grow('child', bro, 'Rudo', 'f', '', { born:'1981' });
+    eq("my father's brother's child is still Hanzvadzi", word(his), 'Hanzvadzi');
+  }
+}
+
 report();
