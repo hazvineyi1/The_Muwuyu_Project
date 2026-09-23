@@ -1495,6 +1495,10 @@ body.carrying .pod{transition:none;}
    like "your father is not recorded yet", which is the sentence this whole
    change exists to stop being a dead end. */
 .seg.col button small.alsoneed{color:var(--gold); text-transform:none; letter-spacing:.01em;}
+/* The word, in a list where the name is what you scan and the word is
+   what you are checking. */
+#form .found u small b.relword{color:var(--gold); font-weight:700;}
+#form #relList{max-height:46vh;}
 .seg.col button:hover small{color:var(--gold);}
 .row{display:flex; gap:8px;}
 .btn{
@@ -11359,6 +11363,18 @@ function openCard(id){
         `${esc((state.people[h.holder] || {}).name || '')} has more than one ` +
         `house, and these are the children of this one.</p>` : '';
     })() +
+    /* EVERYONE ALREADY THERE, one tap from the card.
+       The block above shows this person's parents and marriages and nothing
+       else — not their children, not their brothers and sisters, nobody
+       further out. That is the half of the answer a relative needs before
+       they type a name, and without it a family finds out they have two of
+       somebody long after both have been filled in. */
+    `<div class="row"><button class="btn ghost wide" id="cKin">` +
+      `See everyone recorded around ${first}</button></div>` +
+    `<p class="roothint">Their parents, their marriages, their children, their ` +
+    `brothers and sisters and everybody further out, with the word for each. ` +
+    `Worth a look before adding somebody — it is how a family stops entering ` +
+    `the same person twice.</p>` +
     `<div class="row"><button class="btn ghost wide" id="cJoin">` +
       `Join ${first} to somebody already here</button></div>` +
     whyOnCard(id) +
@@ -11532,6 +11548,7 @@ function openCard(id){
         + (b.dataset.parents === 'none' ? ` Undo puts it back.` : ''));
     } else { closeForm(); }
   });
+  if ($('cKin')) $('cKin').onclick = () => { commit(); openRelatives(id); };
   if ($('cJoin')) $('cJoin').onclick = () => { commit(); openFind(id); };
   $('cAside').onclick = () => { commit(); closeForm(); openSetAside(id); };
   $('cGone').onclick = () => {
@@ -12841,6 +12858,269 @@ function openRejoin(mineId, unionId, wasId){
   draw();
   el.addEventListener('keydown', e => {
     if (e.key === 'Escape'){ e.preventDefault(); closeForm(); openCard(mineId); }
+  });
+}
+
+/* ── EVERYONE ALREADY RECORDED AROUND ONE PERSON ─────────────────────────
+ *
+ * "To avoid duplication, the relationships that are added should show when
+ *  clicking on a person. Maybe they can open up in a space and show a list of
+ *  the relationships, and the person can filter for 10, 20, 30, 50, 100 etc
+ *  relatives to show at a time. Allow for relationship editing."
+ *
+ * The card shows a person's parents and their marriages and stops there. Not
+ * their children, not their brothers and sisters, not anybody further out —
+ * so the question a relative actually has before they type a name, "is this
+ * one already in here?", could only be answered by panning round the drawing
+ * and reading it.
+ *
+ * That is how a tree gets two of somebody. Duplicates are not made by people
+ * who do not care; they are made by people who cannot see what is already
+ * there.
+ *
+ * SORTED BY HOW CLOSE, not alphabetically, because closeness is what the
+ * question is about. Distance is counted in links through the households a
+ * person belongs to — a parent, a child, a husband, a brother are all one
+ * link away; a grandparent is two — so the people most likely to be entered
+ * twice are the ones at the top.
+ *
+ * AND THE WORD IS DERIVED, LIKE EVERYWHERE ELSE. Nothing here is stored. The
+ * list is the tree read back, which is exactly what makes it worth reading
+ * before adding to it. */
+function relativesOf(anchorId){
+  const me = state.people[anchorId];
+  if (!me || !present(anchorId)) return [];
+
+  /* How many links away, walked out through shared households. One pass, so
+     a big family costs one walk rather than one kinship reckoning per
+     person — those are done only for the page being shown. */
+  const away = new Map([[anchorId, 0]]);
+  let edge = [anchorId];
+  while (edge.length){
+    const next = [];
+    for (const x of edge){
+      const near = unionsOf(x).slice();
+      const up = parentUnionOf(x);
+      if (up) near.push(up);
+      for (const u of near){
+        for (const y of u.partners.concat(u.children)){
+          if (away.has(y) || !present(y)) continue;
+          away.set(y, away.get(x) + 1);
+          next.push(y);
+        }
+      }
+    }
+    edge = next;
+  }
+  away.delete(anchorId);
+
+  /* HOW THEY ARE JOINED, where they are joined to this person directly. It is
+     the difference between a row that can be corrected here and a row whose
+     word is a consequence of somebody else's join. */
+  const mine = parentUnionOf(anchorId);
+  const direct = new Map();
+  for (const u of unionsOf(anchorId)){
+    for (const x of u.partners) if (x !== anchorId && present(x)) direct.set(x, { how:'partner', union:u.id });
+    for (const x of u.children)  if (present(x)) direct.set(x, { how:'child', union:u.id });
+  }
+  if (mine){
+    for (const x of mine.partners) if (present(x)) direct.set(x, { how:'parent', union:mine.id });
+    for (const x of mine.children)
+      if (x !== anchorId && present(x) && !direct.has(x)) direct.set(x, { how:'sibling', union:mine.id });
+  }
+
+  const ORDER = { parent:0, partner:1, child:2, sibling:3 };
+  return [...away.entries()]
+    .map(([id, n]) => ({ id, away:n, ...(direct.get(id) || { how:null, union:null }) }))
+    .sort((a, b) =>
+      (a.how ? 0 : 1) - (b.how ? 0 : 1) ||
+      (ORDER[a.how] ?? 9) - (ORDER[b.how] ?? 9) ||
+      a.away - b.away ||
+      ((birthYear(a.id) ?? 9999) - (birthYear(b.id) ?? 9999)) ||
+      String((state.people[a.id] || {}).name).localeCompare(String((state.people[b.id] || {}).name)));
+}
+
+/* How many are shown at a time. Kept for as long as the page is open, because
+   somebody who has asked for a hundred once means it. */
+let relativesPage = { size: 20, at: 0, q: '' };
+const RELATIVES_SIZES = [10, 20, 50, 100];
+
+function openRelatives(anchorId, keep){
+  closeForm();
+  const me = state.people[anchorId];
+  if (!me) return;
+  if (!keep) relativesPage = { size: relativesPage.size, at: 0, q: '' };
+  pending = { kind:'dupes', anchorId };
+  const first = (me.name || '').split(' ')[0];
+
+  const all = relativesOf(anchorId);
+  const q = relativesPage.q.trim().toLowerCase();
+  const wordsOf = id => {
+    const k = kinTerms(anchorId, id);
+    return (k && k.list.length) ? k.list.filter(t => t.term) : [];
+  };
+  const rows = q
+    ? all.filter(r => {
+        const p = state.people[r.id] || {};
+        if ((p.name || '').toLowerCase().includes(q)) return true;
+        if ((p.also || '').toLowerCase().includes(q)) return true;
+        return wordsOf(r.id).some(t => t.term.toLowerCase().includes(q));
+      })
+    : all;
+
+  const size = relativesPage.size;
+  const total = rows.length;
+  const pages = size === 'all' ? 1 : Math.max(1, Math.ceil(total / size));
+  if (relativesPage.at >= pages) relativesPage.at = pages - 1;
+  const from = size === 'all' ? 0 : relativesPage.at * size;
+  const shown = size === 'all' ? rows : rows.slice(from, from + size);
+
+  const HOW = { parent: 'their parent', partner: 'married to them',
+                child: 'their child', sibling: 'their brother or sister' };
+  /* Each button says the one link it takes out. "Not joined" on every row was
+     the same word for four different acts, and on a parent's row it was worse
+     than vague: it read as "not his parent" and would have taken the OTHER
+     parent out with them. */
+  const CUTNAME = { parent: 'Not their parent', partner: 'Not joined',
+                    child: 'Not their child', sibling: 'Different parents' };
+
+  const el = document.createElement('div');
+  el.id = 'form';
+  el.className = 'wide';
+  el.innerHTML =
+    `<p class="cap">Everyone recorded around <b>${esc(me.name)}</b></p>` +
+    `<p class="covnote">${total} ${total === 1 ? 'person' : 'people'}` +
+    `${q ? ' matching' : ''} in this tree ${total === 1 ? 'is' : 'are'} related to ` +
+    `${esc(first)}. Read it before adding somebody — it is how a family stops ` +
+    `entering the same person twice.</p>` +
+
+    `<input id="relQ" class="fld" placeholder="Narrow it — a name, or a word like Sekuru" ` +
+      `value="${esc(relativesPage.q)}" autocomplete="off">` +
+
+    `<p class="lbl">Show at a time</p><div class="seg" id="relSize">` +
+      RELATIVES_SIZES.map(n =>
+        `<button type="button" data-size="${n}" aria-pressed="${size === n}">${n}</button>`).join('') +
+      `<button type="button" data-size="all" aria-pressed="${size === 'all'}">All</button>` +
+    `</div>` +
+
+    (total
+      ? `<div class="kinlist browse" id="relList">` +
+        shown.map(r => {
+          const p = state.people[r.id] || {};
+          const life = [p.born, p.died].filter(Boolean).join(' – ');
+          const words = wordsOf(r.id).map(t => t.term);
+          return `<div class="found" data-rel="${esc(r.id)}">` +
+            `<u>${esc(p.name || '')}` +
+              `<small>${words.length ? `<b class="relword">${esc(words.join(' · '))}</b> — ` : ''}` +
+              `${esc(r.how ? HOW[r.how] : `${r.away} steps away`)}` +
+              `${life ? ` · ${esc(life)}` : ''}</small></u>` +
+            `<span class="acts">` +
+              (r.how === 'partner'
+                ? `<button type="button" class="mini" data-relswap="${esc(r.union)}" ` +
+                  `data-relwas="${esc(r.id)}">Somebody else</button>` : '') +
+              (r.how ? `<button type="button" class="mini" data-relcut="${esc(r.id)}" ` +
+                       `data-relhow="${esc(r.how)}" data-relunion="${esc(r.union)}">` +
+                       `${esc(CUTNAME[r.how])}</button>` : '') +
+              `<button type="button" class="mini join" data-relopen="${esc(r.id)}">Open</button>` +
+            `</span></div>`;
+        }).join('') +
+        `</div>` +
+        (pages > 1
+          ? `<div class="row"><button class="btn ghost" id="relPrev"` +
+            `${relativesPage.at === 0 ? ' disabled' : ''}>Back</button>` +
+            `<button class="btn ghost" id="relNext"` +
+            `${relativesPage.at >= pages - 1 ? ' disabled' : ''}>More</button></div>` +
+            `<p class="roothint">Showing ${from + 1}–${from + shown.length} of ${total}.</p>`
+          : '')
+      : `<p class="browse">${q ? 'Nobody of that name or word is recorded around ' +
+          esc(first) + ' yet.' : esc(first) + ' is not joined to anybody yet.'}</p>`) +
+
+    `<div class="row"><button class="btn ghost" id="relNo">Close</button></div>`;
+  document.body.appendChild(el);
+  placeForm(el);
+
+  const again = () => openRelatives(anchorId, true);
+
+  const box = $('relQ');
+  box.addEventListener('input', () => {
+    clearTimeout(suggestTimer);
+    const at = box.selectionStart;
+    suggestTimer = setTimeout(() => {
+      relativesPage.q = box.value;
+      relativesPage.at = 0;
+      again();
+      const n = $('relQ');
+      if (n){ n.focus(); try { n.setSelectionRange(at, at); } catch (e) {} }
+    }, 200);
+  });
+
+  el.querySelectorAll('#relSize button').forEach(b => b.onclick = () => {
+    relativesPage.size = b.dataset.size === 'all' ? 'all' : Number(b.dataset.size);
+    relativesPage.at = 0;
+    again();
+  });
+  if ($('relPrev')) $('relPrev').onclick = () => { relativesPage.at--; again(); };
+  if ($('relNext')) $('relNext').onclick = () => { relativesPage.at++; again(); };
+  el.querySelectorAll('[data-relopen]').forEach(b =>
+    b.onclick = () => { sel = b.dataset.relopen; closeForm(); render(); openCard(b.dataset.relopen); });
+  el.querySelectorAll('[data-relswap]').forEach(b =>
+    b.onclick = () => openRejoin(anchorId, b.dataset.relswap, b.dataset.relwas));
+
+  /* TAKING A JOIN OUT FROM THE LIST, which is the one correction that can be
+     made here without knowing anything the list does not already show. The
+     rest of the editing lives on the card, where there is room for it, and
+     Open is one tap away on every row.
+
+     A parent and a child are the same link seen from two ends, so both come
+     down to taking one person out of one household. A brother or sister is
+     that link too — theirs, not this person's. */
+  el.querySelectorAll('[data-relcut]').forEach(b => b.onclick = () => {
+    const them = b.dataset.relcut, how = b.dataset.relhow;
+    const name = (state.people[them] || {}).name || 'them';
+    const wereLoose = adrift();
+    let done = false, what = '', also = '';
+    if (how === 'partner'){
+      done = unlinkPartner(b.dataset.relunion, them);
+      what = `${me.name} and ${name} are no longer recorded as joined`;
+    } else if (how === 'parent'){
+      /* THE PARENT LEAVES THE HOUSEHOLD, not the child — otherwise taking one
+         parent off would take the other off with them, which is not what the
+         row says and not what anybody means by it.
+         A parent is shared, so this reaches every child of that household.
+         Said out loud rather than discovered afterwards. */
+      const u = state.unions[b.dataset.relunion];
+      const kids = u ? u.children.filter(x => x !== anchorId && present(x)).length : 0;
+      done = unlinkPartner(b.dataset.relunion, them);
+      what = `${name} is no longer recorded as ${me.name}'s parent`;
+      also = kids ? ` That household holds ${kids} other ` +
+                    `${kids === 1 ? 'child' : 'children'}, so it is no longer ` +
+                    `${kids === 1 ? 'their' : 'their'} parent either.` : '';
+    } else {
+      // A child or a brother — the same link, and it is theirs to leave.
+      done = unlinkParents(them);
+      what = `${name} is no longer recorded in that household`;
+    }
+    if (!done){ say('That could not be taken out.', 'atonce'); return; }
+    /* REFUSED IS NOT THE SAME AS FINISHED. keptJoined winds the act back and
+       closes whatever panel was open, which is right everywhere else and
+       wrong here — it would drop somebody out of a list they were halfway
+       down, on page four of it, for pressing a button that did nothing. The
+       list comes straight back, at the same page and the same filter.
+
+       And a refusal here is ORDINARY, not an edge case: a parent is very
+       often the only thread holding a household to the rest of the family,
+       so taking one out really would float the household off. The sentence
+       keptJoined says names who and what to do about it. */
+    if (!keptJoined(wereLoose, 'Taking that join out')){ again(); return; }
+    render(); save();
+    again();
+    say(`${what}.${also} Everybody keeps their own name, years and children, ` +
+        `and Undo puts it back.`);
+  });
+
+  $('relNo').onclick = () => { closeForm(); openCard(anchorId); };
+  el.addEventListener('keydown', e => {
+    if (e.key === 'Escape'){ e.preventDefault(); closeForm(); }
   });
 }
 

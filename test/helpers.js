@@ -142,7 +142,7 @@ function loadFrontend(){
       saidWhat, newsLines, whenWords, newsCount, markSeen, loadSeen,
       budWords, PLAIN_BUDS, waysToAdd,
       focusIds, setFocusLifts, loadFocus, adrift, mayAlreadyBe, adriftRoom,
-      nameHelp, cutLoose, hereWords,
+      nameHelp, cutLoose, hereWords, relativesOf,
       BONDS, bondBetween, setBond, bondLine, widowedIn, marriageBlock,
       mergedRoom, setAutoMerged(list){ autoMerged = list; }, lightWord,
       growthGaps, growthFor, growthRoom, frontier, isOpenEnd,
