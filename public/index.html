@@ -719,6 +719,14 @@ body.carrying .pod{transition:none;}
   padding:8px 12px; margin-bottom:4px; border-radius:12px 4px 12px 4px;
   background:var(--pod-hi); border:1.5px solid var(--pod-edge); cursor:pointer;
   font:inherit; color:var(--ink);
+  /* THREE THINGS ACROSS A PHONE, and the third of them is a person's whole
+     name. "Babamukuru / Musekiwa's father's older brother / recorded on
+     Sydney Mufambisi Musoni" came to 375 pixels in a row 320 wide, and the
+     tail — which says WHICH relative the word is reckoned from, the one
+     thing that tells two Babamukuru apart — ran off the edge of the screen
+     on every row in the list. It takes its own line when the line it is on
+     has no room for it. */
+  flex-wrap:wrap;
 }
 #form .wayrow:hover{border-color:var(--gold);}
 #form .wayrow b{
@@ -726,7 +734,8 @@ body.carrying .pod{transition:none;}
 }
 #form .wayrow em{flex:1 1 auto; font-style:normal; font-size:var(--t-note); color:var(--muted);}
 #form .wayrow small{
-  flex:0 0 auto; font-size:var(--t-note); letter-spacing:.06em; color:var(--muted); opacity:.8;
+  flex:0 1 auto; min-width:0;
+  font-size:var(--t-note); letter-spacing:.06em; color:var(--muted); opacity:.8;
 }
 #form .wayrow.waiting{opacity:.5; cursor:default;}
 #form .wayrow.waiting:hover{border-color:var(--pod-edge);}
@@ -945,7 +954,12 @@ body.carrying .pod{transition:none;}
   padding:2px 10px; border-radius:999px; white-space:nowrap;
   background:var(--fam); color:var(--pod);
   font-size:var(--t-mark); font-weight:700; letter-spacing:.14em; text-transform:uppercase;
+  /* The word on it is counted rather than given, so it has to be something
+     a family can press. See openHouse. */
+  cursor:pointer;
 }
+.pod .famname:hover{filter:brightness(1.12);}
+.pod .famname:focus-visible{outline:2.5px solid var(--gold); outline-offset:2px;}
 /* The door. Where the two families are joined by a marriage, and therefore
    the one place it makes sense to put them away or bring them back. */
 .pod .fold{
@@ -1132,6 +1146,16 @@ body.carrying .pod{transition:none;}
    252px a question about one person needs. Still narrow enough to sit beside
    the tree rather than over it. */
 #form.wide{width:min(92vw, 372px);}
+/* ON A PHONE THERE IS NO BESIDE. 252px is two thirds of a 390px screen, and
+   the whole reason for it — leaving the tree visible next to the panel — is
+   a reason that only exists on a desktop. What it bought on a phone was a
+   narrow column pushed to one side, with a third of the screen showing tree
+   that the panel was covering anyway, a year of birth and a year of death
+   crushed side by side, and every button label wrapping. The same width as
+   the wide panels, so every panel on a phone is the same shape. */
+@media (max-width: 560px){
+  #form{width:min(92vw, 372px);}
+}
 #form .cap{
   font-size:var(--t-note); letter-spacing:.12em; text-transform:uppercase;
   color:var(--muted); margin:0 0 10px; line-height:1.5;
@@ -1214,6 +1238,18 @@ body.carrying .pod{transition:none;}
 #form .found .mini.join{border-color:var(--gold-soft); color:var(--gold);}
 #form .found .mini.join:hover{background:var(--gold); color:var(--pod); border-color:var(--gold);}
 #form .found u small.leaves{color:var(--muted); font-style:italic;}
+/* ON A PHONE THE NAME GETS THE WHOLE LINE AND THE ACTIONS GET THE NEXT ONE.
+   Up to three buttons sit at the end of this row — "Somebody else", "Not
+   joined", "Open" — and every one of them refuses to wrap, which is right:
+   a broken button label is worse than a narrow one. So the only thing left
+   to squeeze was the person, and it was squeezed to 55 pixels: "Mukadzi —
+   married to them · 1972" came out as a column of one and two word lines
+   beside the name it belongs to. The row a family reads is the name. */
+@media (max-width: 560px){
+  #form .found{flex-wrap:wrap;}
+  #form .found u{flex:1 0 100%;}
+  #form .found .acts{flex:1 0 100%; justify-content:flex-end;}
+}
 #form .dupe.move{border-style:solid; border-color:var(--gold-soft);}
 #form .dupe.move u small.leaves{color:var(--gold); font-weight:600;}
 #form .kinpair{display:flex; gap:10px; margin-bottom:4px;}
@@ -5935,7 +5971,29 @@ function familyLines(){
         if (other) doors.push({ person:id, union:u.id, to:lineOf.get(other), with:other });
       }
     members.sort((a, b) => seniorSide(a, b));
-    lines.push({ id:r, root:r, members, doors, name:nameOf(members) });
+    /* ── AND WHAT THIS SIDE OF THE FAMILY ACTUALLY CALLS ITSELF ─────────
+     *
+     * "How was this name generated and it should be editable or removable."
+     *
+     * nameOf() counts surnames, which is the answer nobody has to give and
+     * is right most of the time. When somebody HAS given one it wins, and
+     * an answer of '' means they asked for no caption at all — three
+     * states, and migration 018 says why the third one needs a null.
+     *
+     * The answer is looked for on the head of the line first, because that
+     * is the pod the caption sits on and so the pod it was given from. It
+     * is looked for further down only because heads MOVE: record a father
+     * above somebody and the line they headed is now his, and a family
+     * that had named their side should not lose the name for having
+     * remembered one more generation. Nearest to the head wins, and the
+     * members are already in senior order. */
+    const said = members.find(id => (state.people[id] || {}).house != null);
+    const house = said ? state.people[said].house : null;
+    lines.push({ id:r, root:r, members, doors,
+                 name: house == null ? nameOf(members) : house,
+                 // What the count would have said, so a panel can offer it
+                 // back as the way to undo a name.
+                 counted: nameOf(members), saidBy: said || null });
   }
   lines.sort((a, b) => seniorSide(a.root, b.root));
 
@@ -7791,9 +7849,15 @@ function drawing(){
     /* One caption per family, on the person the rest of them come down from.
        Not while it is folded — the button already says the name, and the
        person wearing the caption is not on the screen to wear it. */
+    /* AND IT IS A BUTTON, because it is a guess. The word on it was worked
+       out by counting surnames — see familyLines — and a family that reads
+       a word they do not use needs somewhere to say so. Tapping it asks. */
     const capt = (hue !== undefined && theirs && theirs.root === p.id &&
                   theirs.name && !isFolded(myLine))
-      ? `<span class="famname">${esc(theirs.name)}</span>` : '';
+      ? `<span class="famname" role="button" tabindex="0" data-house="${esc(myLine)}"` +
+        ` title="What this side of the family is called — tap to change it"` +
+        ` aria-label="This side of the family is called ${esc(theirs.name)}` +
+        ` — change or remove that">${esc(theirs.name)}</span>` : '';
     /* AND A SECTOR CONTROL ON ANYBODY WITH PEOPLE BELOW THEM. The family
        doors above are a special case of this; this is the general one. Only
        drawn on the person who is picked, because a control on every pod in
@@ -10132,6 +10196,112 @@ async function openFamilies(){
   });
   $('fmNo').onclick = closeForm;
   el.addEventListener('keydown', e => { if (e.key === 'Escape'){ e.preventDefault(); closeForm(); } });
+}
+
+/* ── WHAT THIS SIDE OF THE FAMILY IS CALLED ─────────────────────────────
+ *
+ * "How was this name generated and it should be editable or removable."
+ *
+ * It was counted. The page works out which line each person belongs to —
+ * the house runs down the men, see HOUSE_THROUGH — and then names that line
+ * by taking the last word of every member's name and keeping whichever word
+ * most of them carry. Nobody typed it, and nothing on the screen said so.
+ *
+ * The count is a good default and stays the default. It is also wrong in
+ * ways only a family can see: it names a line by the commonest surname IN
+ * it, which is not always the name the person wearing the caption answers
+ * to; where a father's sex was never recorded the line falls to whoever is
+ * listed first among the partners, often the wife, and the caption lands on
+ * her; and some families call themselves something no surname count can
+ * reach — a village, a praise name, "the Harare side".
+ *
+ * So three answers, and the panel offers all three plainly: keep the word it
+ * worked out, use ours instead, or put nothing there at all. The third is
+ * not the same as the first, which is the whole reason migration 018 gives
+ * this column a null.
+ *
+ * IT IS KEPT ON A PERSON, not on a line, because a line has no record of its
+ * own — it is worked out fresh from the marriages every time the tree is
+ * drawn, and an id that only exists while the page is open has nowhere to
+ * keep anything. The person it is kept on is the head of the line, which is
+ * the pod the caption sits on. */
+function openHouse(lineId){
+  closeForm();
+  const L = familyLines().byId.get(lineId);
+  if (!L) return;
+  const head = state.people[L.root];
+  if (!head) return;
+  pending = { kind:'card', anchorId:L.root };
+
+  const n = L.members.length;
+  const said = L.saidBy ? state.people[L.saidBy] : null;
+  const owned = said && said.house != null;
+
+  const el = document.createElement('div');
+  el.id = 'form';
+  el.innerHTML =
+    `<p class="cap">This side of the family</p>` +
+    `<p class="covnote">` +
+      (owned
+        ? `Somebody in this family wrote this name. ` +
+          (said.house === ''
+            ? `They asked for no name on this side.`
+            : `They called it <b>${esc(said.house)}</b>.`)
+        : `Nobody has said what this side is called, so the app counted: ` +
+          `<b>${esc(L.counted || 'nothing yet')}</b> is the surname most of the ` +
+          `${n} ${n === 1 ? 'person' : 'people'} in it ` +
+          `${n === 1 ? 'carries' : 'carry'}. ` +
+          `It is a guess, and it is on ${esc((head.name || '').split(' ')[0])} ` +
+          `because this line comes down from ${esc((head.name || '').split(' ')[0])}.`) +
+    `</p>` +
+    `<p class="lbl">Call it</p>` +
+    `<input class="fld" id="hsName" maxlength="60" autocomplete="off"` +
+      ` placeholder="${esc(L.counted || 'A name for this side')}"` +
+      ` value="${esc(owned ? said.house : '')}">` +
+    `<div class="row"><button class="btn" id="hsGo">Save</button></div>` +
+    `<div class="row"><button class="btn ghost wide" id="hsNone">` +
+      `Put no name on this side</button></div>` +
+    (owned
+      ? `<div class="row"><button class="btn ghost wide" id="hsBack">` +
+        `Go back to the name it works out${L.counted ? ` — ${esc(L.counted)}` : ''}` +
+        `</button></div>`
+      : '') +
+    `<div class="row"><button class="btn ghost wide" id="hsNo">Close</button></div>`;
+  document.body.appendChild(el);
+  placeForm(el);
+
+  /* Written on the head of the line as it stands now. If a father is
+     recorded above them later the head moves, and familyLines looks down
+     the line for an answer so the name is not lost — see the lookup
+     there. */
+  const put = value => {
+    const p = state.people[L.root];
+    if (!p) return;
+    p.house = value;
+    closeForm(); render(); save();
+  };
+
+  $('hsGo').onclick = () => {
+    const v = $('hsName').value.trim();
+    /* An empty box is not "no name" — the button under it is. Somebody who
+       clears the box and presses Save means "go back to the guess", which
+       is the same act as the third button and is answered the same way. */
+    put(v === '' ? null : v);
+    say(v ? `This side of the family is called ${v}.`
+          : `The name on this side is worked out again.`);
+  };
+  $('hsNone').onclick = () => {
+    put('');
+    say('No name is shown on that side of the family now.');
+  };
+  if ($('hsBack')) $('hsBack').onclick = () => {
+    put(null);
+    say(L.counted ? `That side is called ${L.counted} again — the name the app works out.`
+                  : 'That side is named by the app again.');
+  };
+  $('hsNo').onclick = closeForm;
+  $('hsName').focus();
+  $('hsName').onkeydown = e => { if (e.key === 'Enter') $('hsGo').click(); };
 }
 
 /* Everyone currently out of the tree, and how to bring them back.
@@ -15168,6 +15338,12 @@ podsEl.addEventListener('click', e => {
   const card = e.target.closest('[data-card]');
   if (card){ openCard(card.dataset.card); return; }
 
+  /* The caption under a pod names a SIDE of the family, not the person
+     wearing it — so it opens a question about the side. Before the pod,
+     because it sits on the pod's own bottom edge. */
+  const house = e.target.closest('[data-house]');
+  if (house){ openHouse(house.dataset.house); return; }
+
   const ord = e.target.closest('.ord');
   if (ord){
     const who = ord.dataset.who;
@@ -15250,7 +15426,9 @@ podsEl.addEventListener('click', e => {
 });
 podsEl.addEventListener('keydown', e => {
   if (e.key === 'Enter' || e.key === ' '){
-    const t = e.target.closest('.ord,.rm,.pod');
+    // .famname too: it is a button now, and a button that only a mouse can
+    // press is not one.
+    const t = e.target.closest('.ord,.rm,.famname,.pod');
     if (t){ e.preventDefault(); t.click(); }
   }
 });
@@ -15888,6 +16066,9 @@ function adopt(tree){
   for (const p of tree.people){
     next.people[p.id] = {
       id:p.id, name:p.name, also:p.also_known_as || '',
+      /* NOT `|| null`. '' is an answer here — "do not put a name on this
+         side" — and null is the absence of one. See migration 018. */
+      house:(p.house === undefined ? null : p.house),
       sex:p.sex || '', totem:p.totem || '',
       born:p.born || '', died:p.died || '', root:!!p.is_root,
       by:p.added_by || '', at:p.created_at, v:p.updated_at
@@ -15969,6 +16150,10 @@ function diffOps(was, now){
     // The op's name for it is alsoKnownAs; the client calls it `also` because
     // it sits beside `name` on a card and a card is not a schema.
     if ((p.also || '') !== (b.also || '')) fields.alsoKnownAs = p.also || '';
+    /* Compared with ===, not with `|| ''`, because null and '' are two
+       different answers about the caption on this side of the family and
+       collapsing them loses the one a family had to ask for. */
+    if ((p.house ?? null) !== (b.house ?? null)) fields.house = p.house ?? null;
     if (Object.keys(fields).length){
       // `expect` is the whole of the concurrency guarantee: the server
       // refuses this rather than applying it if somebody else has touched

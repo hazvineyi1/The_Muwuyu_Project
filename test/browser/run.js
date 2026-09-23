@@ -37,6 +37,7 @@ const ROOT = path.join(__dirname, '..', '..');
  * suite cannot run without, so a missing one is reported as skipped rather
  * than failed. A suite that is skipped has not passed. */
 const SUITES = [
+  { name: 'calling',      kind: 'api' },
   { name: 'concurrent',   kind: 'api' },
   { name: 'connection',   kind: 'api' },
   { name: 'families',     kind: 'api' },

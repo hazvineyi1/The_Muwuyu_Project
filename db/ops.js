@@ -187,17 +187,24 @@ function makeResolver(refs) {
 
 // ---------------------------------------------------------------------------
 
-const PERSON_FIELDS = ['name', 'also_known_as', 'sex', 'totem', 'born', 'died', 'added_by'];
+/* `house` is NULLABLE and the three states matter — see migration 018. The
+   loop below writes a field when the op MENTIONS it, so `house: null` is a
+   real instruction ("go back to counting the surnames") and leaving it out
+   is silence. Every other field here is NOT NULL and '' is its empty. */
+const PERSON_FIELDS = ['name', 'also_known_as', 'sex', 'totem', 'born', 'died',
+                       'added_by', 'house'];
 
 const HANDLERS = {
   async addPerson(ctx, op) {
     const { client, treeId, actor } = ctx;
     const { rows } = await client.query(
       `INSERT INTO people (tree_id, name, also_known_as, sex, totem, born, died,
-                           added_by, legacy_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+                           added_by, legacy_id, house)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
       [treeId, op.name ?? '', op.alsoKnownAs ?? '', op.sex ?? '', op.totem ?? '',
-       op.born ?? '', op.died ?? '', op.addedBy ?? actor ?? '', op.legacyId ?? null]
+       op.born ?? '', op.died ?? '', op.addedBy ?? actor ?? '', op.legacyId ?? null,
+       // Nobody is born with a caption on them; see migration 018.
+       op.house ?? null]
     );
     const person = rows[0];
     if (op.ref) ctx.refs.set(op.ref, person.id);

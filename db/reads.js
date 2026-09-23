@@ -7,7 +7,7 @@
 
 const { badRequest, notFound } = require('./errors');
 
-const PERSON_COLS = `id, name, also_known_as, sex, totem, born, born_year, died, is_root,
+const PERSON_COLS = `id, name, also_known_as, sex, totem, born, born_year, died, is_root, house,
                      added_by, aside_at, aside_by, aside_why, merged_into,
                      visibility, visibility_by, visibility_at,
                      mw_is_living(died, born_year) AS is_living,

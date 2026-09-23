@@ -1,0 +1,48 @@
+-- 018: what this side of the family is actually called.
+--
+-- "How was this name generated and it should be editable or removable."
+--
+-- The pill under a pod — BOLATIWA, MUSONI, MLISWA — is not a name anybody
+-- typed. The page works out which line each person belongs to (the house
+-- runs through the men; see HOUSE_THROUGH), and then names that line by
+-- COUNTING: the last word of every member's name, and whichever word most of
+-- them carry becomes the caption on the person the line comes down from.
+--
+-- It is a good guess and it is a guess, and it is wrong in ways a family can
+-- see and the app cannot:
+--
+--   * it names a line after the commonest surname IN it, which is not always
+--     the name the head of that line answers to. A grandmother who kept her
+--     father's name heads a line of grandchildren carrying their father's —
+--     so her pod wears a name that is not hers. That is deliberate (the
+--     alternative files a whole family under a name none of them use) and it
+--     is still a surprise when you see it on her.
+--   * where a father's sex was never recorded, the line falls to whoever is
+--     listed first among the partners — often the wife — and the caption
+--     lands on her.
+--   * a family may simply call themselves something a surname count cannot
+--     reach: a village, a praise name, "the Harare side".
+--
+-- So the count stays as the answer nobody has to give, and this column is
+-- the answer a family can give instead. It is kept on the person the caption
+-- sits on, because that is the person it is a caption FOR.
+--
+-- NULLABLE, AND THE NULL IS THE POINT. Three states, and they are three
+-- different things:
+--
+--   NULL   nobody has said — count the surnames, which is what the app has
+--          always done and what most families will never need to change
+--   ''     somebody has said "do not put a name here", and that is an
+--          answer, not an absence: the caption is not drawn
+--   text   this is what we call ourselves
+--
+-- A NOT NULL DEFAULT '' column, which is this schema's usual shape, cannot
+-- tell the second of those from the first — and "we do not want a name on
+-- this" is exactly the answer this was asked for.
+--
+-- NOTHING IS DERIVED FROM IT. It does not change anybody's mutupo, it does
+-- not join or separate anybody, and it does not make two records the same
+-- person. It is a caption.
+
+ALTER TABLE people
+  ADD COLUMN IF NOT EXISTS house TEXT DEFAULT NULL;
