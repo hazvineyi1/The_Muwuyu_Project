@@ -15863,6 +15863,69 @@ function diffOps(was, now){
   return ops;
 }
 
+/* ── A CONNECTION THAT WENT, WHICH IS NOT A TREE THAT BROKE ──────────────
+ *
+ * Every failure to reach the server used to stall the page: one catch, one
+ * `store = 'stalled'`, and from that moment nothing is sent and nothing more
+ * will be until somebody notices the banner and reloads — losing whatever
+ * they had typed since.
+ *
+ * On the phone this app is actually used on, a dropped request is not an
+ * error condition. It is a lift, a tunnel, a bus, a signal that comes and
+ * goes all afternoon. Treating one of those the same as a broken tree turns
+ * an ordinary two seconds into "nothing will be saved" and makes a family
+ * retype an entry they already made.
+ *
+ * So the two are told apart. A fetch that never reached the server at all
+ * rejects with a TypeError — no status, no answer, nothing — and that is the
+ * connection. Anything WITH an answer is the server saying something, and
+ * some of those really are for keeping the page from writing.
+ *
+ * WHAT HAPPENS TO THE WORK. Nothing: it sits in `state`, exactly as it did
+ * on screen, and goes up when the connection comes back. Nobody retypes
+ * anything. The banner says that rather than saying it is lost, because
+ * those are different sentences and a family can tell.
+ *
+ * HOW OFTEN IT TRIES. A second, then two, then four, up to twenty — and at
+ * once when the browser itself says it is back online. */
+const offlineError = e =>
+  (typeof navigator !== 'undefined' && navigator.onLine === false) ||
+  !!(e && (e.name === 'TypeError' ||
+           /failed to fetch|networkerror|load failed|network request failed/i
+             .test(String(e.message || ''))));
+
+let holdingSince = 0, holdTimer = null, holdFor = 1000;
+const HOLD_MAX = 20000;
+
+function holdOn(){
+  if (!holdingSince) holdingSince = Date.now();
+  showStalled();
+  clearTimeout(holdTimer);
+  holdTimer = setTimeout(() => {
+    holdFor = Math.min(holdFor * 2, HOLD_MAX);
+    flush();
+  }, holdFor);
+}
+
+function letGo(){
+  if (!holdingSince) return;
+  holdingSince = 0;
+  holdFor = 1000;
+  clearTimeout(holdTimer);
+  showStalled();
+  say('The connection is back, and everything that was waiting has gone up.');
+}
+
+// The browser knows before we do.
+if (typeof addEventListener === 'function'){
+  addEventListener('online', () => {
+    if (!holdingSince) return;
+    clearTimeout(holdTimer);
+    holdFor = 1000;
+    flush();
+  });
+}
+
 /* ── writing ─────────────────────────────────────────────────────────── */
 
 function save(){
@@ -15989,6 +16052,7 @@ async function flush(){
     headSeq = Math.max(headSeq, Number(out.seq) || 0);
     if (wasCaughtUp) markSeen(headSeq);
     synced = copyState();
+    letGo();                         // it landed, so we are not waiting any more
     /* Whoever is viewing must be on the session before the tree is asked
        for, or the ask is refused. See remapId. */
     if (claimingMe){ try { await claimingMe; } catch (e) {} claimingMe = null; }
@@ -16029,14 +16093,19 @@ async function flush(){
           `they are one record each now.`);
     }
   } catch (e) {
+    /* The connection, not the tree. The work stays where it is and goes up
+       when the signal does — see offlineError. */
+    if (offlineError(e)){ holdOn(); return; }
     store = 'stalled';
     stalledWhy = 'The last change could not be saved (' + e.message + ').';
     showStalled();
   } finally {
     sending = false;
     /* And whatever arrived while that was in the air goes now, rather than
-       waiting for somebody to type something else. */
-    if (store === 'shared' && synced && diffOps(synced, state).length){
+       waiting for somebody to type something else. Not while we are holding
+       for the connection: holdOn owns the next attempt, and two timers on the
+       same batch is two requests. */
+    if (store === 'shared' && !holdingSince && synced && diffOps(synced, state).length){
       clearTimeout(timer);
       timer = setTimeout(flush, 120);
     }
@@ -16195,12 +16264,17 @@ async function refresh({ quiet = false } = {}){
         await pull();
       } catch (again) {
         askingWho = null;
+        if (offlineError(again)){ holdOn(); return; }
         store = 'stalled';
         stalledWhy = 'The tree could not be re-read (' + again.message + ').';
         showStalled();
         return;
       }
     } else {
+      /* A re-read that could not reach the server leaves the tree that is
+         already on screen exactly where it is. It is the last good one, and
+         throwing it away for a lost second would be the harm, not the fix. */
+      if (offlineError(e)){ holdOn(); return; }
       store = 'stalled';
       stalledWhy = 'The tree could not be re-read (' + e.message + ').';
       showStalled();
@@ -16315,7 +16389,35 @@ function showClash(detail){
 function showStalled(){
   const el = $('stalled');
   if (!el) return;
+
+  /* WAITING IS NOT BROKEN, and the words are the whole difference. "Nothing
+     will be saved" is true of a stall and false of a lost signal, and a
+     family that reads it while holding a phone in a lift will retype work
+     that was never lost. */
+  if (holdingSince && store === 'shared'){
+    const held = (() => { try { return diffOps(synced, state).length; } catch (e) { return 0; } })();
+    el.hidden = false;
+    $('stalledHead').textContent = 'Waiting for the connection.';
+    $('stalledWhy').textContent = held
+      ? `${held} change${held === 1 ? '' : 's'} of yours ${held === 1 ? 'is' : 'are'} held here.`
+      : 'Nothing of yours is unsent.';
+    $('stalledCalm').textContent =
+      'Nothing is lost and nothing needs typing again — it goes up by itself ' +
+      'when the signal is back. Carry on if you like.';
+    const again = $('stalledGo');
+    if (again){
+      again.textContent = 'Try now';
+      again.onclick = () => { clearTimeout(holdTimer); holdFor = 1000; flush(); };
+    }
+    return;
+  }
+
   el.hidden = store !== 'stalled' && store !== 'keeper';
+  const back = $('stalledGo');
+  if (back && store !== 'keeper'){
+    back.textContent = 'Try again';
+    back.onclick = () => location.reload();
+  }
 
   if (store === 'keeper'){
     /* Not a failure, so it must not be dressed as one — and above all the
