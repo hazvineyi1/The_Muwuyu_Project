@@ -177,6 +177,55 @@ const banner = page => page.evaluate(() => {
           'and does not report it as a refusal or as a relative');
   }
 
+  section('AND A CHANGE THAT WAS REFUSED IS PUT BACK IN ONE TAP');
+  /* A version clash is not an error. It is two answers to the same question,
+     and the only thing the server can honestly do is keep the one it already
+     had. Telling somebody to "make it again" means remembering what they
+     typed, finding the person, opening the card and typing it a second time
+     — for a correction that is usually one year in one box. Both answers are
+     known here, so the family is asked which is right, which is the thing
+     they are actually the authority on. */
+  {
+    await b.evaluate(() => { const e = document.getElementById('others'); if (e) e.hidden = true; });
+    await b.evaluate(() => { pending = { kind:'card', anchorId:people()[0].id }; });
+    await a.page.evaluate(() => {
+      const t = people().find(p => /Tinashe/.test(p.name));
+      state.people[t.id].born = '1990'; save();
+    });
+    await saved(a.page);
+    await b.evaluate(() => { pending = null;
+      const t = people().find(p => /Tinashe/.test(p.name));
+      state.people[t.id].born = '1988'; save(); });
+    await b.waitForTimeout(3000);
+
+    check(await b.$('#clashGo') !== null, 'the refusal carries the way to settle it');
+    const said = await banner(b);
+    check(said && !/make it again/.test(said),
+          'and does not ask for it to be typed again: ' + JSON.stringify(said));
+
+    await b.click('#clashGo');
+    await b.waitForTimeout(400);
+    const panel = await b.evaluate(() =>
+      document.getElementById('form').textContent.replace(/\s+/g, ' ').trim());
+    check(/Two answers about Tinashe/.test(panel), 'the panel names the person');
+    check(/Yours — 1988/.test(panel) && /On the tree now — 1990/.test(panel),
+          'and shows both answers rather than choosing one: ' + JSON.stringify(panel.slice(-70)));
+
+    await b.evaluate(() => {
+      const btn = [...document.querySelectorAll('[data-keep]')].find(x => /^mine/.test(x.dataset.keep));
+      btn.click();
+    });
+    await b.waitForTimeout(2500);
+    is(await b.evaluate(() => people().find(p => /Tinashe/.test(p.name)).born), '1988',
+       'keeping yours puts it back');
+
+    await a.page.reload({ waitUntil:'domcontentloaded' });
+    await ready(a.page);
+    await a.page.waitForTimeout(900);
+    is(await a.page.evaluate(() => people().find(p => /Tinashe/.test(p.name)).born), '1988',
+       'and it reaches the family, against the version that is current now');
+  }
+
   section('A NAME THAT GOES MISSING IS NEVER SILENT');
   /* "This message comes on and the name disappears — it is nowhere to be
      found on the tree."

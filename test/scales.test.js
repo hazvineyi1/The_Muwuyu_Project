@@ -466,17 +466,18 @@ section('TWO LOUDNESSES, AND THE SECOND IS FOR WHAT DID NOT HAPPEN');
   check('say takes a loudness', /function say\(m, how\)/.test(js), 'say has not changed');
   check('quiet is the default', /how === 'atonce' \? 'assertive' : 'polite'/.test(body), body);
   const loud = (js.match(/'atonce'/g) || []).length - 1;   // one is the test in say itself
-  /* Eighteen of a hundred and five say() calls. The number moves when a
-     refusal is added: a batch that half-clashes says which person it was and
-     what was kept, the older clash sentence was quiet only because "was not
-     saved" fell across a string join where the check below could not see it,
-     and a name that is not in the tree after a save now says so. Raise it
-     for a refusal, never for a confirmation — and the check below is what
-     decides which it is, since a sentence saying something was not saved
-     fails that one if it is left quiet. The ratio is the point, not the
-     number. */
+  /* Seventeen of a hundred and nine say() calls, and it came DOWN to get
+     here: a refused batch was announcing itself up to three times as the
+     page learned more about it, which is one event interrupting a screen
+     reader three times. It says it once, when it is first known, and what
+     it learns afterwards is reassurance at the quiet loudness.
+   *
+     Raise this for a refusal, never for a confirmation — and the check below
+     is what decides which it is, since a sentence saying something was not
+     saved fails that one if it is left quiet. Before raising it, look for
+     the same event speaking twice. The ratio is the point, not the number. */
   check('and a handful of places are loud, not most of them',
-        loud >= 4 && loud <= 18, String(loud));
+        loud >= 4 && loud <= 17, String(loud));
 }
 
 section('and nothing that failed is announced politely');

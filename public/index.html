@@ -16561,6 +16561,100 @@ function save(){
   duplicatesChanged();
 }
 
+/* ── THE CHANGE THAT WAS REFUSED, PUT BACK IN ONE TAP ───────────────────
+ *
+ * A version clash is not an error. It is two answers to the same question,
+ * and the only thing the server can honestly do is keep the one it already
+ * had and say so. What the page did with that was tell somebody to make
+ * their change again — which means remembering what they typed, finding the
+ * person, opening the card and typing it a second time, for a correction
+ * that is usually one year in one box.
+ *
+ * Both answers are right here. The page knows what was read, what was typed
+ * on top of it, and what the tree holds now. So it shows the two side by
+ * side and lets the family say which is right, which is the thing they are
+ * actually the authority on. Keeping theirs is a tap; keeping yours is a
+ * tap and goes through the ordinary save, against the version that is
+ * current now — so it lands.
+ *
+ * ONLY WHERE THEY REALLY DIFFER. If the other writer happened to type the
+ * same thing there is nothing to settle and nothing is offered. */
+const CLASH_FIELDS = [
+  { f:'name',  label:'Name' },
+  { f:'also',  label:'Also known as' },
+  { f:'born',  label:'Born' },
+  { f:'died',  label:'Died' },
+  { f:'totem', label:'Mutupo' },
+  { f:'sex',   label:'Recorded as' },
+  { f:'house', label:'This side of the family' }
+];
+const SEX_WORD = { m:'He', f:'She', '':'—' };
+const clashValue = (f, v) => f === 'sex' ? (SEX_WORD[v || ''] || '—')
+                           : (v == null || v === '' ? 'nothing' : String(v));
+
+/* What this page changed about somebody that the tree now disagrees with.
+   `base` is what was read, `mine` what was made of it, and state is what the
+   server holds after the re-read. */
+function clashOver(id, base, mine){
+  const was = (base.people || {})[id], want = (mine.people || {})[id], now = state.people[id];
+  if (!was || !want || !now) return [];
+  return CLASH_FIELDS
+    .filter(({ f }) => (want[f] ?? '') !== (was[f] ?? ''))     // they changed it
+    .filter(({ f }) => (want[f] ?? '') !== (now[f] ?? ''))     // and it did not land
+    .map(({ f, label }) => ({ f, label, mine:want[f] ?? '', theirs:now[f] ?? '' }));
+}
+
+function openClash(id, over){
+  closeForm();
+  const who = state.people[id];
+  if (!who || !over.length) return;
+  pending = { kind:'card', anchorId:id };
+  const first = (who.name || '').split(' ')[0];
+
+  const el = document.createElement('div');
+  el.id = 'form';
+  el.className = 'wide';
+  el.innerHTML =
+    `<p class="cap">Two answers about ${esc(who.name)}</p>` +
+    `<p class="covnote">Your change was not saved, because ${esc(first)} had ` +
+    `already been changed here since this page read them. Neither answer has ` +
+    `been thrown away — say which is right.</p>` +
+    over.map((d, i) =>
+      `<div class="splitrow"><b>${esc(d.label)}</b>` +
+        `<div class="row">` +
+          `<button type="button" class="btn ghost wide" data-keep="mine:${i}">` +
+            `Yours — ${esc(clashValue(d.f, d.mine))}</button>` +
+        `</div>` +
+        `<div class="row">` +
+          `<button type="button" class="btn ghost wide" data-keep="theirs:${i}">` +
+            `On the tree now — ${esc(clashValue(d.f, d.theirs))}</button>` +
+        `</div>` +
+      `</div>`).join('') +
+    `<div class="row"><button class="btn ghost wide" id="clashNo">` +
+      `Leave it as the tree has it</button></div>`;
+  document.body.appendChild(el);
+  placeForm(el);
+
+  el.querySelectorAll('[data-keep]').forEach(b => b.onclick = () => {
+    const [side, at] = b.dataset.keep.split(':');
+    const d = over[Number(at)];
+    if (!d) return;
+    if (side === 'mine'){
+      const p = state.people[id];
+      if (!p) return;
+      /* Written onto the version the tree holds NOW, so the save that
+         follows carries a version that is current and lands. */
+      p[d.f] = d.mine;
+      closeForm(); sel = id; render(); save();
+      say(`${who.name} — ${d.label.toLowerCase()} is ${clashValue(d.f, d.mine)} again.`);
+    } else {
+      closeForm(); sel = id; render();
+      say(`${who.name} — ${d.label.toLowerCase()} stays as the tree has it.`);
+    }
+  });
+  $('clashNo').onclick = closeForm;
+}
+
 /* ── A NAME THAT GOES MISSING IS NEVER SILENT ───────────────────────────
  *
  * "This message comes on and the name disappears — it is nowhere to be found
@@ -16806,8 +16900,28 @@ async function flush(){
       }
       const theirName = clashed && state.people[clashed]
         ? state.people[clashed].name : '';
+      /* SAID AT ONCE, BEFORE THE RE-READ. Everything below waits on a full
+         read of the tree, which on a family of any size and a phone on a
+         slow signal is a second or two — and for that second the screen
+         shows a change quietly coming undone and nothing to say why. The
+         first sentence is already known here, so it goes up here, and is
+         replaced by the fuller one when there is more to say. */
+      const early = theirName
+        ? `${theirName} had already been changed here since this page last ` +
+          `read them, so your change to them was not saved.`
+        : 'That change was not saved: the tree had moved on since this page ' +
+          'last read it.';
+      say(early, 'atonce');
+      showRefused(early);
+
+      /* Three copies, and each answers a different question: what this page
+         had READ, what was MADE of it, and — after the re-read below — what
+         the tree holds. Two of them are what a family needs to settle it;
+         see openClash. */
+      const base = JSON.parse(JSON.stringify(synced));
       const mine = copyState();
       await refresh();
+      const over = clashed ? clashOver(clashed, base, mine) : [];
       const kept = regraftUnsaved(mine);
       if (kept){
         render();
@@ -16844,8 +16958,14 @@ async function flush(){
           `${kept === 1 ? 'is' : 'are'} still here, being saved now.` +
           ` If this family is open in another tab or on another phone, that ` +
           `is usually why.`;
-        say(said, 'atonce');
-        showRefused(said);
+        /* ONE INTERRUPTION PER EVENT. The refusal itself was announced the
+           moment it was known, at the loudness every refusal uses; this is
+           the same event getting fuller, and saying it assertively a second
+           time interrupts a screen reader twice for one thing. The part
+           that is new here is reassurance — the names are safe — which is
+           exactly what belongs at the quiet loudness. */
+        say(said);
+        showRefused(said, over.length ? { id:clashed, over } : null);
         return;
       }
       /* NOTHING OF OURS WAS NEW, so the batch was an edit and only an edit —
@@ -16858,17 +16978,23 @@ async function flush(){
          the sentence was built from two strings and "was not saved" fell
          across the join, where the check that catches a politely-announced
          refusal could not see it. */
+      /* "Make it again" is only the answer where there is nothing better.
+         Where the two answers are both known, the button beside this
+         sentence settles it and telling somebody to retype is wrong. */
       const refused = (theirName
         ? `${theirName} had already been changed here since this page last ` +
-          `read them, so your change to them was not saved. What is recorded ` +
-          `is on the tree now — have a look before making it again.`
+          `read them, so your change to them was not saved.` +
+          (over.length ? ' Both answers are here —'
+                       : ' What is recorded is on the tree now — have a look ' +
+                         'before making it again.')
         : `That record had already been changed here since this page last ` +
           `read it, so your change was not saved. The tree has been ` +
           `refreshed — please make it again.`) +
-        ` If this family is open in another tab or on another phone, that is ` +
-        `usually why.`;
-      say(refused, 'atonce');
-      showRefused(refused);
+        (over.length ? '' :
+          ' If this family is open in another tab or on another phone, that is ' +
+          'usually why.');
+      say(refused);                   // announced once already; see above
+      showRefused(refused, over.length ? { id:clashed, over } : null);
       return;
     }
     /* ── A NAME WITH NOBODY ON THE OTHER END OF IT ────────────────────────
@@ -17348,10 +17474,21 @@ function showAlreadyHere(who, said){
  *
  * It goes where the clash goes, and stays longer, because it asks the family
  * to do something rather than just telling them what happened. */
-function showRefused(message){
+function showRefused(message, settle){
   const el = $('others');
   if (!el) return;
   el.textContent = message;
+  /* AND THE WAY TO SETTLE IT, where there is something to settle. A refusal
+     that ends in "make it again" is a refusal that costs somebody the work
+     twice; this is the same sentence with the answer attached. */
+  if (settle){
+    el.innerHTML = esc(message) +
+      /* The panel offers both, so the button must not name one of them.
+         "Put my change back" promised an outcome the panel then asked about. */
+      ` <button type="button" class="linkbtn" id="clashGo">See both answers</button>`;
+    const go = $('clashGo');
+    if (go) go.onclick = () => { el.hidden = true; openClash(settle.id, settle.over); };
+  }
   el.hidden = false;
   clearTimeout(showFromOthers.t);
   showFromOthers.t = setTimeout(() => { el.hidden = true; }, 20000);

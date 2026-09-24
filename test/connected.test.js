@@ -355,8 +355,16 @@ const http = require('http');
           /\.sr\{position:absolute; width:1px/.test(html));
     check('a refused batch is written where it can be read',
           /showRefused\(undone\)/.test(html));
-    check('by a function that puts it on the screen and leaves it there',
-          /function showRefused\(message\)\{[\s\S]{0,240}el\.hidden = false/.test(html));
+    /* It gained a second argument — what there is to settle, where a clash
+       has two known answers — so the shape is pinned by what it DOES rather
+       than by its exact signature: it takes the sentence, it puts it on the
+       screen, and it leaves it there long enough to be read by somebody who
+       looked away. */
+    const showRefused = (html.match(/function showRefused\(message[\s\S]{0,1400}?\n\}/) || [''])[0];
+    check('by a function that puts it on the screen',
+          /el\.hidden = false/.test(showRefused), showRefused.slice(0, 120));
+    check('and leaves it there long enough to be read',
+          /\}, 20000\)/.test(showRefused), showRefused.slice(-80));
     check('and the passcode refusal is written up the same way',
           /showRefused\(refused\)/.test(html));
   }

@@ -146,7 +146,13 @@ const settle = (page, ms = 1200) => page.waitForTimeout(ms);
   is(bornOnServer, '1941', 'the first correction stands');
   is(await b.page.evaluate(id => state.people[id].born, realRoot), '1941',
      'and the second page was refreshed to it rather than overwriting');
-  is(await b.page.isVisible('#others'), true, 'the second editor was told');
+  /* WAITED FOR, NOT ASSUMED. The refusal is said as soon as it is known, but
+     a fixed sleep before an assertion is a test that passes on a quiet
+     machine and fails on a busy one — which is a test that tells you nothing
+     either way. */
+  await b.page.waitForSelector('#others:not([hidden])', { timeout: 8000 })
+    .then(() => ok('the second editor was told'),
+          () => bad('the second editor was told'));
 
   // ── nothing was lost anywhere ────────────────────────────────────────
   section('and after all of that, one tree that everybody agrees on');
