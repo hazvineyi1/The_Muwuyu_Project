@@ -132,6 +132,46 @@ const banner = page => page.evaluate(() => {
     check(said && /3 names/.test(said), 'and saying the three names were kept');
     check(said && !/make it again|make your change again/.test(said),
           'and not asking for work back that was not lost');
+    /* AND NOT PROMISING WHAT HAS NOT HAPPENED. This said "and has been sent"
+       at the moment the second batch was being STARTED, so a batch that was
+       itself refused took the names off the tree under a line saying they
+       were safe. Whether they landed is answered afterwards, by the watch
+       below, and only if one of them did not. */
+    check(said && !/has been sent|have been sent/.test(said),
+          'and not claiming a send that had not finished: ' + JSON.stringify(said));
+  }
+
+  section('A NAME THAT GOES MISSING IS NEVER SILENT');
+  /* "This message comes on and the name disappears — it is nowhere to be
+     found on the tree."
+   *
+     Several things can take a pod off the screen — a refusal, a fold, a
+     re-read — and most of them say so. What there was no guarantee of was
+     the whole: that a name somebody typed either stays or its going is
+     accounted for. This is the backstop for the rest. */
+  {
+    await b.evaluate(() => { const e = document.getElementById('others'); if (e) e.hidden = true; });
+    await b.evaluate(() => { watchAdded('no-such-id', 'Tarisai Chikomba'); addedLanded(); });
+    await b.waitForTimeout(250);
+    const said = await banner(b);
+    check(said && /Tarisai Chikomba/.test(said),
+          'a name that is not in the tree afterwards is named: ' + JSON.stringify(said));
+    check(said && /not saved/.test(said), 'and said to be unsaved rather than lost');
+  }
+
+  section('while a record the server folded into another is not a loss');
+  /* The bar already says that one in its own words — "two records made one" —
+     and a second line calling it a disappearance would be wrong twice. */
+  {
+    await b.evaluate(() => { const e = document.getElementById('others'); if (e) e.hidden = true; });
+    await b.evaluate(() => {
+      const who = people().find(p => /Tinashe/.test(p.name));
+      state.people[who.id].aside = { by:'', at:'', why:'folded', mergedInto:'another' };
+      watchAdded(who.id, who.name);
+      addedLanded();
+    });
+    await b.waitForTimeout(250);
+    is(await banner(b), null, 'nothing is said about it here');
   }
 
   await a.ctx.close();

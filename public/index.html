@@ -12783,6 +12783,8 @@ function submitForm(){
   closeForm();
   sel = id;
   markLanded(id);
+  // Watched from here until the server has answered for them. See addedLanded.
+  watchAdded(id, name);
   render();
   /* ON SCREEN IS NOT THE SAME AS VISIBLE.
    *
@@ -16549,6 +16551,62 @@ function save(){
   duplicatesChanged();
 }
 
+/* ── A NAME THAT GOES MISSING IS NEVER SILENT ───────────────────────────
+ *
+ * "This message comes on and the name disappears — it is nowhere to be found
+ *  on the tree."
+ *
+ * Every path that takes a name back off the screen has a reason and most of
+ * them say it: a refused join says so, a refused passcode says so, a fold
+ * puts a line in the bar. What there was no guarantee of is the WHOLE: that
+ * a name somebody typed either stays, or its going is accounted for. Between
+ * a batch, a re-read, an auto-fold and a rollback there are several ways for
+ * a pod to stop being drawn, and any one of them landing while a banner is
+ * still up saying the opposite reads as the app losing work and lying about
+ * it.
+ *
+ * So the names are watched from the moment they are typed until the server
+ * has answered for them, and if one is not in the tree afterwards it is
+ * named out loud. It is a backstop, and like any backstop it should almost
+ * never speak: where the app already has a better sentence — the record was
+ * folded into another, the batch was refused because of X — that sentence
+ * has been said and this one stays quiet.
+ *
+ * BY ID AND THEN BY NAME. The id is exact and survives remapId; the name is
+ * the fallback for the case the id cannot cover, which is a record the
+ * server folded into one that was already here under a spelling of its own. */
+let addedWaiting = [];
+
+function watchAdded(id, name){
+  addedWaiting.push({ id, name:String(name || '').trim() });
+  if (addedWaiting.length > 24) addedWaiting.shift();
+}
+
+function addedLanded(){
+  if (!addedWaiting.length) return;
+  const mine = addedWaiting;
+  addedWaiting = [];
+  const here = a => {
+    const p = state.people[a.id];
+    if (p && !p.aside) return true;
+    // Folded into somebody already recorded is not a loss, and the bar
+    // already says so in its own words.
+    if (p && p.aside && p.aside.mergedInto) return true;
+    if (!a.name) return true;
+    return Object.values(state.people)
+      .some(q => !q.aside && String(q.name || '').trim() === a.name);
+  };
+  const gone = mine.filter(a => !here(a)).map(a => a.name).filter(Boolean);
+  if (!gone.length) return;
+  const one = gone.length === 1;
+  const said =
+    `${gone.join(' and ')} ${one ? 'is' : 'are'} not in the tree. That change ` +
+    `was not saved, and nothing else you have entered was touched — please ` +
+    `add ${one ? 'them' : 'them'} again.`;
+  say(said, 'atonce');
+  showRefused(said);
+}
+
 /* ── PUTTING BACK WHAT WAS NEVER SENT ───────────────────────────────────
  *
  * Used when the server has refused a batch and the page has had to re-read
@@ -16586,7 +16644,7 @@ function regraftUnsaved(mine){
 
   for (const p of ours) state.people[p.id] = { ...p };
 
-  const holding = new Set();
+  const holding = [];        // unions, and which of ours are in each
   for (const u of Object.values(mine.unions || {})){
     if (!u) continue;
     const partners = (u.partners || []).filter(x => state.people[x]);
@@ -16605,12 +16663,29 @@ function regraftUnsaved(mine){
       // A marriage this page invented, which travels with the people in it.
       state.unions[u.id] = { id:u.id, partners, children, bond:u.bond || '' };
     }
-    /* Held only where somebody ELSE is in the union too. A union containing
-       one new name and nothing else is a name in a box, not a join — see
-       db/joined.js, which would refuse the batch for exactly this. */
-    const others = [...partners, ...children].filter(x => mintedYet(x));
-    const holdsEachOther = partners.length + children.length > 1;
-    if (others.length || holdsEachOther) for (const x of newcomers) holding.add(x);
+    holding.push({ members:[...partners, ...children], newcomers });
+  }
+
+  /* WHAT IS ACTUALLY HOLDING THEM ON, worked out the way the server works it
+     out — see looseAfter in db/joined.js.
+   *
+     "Is somebody else in this union too" is not the question and answering
+     it was a bug: two new names married to each other are in a union with
+     somebody else and are still an island, which the server refuses. The
+     whole batch is then rolled back — so a banner that had already promised
+     the names were kept watched them vanish, which is exactly what it exists
+     to stop.
+   *
+     The ground is everybody the server already has. A new name reaches it
+     through a union containing somebody grounded, and then holds the next
+     one along. Anybody who cannot get there is not sent. */
+  const held = new Set();
+  for (let again = true; again; ){
+    again = false;
+    for (const u of holding){
+      if (!u.members.some(x => mintedYet(x) || held.has(x))) continue;
+      for (const x of u.newcomers) if (!held.has(x)){ held.add(x); again = true; }
+    }
   }
 
   /* Anybody left with nothing holding them on goes, and so does the union
@@ -16619,7 +16694,7 @@ function regraftUnsaved(mine){
      to tell the family about it. */
   let kept = 0;
   for (const p of ours){
-    if (holding.has(p.id)){ kept++; continue; }
+    if (held.has(p.id)){ kept++; continue; }
     delete state.people[p.id];
     for (const u of Object.values(state.unions)){
       if (mintedYet(u.id)){
@@ -16704,9 +16779,16 @@ async function flush(){
               `one change was not saved.`
             : `Somebody else was editing the same person at the same time, so ` +
               `that one change was not saved.`) +
+          /* WHAT IS TRUE NOW, and not a word more. This said "and has been
+             sent" at the moment the send was being STARTED — so when that
+             second batch was itself refused, the names came off the tree
+             under a line promising they were safe. A page that says
+             something is saved before the server has said so is a page that
+             can be wrong in the one direction that matters. Whether they
+             landed is answered by watchAdded(), which speaks only if one
+             of them does not. */
           ` The ${kept === 1 ? 'name' : kept + ' names'} you added ` +
-          `${kept === 1 ? 'is' : 'are'} still here and ${kept === 1 ? 'has' : 'have'} ` +
-          `been sent.`;
+          `${kept === 1 ? 'is' : 'are'} still here, being saved now.`;
         say(said, 'atonce');
         showRefused(said);
         return;
@@ -16754,6 +16836,11 @@ async function flush(){
         state = JSON.parse(JSON.stringify(synced));
         if (!state.people[sel]) sel = null;
         closeForm(); render();
+        /* The backstop stands down: this has just said what became of them,
+           in words that name the actual reason. A second sentence saying
+           "they are not in the tree" would be the app telling somebody
+           something they were told a line ago. */
+        addedWaiting = [];
         const undone = why + ' That change has been undone here too.';
         say(undone, 'atonce');
         showRefused(undone);          // and where somebody can read it
@@ -16778,6 +16865,7 @@ async function flush(){
         state = JSON.parse(JSON.stringify(synced));
         if (!state.people[sel]) sel = null;
         closeForm(); render();
+        addedWaiting = [];            // said, in better words than the backstop has
         const refused = why + ' Nothing has been changed here either.';
         say(refused, 'atonce');
         showRefused(refused);
@@ -16811,6 +16899,9 @@ async function flush(){
     if (claimingMe){ try { await claimingMe; } catch (e) {} claimingMe = null; }
     // Versions moved for everything we touched; the next read settles them.
     await refresh({ quiet:true });
+    /* AND NOW THE TREE IS THE SERVER'S OWN. Anything typed in that is not in
+       it has gone somewhere, and this is where that is noticed. */
+    addedLanded();
 
     /* ── AND IF THAT JUST DOUBLED SOMEBODY, THE SERVER HAS FOLDED THEM ─────
      *
@@ -16928,6 +17019,7 @@ function remapId(from, to){
   if (sel === from) sel = to;
   if (fresh.has(from)){ fresh.delete(from); fresh.add(to); }
   if (landedId === from) landedId = to;   // …and so must the ring
+  for (const a of addedWaiting) if (a.id === from) a.id = to;
 
   /* AND ANYTHING ON SCREEN THAT IS HOLDING AN ID.
 
