@@ -14742,6 +14742,16 @@ function openLook(){
         }).join('') +
       `</div>` +
       `<div class="row"><button class="btn" id="lookNo">Done</button></div>` +
+      /* AND THE LAST THING THE SERVER REFUSED, in its own words.
+       *
+       * A refusal that cannot be diagnosed is a refusal that cannot be
+       * fixed. The banner says what a family needs in the moment; this says
+       * what the server actually answered, which is what anybody trying to
+       * work out WHY needs — and it sits beside the build, which is the
+       * other question every such report turns on. */
+      (lastRefusal
+        ? `<p class="build">Last refusal · ${esc(lastRefusal.at)} · ` +
+          `${esc(lastRefusal.status)} ${esc(lastRefusal.why)}</p>` : '') +
       (BUILD ? `<p class="build">Build ${esc(BUILD)}</p>` : '');
     placeForm(el);
 
@@ -16577,6 +16587,15 @@ function save(){
  * server folded into one that was already here under a spelling of its own. */
 let addedWaiting = [];
 
+/* What the server last refused and why, in its own words — shown in Look.
+   One, not a log: the question it answers is "what just happened", and a
+   family's page is not a place to keep a history of failures. */
+let lastRefusal = null;
+const noteRefusal = (status, why) => {
+  lastRefusal = { status:String(status), why:String(why || '').slice(0, 160),
+                  at:new Date().toTimeString().slice(0, 5) };
+};
+
 function watchAdded(id, name){
   addedWaiting.push({ id, name:String(name || '').trim() });
   if (addedWaiting.length > 24) addedWaiting.shift();
@@ -16759,12 +16778,32 @@ async function flush(){
        * tree is re-read and those names are put straight back on top of it
        * and sent again. Only the edit to a record somebody else had touched
        * is lost, and that one is named. */
-      let who = '', clashed = null;
+      let who = '', clashed = null, already = false;
       try {
         const d = await r.json();
         who = d.message || '';
         clashed = d.current && d.current.id ? d.current.id : null;
+        noteRefusal(409, who);
+        /* TWO DIFFERENT THINGS COME BACK AS 409 and only one of them is a
+           clash. A version check that failed carries the row it failed
+           against; a unique violation — "that link already exists" — carries
+           nothing, because nothing about it is a disagreement between two
+           people. It means the link is already recorded, which is not a
+           refusal at all, and reporting it as somebody else editing was the
+           app blaming a relative for its own copy being behind. */
+        already = !d.current;
       } catch (e) {}
+      if (already){
+        /* Already recorded. Take the server's tree, which has it, and say
+           the calm true thing rather than the alarming untrue one. */
+        await refresh();
+        addedWaiting = [];
+        const same = 'That was already recorded, so nothing needed saving. ' +
+                     'The tree has been refreshed.';
+        say(same);
+        showDone(same);
+        return;
+      }
       const theirName = clashed && state.people[clashed]
         ? state.people[clashed].name : '';
       const mine = copyState();
@@ -16773,12 +16812,26 @@ async function flush(){
       if (kept){
         render();
         save();
+        /* IT DOES NOT SAY WHO, BECAUSE IT DOES NOT KNOW.
+         *
+         * "Somebody else was editing the same person at the same time" —
+         * sent by the only person using the tree. The app cannot tell one
+         * writer from another: all a failed version check says is that the
+         * record moved on after this page last read it. That is usually the
+         * same family on a second tab or a second phone, and it is sometimes
+         * this page simply being behind. Naming a relative who was not there
+         * turns a small refusal into an accusation, and sends somebody
+         * looking for a person to ask.
+         *
+         * So it says what happened to the record, and offers the reason
+         * that is nearly always the real one, as a reason rather than a
+         * fact. */
         const said =
           (theirName
-            ? `Somebody else was editing ${theirName} at the same time, so that ` +
-              `one change was not saved.`
-            : `Somebody else was editing the same person at the same time, so ` +
-              `that one change was not saved.`) +
+            ? `${theirName} had already been changed here since this page last ` +
+              `read them, so your change to them was not saved.`
+            : `That person had already been changed here since this page last ` +
+              `read them, so your change to them was not saved.`) +
           /* WHAT IS TRUE NOW, and not a word more. This said "and has been
              sent" at the moment the send was being STARTED — so when that
              second batch was itself refused, the names came off the tree
@@ -16788,7 +16841,9 @@ async function flush(){
              landed is answered by watchAdded(), which speaks only if one
              of them does not. */
           ` The ${kept === 1 ? 'name' : kept + ' names'} you added ` +
-          `${kept === 1 ? 'is' : 'are'} still here, being saved now.`;
+          `${kept === 1 ? 'is' : 'are'} still here, being saved now.` +
+          ` If this family is open in another tab or on another phone, that ` +
+          `is usually why.`;
         say(said, 'atonce');
         showRefused(said);
         return;
@@ -16803,15 +16858,17 @@ async function flush(){
          the sentence was built from two strings and "was not saved" fell
          across the join, where the check that catches a politely-announced
          refusal could not see it. */
-      const refused = theirName
-        ? `Somebody else was editing ${theirName} at the same time, so your ` +
-          `change to them was not saved. Their version is on the tree now — ` +
-          `have a look before making it again.`
-        : 'Somebody else was editing at the same time, so that change was not ' +
-          'saved. The tree has been refreshed — please make it again.';
+      const refused = (theirName
+        ? `${theirName} had already been changed here since this page last ` +
+          `read them, so your change to them was not saved. What is recorded ` +
+          `is on the tree now — have a look before making it again.`
+        : `That record had already been changed here since this page last ` +
+          `read it, so your change was not saved. The tree has been ` +
+          `refreshed — please make it again.`) +
+        ` If this family is open in another tab or on another phone, that is ` +
+        `usually why.`;
       say(refused, 'atonce');
       showRefused(refused);
-      if (!theirName) showClash(who);
       return;
     }
     /* ── A NAME WITH NOBODY ON THE OTHER END OF IT ────────────────────────
@@ -16831,7 +16888,8 @@ async function flush(){
      * prevented. */
     if (r.status === 422){
       let why = '';
-      try { const d = await r.json(); if (d.error === 'not_joined') why = d.message || ''; } catch (e) {}
+      try { const d = await r.json(); noteRefusal(422, d.message || d.error || '');
+                                      if (d.error === 'not_joined') why = d.message || ''; } catch (e) {}
       if (why){
         state = JSON.parse(JSON.stringify(synced));
         if (!state.people[sel]) sel = null;
@@ -16858,6 +16916,7 @@ async function flush(){
       let why = '';
       try {
         const d = await r.json();
+        noteRefusal(403, d.message || d.error || '');
         if (d.error === 'need_passcode') why = d.message || '';
       } catch (e) {}
       if (why){
@@ -16872,7 +16931,10 @@ async function flush(){
         return;
       }
     }
-    if (!r.ok) throw new Error('the server answered ' + r.status);
+    if (!r.ok){
+      noteRefusal(r.status, 'the write was refused');
+      throw new Error('the server answered ' + r.status);
+    }
 
     const out = await r.json();
     // Provisional ids become the ids the server minted. Everything that
@@ -17319,16 +17381,11 @@ function showDone(message){
   showFromOthers.t = setTimeout(() => { el.hidden = true; }, 7000);
 }
 
-function showClash(detail){
-  const el = $('others');
-  if (!el) return;
-  el.textContent = 'Two of you edited the same person at once, so nothing was ' +
-                   'overwritten. The tree has been refreshed — please make your ' +
-                   'change again.';
-  el.hidden = false;
-  clearTimeout(showFromOthers.t);
-  showFromOthers.t = setTimeout(() => { el.hidden = true; }, 10000);
-}
+/* showClash IS GONE, and the sentence it held with it: "Two of you edited
+   the same person at once." It was sent back by the only person using a
+   tree. A failed version check does not know who, or whether there is a who
+   at all — see the 409 above, which now says what happened to the record
+   instead of naming a relative who may not exist. */
 
 /* A stalled page is still a usable page to read, but it must never look like
    a page that is recording anything. */

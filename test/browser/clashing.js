@@ -127,8 +127,18 @@ const banner = page => page.evaluate(() => {
   {
     const said = await banner(b);
     check(!!said, 'something is said where it can be seen');
-    check(said && /Sydney Musoni/.test(said), 'naming the person somebody else was editing: ' +
+    check(said && /Sydney Musoni/.test(said), 'naming the record that had moved on: ' +
           JSON.stringify(said));
+    /* AND NOT NAMING A RELATIVE IT CANNOT KNOW IS THERE. "Somebody else was
+       editing the same person at the same time" was sent back by the only
+       person using a tree. A failed version check says the record moved on
+       after this page read it — not who, and not whether there is a who. It
+       is usually the same family on a second tab, so that is offered as the
+       likely reason rather than asserted as a fact. */
+    check(said && !/Somebody else/i.test(said),
+          'without inventing a relative who may not exist');
+    check(said && /another tab or on another phone/.test(said),
+          'and offering the reason that is nearly always the real one');
     check(said && /3 names/.test(said), 'and saying the three names were kept');
     check(said && !/make it again|make your change again/.test(said),
           'and not asking for work back that was not lost');
@@ -139,6 +149,32 @@ const banner = page => page.evaluate(() => {
        below, and only if one of them did not. */
     check(said && !/has been sent|have been sent/.test(said),
           'and not claiming a send that had not finished: ' + JSON.stringify(said));
+  }
+
+  section('AND A LINK THAT IS ALREADY RECORDED IS NOT A CLASH AT ALL');
+  /* The server answers 409 for two different things and only one is a
+     disagreement. A unique violation — "that link already exists" — carries
+     no row, because nothing about it is two people disagreeing: it means the
+     change is already in. Reporting it as somebody else editing was the app
+     blaming a relative for its own copy being behind. */
+  {
+    await b.evaluate(() => { const e = document.getElementById('others'); if (e) e.hidden = true; });
+    await b.route('**/ops', route => route.fulfill({
+      status: 409, contentType: 'application/json',
+      body: JSON.stringify({ error:'conflict', message:'That link already exists' })
+    }));
+    await b.evaluate(() => {
+      const who = people().find(p => /Musekiwa/.test(p.name));
+      grow('child', who.id, 'Tapiwa Musoni', 'm', '', { born:'2001' });
+      save();
+    });
+    await b.waitForTimeout(2500);
+    await b.unroute('**/ops');
+    const said = await banner(b);
+    check(said && /already recorded/.test(said),
+          'it says the change was already in: ' + JSON.stringify(said));
+    check(said && !/not saved|Somebody else/i.test(said),
+          'and does not report it as a refusal or as a relative');
   }
 
   section('A NAME THAT GOES MISSING IS NEVER SILENT');
