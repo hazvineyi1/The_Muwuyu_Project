@@ -12355,7 +12355,7 @@ function waysToJoin(anchorId, otherId){
 
 const BANDS = { up: 'Older than you', own: 'Your own row', down: 'Younger than you' };
 
-function openWays(anchorId){
+function openWays(anchorId, carry){
   closeForm();
   const who = state.people[anchorId];
   if (!who) return;
@@ -12400,7 +12400,9 @@ function openWays(anchorId){
     const w = ways.find(x => x.term === term && x.gloss === gloss);
     if (!w || !w.ready) return;
     closeForm();
-    openForm(w.kind, w.on, { ...w.preset, term, gloss: facing(gloss) });
+    // `carry` is whatever the panel that opened this already knows — today
+    // that is a name typed into Find, which must not have to be typed twice.
+    openForm(w.kind, w.on, { ...w.preset, ...(carry || {}), term, gloss: facing(gloss) });
   });
   $('wayNo').onclick = closeForm;
   el.addEventListener('keydown', e => { if (e.key === 'Escape'){ e.preventDefault(); closeForm(); } });
@@ -12520,7 +12522,12 @@ function openForm(kind, anchorId, said){
     `<p class="lbl">1 · Already in this tree?</p>` +
     `<div class="dupes" id="fDupes"></div>` +
     `<p class="lbl">2 · Nobody above — a new name</p>` +
-    `<input id="fName" class="fld" placeholder="Their name" autocomplete="off">` +
+    /* IT CAN ARRIVE ALREADY FILLED IN. Somebody who has just typed a name
+       into Find and been told nobody by that name is here should not have
+       to type it a second time to add them — see openFind, where being told
+       "no" used to be the end of the road. */
+    `<input id="fName" class="fld" placeholder="Their name" autocomplete="off"` +
+      ` value="${esc(said.name || '')}">` +
     `<p class="roothint" id="fNameWhy"></p>` +
     `<div class="seg" id="fSex">` +
       `<button type="button" data-sex="f" aria-pressed="${said.sex === 'f'}">She</button>` +
@@ -13247,8 +13254,43 @@ function openFind(anchorId){
         (findText.trim().length < 2
           ? `<p class="browse">Two letters is enough.</p>`
           : !hits.length
+            /* ── AND "NO" IS NOT THE END OF THE ROAD ────────────────────
+             *
+             * "Find box not functional" — sent with a photograph of this
+             * panel holding a name, the word no, and a Close button.
+             *
+             * The box was working. It had searched the family and answered
+             * honestly, and then it stopped: a name typed, nobody by it, and
+             * nothing to do but close the panel and start again somewhere
+             * else. Looking somebody up and not finding them is not a dead
+             * end in this app — it is the commonest reason to add them, and
+             * it is the exact moment the app has just PROVED they are not a
+             * duplicate.
+             *
+             * So the way on is here, and it carries the name across so it
+             * is not typed twice. It still goes through a relative, because
+             * that rule holds everywhere: nobody goes in on their own. */
             ? `<p class="browse">Nobody by that name. Names entered with a ` +
-              `different spelling still turn up — try a shorter piece of it.</p>`
+              `different spelling still turn up — try a shorter piece of it.</p>` +
+              (onBranch
+                /* A side of a family is not the family. Somebody working on
+                   one branch cannot see the rest and must not read "nobody
+                   by that name" as "not in this family". */
+                ? `<p class="browse">You are working on one side of this ` +
+                  `family, so anybody recorded on another side will not turn ` +
+                  `up here.</p>`
+                : '') +
+              (to
+                /* Straight to it. "Nobody by that name" has been said once
+                   already and saying it twice in different words is the app
+                   dwelling on the no rather than offering the yes. */
+                ? `<div class="row"><button class="btn" id="findAdd">` +
+                  `Add ${esc(findText.trim())} as a relative of ` +
+                  `${esc(toName)}</button></div>`
+                : `<p class="browse">To add them, tap whoever ` +
+                  `<b>${esc(findText.trim())}</b> belongs to on the tree — ` +
+                  `their buds offer every way in, and this box will offer it ` +
+                  `too once somebody is picked.</p>`)
             : hits.map(h => {
                 const q = state.people[h.id];
                 const life = q.born ? `b. ${esc(q.born)} · ` : '';
@@ -13280,6 +13322,13 @@ function openFind(anchorId){
       say(`${state.people[id].name} — ${positionOf(id)}.`);
     });
     el.querySelectorAll('[data-join]').forEach(b => b.onclick = () => openJoin(to, b.dataset.join));
+    /* The name goes with them. openWays asks which word, and the form it
+       opens arrives with the name already in the box — see openForm. */
+    if ($('findAdd')) $('findAdd').onclick = () => {
+      const name = findText.trim();
+      closeForm();
+      openWays(to, { name });
+    };
     $('findNo').onclick = closeForm;
   };
 
