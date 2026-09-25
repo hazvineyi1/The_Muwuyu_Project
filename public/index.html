@@ -2049,6 +2049,20 @@ const BUILD = (() => {
 })();
 
 const POD_W = 132, POD_H = 48;
+/* POD_H IS THE SHORTEST A POD CAN BE, and it was being used everywhere the
+   question was "how tall IS a pod". The stylesheet says min-height:46px, so
+   48 is right for a name and nothing else — and a pod in a real family
+   carries a kin word above the name, the name over two lines, a married
+   name, two dates, a mutupo and a rank, and comes to a hundred and thirty.
+   Every clearance worked out from 48 was working with less than half the
+   truth: the lane a married-in family stands in, the dip a second marriage
+   takes below the row, the room the buds keep from a pod.
+ *
+   A number until the page can be asked. measureChrome() replaces it after
+   every draw, the same way the toolbar's height is measured; 132 is what a
+   full pod comes to and what the headless tests get, since they have no page
+   to measure. */
+let POD_TALL = 132;
 /* How much of the top of the screen the banner occupies. Everything that
    places something on screen — fitting the tree, laying out the buds, nudging
    a selected person into view — has to know, or the first row of a family
@@ -6992,7 +7006,9 @@ function computeLayout(){
   }
 
   /* WHERE EVERYBODY ENDS UP STANDING, before anything is moved on purpose. */
-  const IN_LAW_LANE = 0.5;
+  /* IN_LAW_LANE was half a generation, which stopped being a clearance the
+     moment a pod grew taller than half a generation. The lane is measured
+     from a pod now — see laneDrop below. */
   /* The rows, measured by adding up the steps rather than multiplying one
      out — because the steps are no longer all the same. See RISE. */
   const rowAt = new Map();
@@ -7006,8 +7022,50 @@ function computeLayout(){
   };
   // Households first, so a visiting house has a row to be measured against.
   for (const b of blocks) if (!b.visiting) b.y = rowY(b.gen);
+
+  /* ── AND THE LANE IS GIVEN ROOM TO BE A LANE ────────────────────────────
+   *
+   * "Adding names and they are overlapping and it is not clear the
+   *  demarcations and understanding of the family structure."
+   *
+   * A married-in family stands half a level under the household they came
+   * to — a lane between two rows, for the reasons written below. Half of
+   * LEVEL is a hundred pixels, and a pod in a real family is a hundred and
+   * thirty: a kin word, a name over two lines, dates, a mutupo, a rank. So
+   * the visitor's pod and the pod above it shared thirty pixels of the same
+   * space, and a father-in-law was drawn ACROSS his own daughter's name.
+   *
+   * There is no arithmetic that fits three rows of hundred-and-thirty into
+   * two hundred. The lane is put a full pod clear of the household, and the
+   * generations below it are moved down by what that costs — only where a
+   * lane is actually occupied, so a family with nobody married in is drawn
+   * exactly as it was.
+   *
+   * IT IS THE TREE'S JOB, NOT THE READER'S. A picture that needs somebody to
+   * work out which name is on top of which is not a picture of a family. */
+  const LANE_GAP = 22;
+  const laneDrop = () => POD_TALL + LANE_GAP;       // centre to centre
+  const laneRows = new Set();
+  for (const b of blocks) if (b.visiting && b.parent) laneRows.add(b.parent.y);
+  if (laneRows.size){
+    /* What the two clearances cost beyond the room a generation already
+       has: one from the household down to the lane, one from the lane down
+       to the row below it. */
+    const extra = Math.max(0, laneDrop() * 2 - LEVEL);
+    if (extra > 0){
+      const marks = [...laneRows];
+      // Worked out against the rows as they stand, then applied — or a row
+      // that has just moved would be measured against its own shift.
+      const shift = new Map();
+      for (const b of blocks){
+        if (b.visiting) continue;
+        shift.set(b, marks.reduce((n, m) => n + (b.y > m ? 1 : 0), 0) * extra);
+      }
+      for (const [b, by] of shift) b.y += by;
+    }
+  }
   for (const b of blocks){
-    if (b.visiting) b.y = (b.parent ? b.parent.y : rowY(b.gen)) + LEVEL * IN_LAW_LANE;
+    if (b.visiting) b.y = (b.parent ? b.parent.y : rowY(b.gen)) + laneDrop();
   }
 
   const personXIn = (b, id) => {
@@ -7770,7 +7828,7 @@ function drawing(){
       /* A tie that has to reach past whoever stands between the two of them
          steps below the row and back, squarely, rather than bowing under it
          — the same three segments as a branch, for the same reason. */
-      const drop = l.y + POD_H / 2 + 26;
+      const drop = l.y + POD_TALL / 2 + 26;   // clear of a full pod, not a bare one
       const d = l.reach
         ? `M${l.x1} ${l.y}L${l.x1} ${drop}L${l.x2} ${drop}L${l.x2} ${l.y}`
         : `M${l.x1} ${l.y}L${l.x2} ${l.y}`;
@@ -8167,7 +8225,7 @@ function placeBuds(){
   const sx = q => q.x * pos.k + pos.x, sy = q => q.y * pos.k + pos.y;
   const cx = sx(at), cy = sy(at);
 
-  const halfW = (POD_W / 2) * pos.k, halfH = (POD_H / 2) * pos.k;
+  const halfW = (POD_W / 2) * pos.k, halfH = (POD_TALL / 2) * pos.k;
   // Covering a person is bad; covering another bud is fatal, because the
   // hidden one looks like an option that simply isn't offered.
   /* A badge — "You", "Root of the line" — hangs ABOVE the pod, outside the
@@ -12894,6 +12952,24 @@ function measureChrome(){
     if (top && typeof top.getBoundingClientRect === 'function' && !top.hidden){
       const h = Math.round(top.getBoundingClientRect().height);
       if (h > 0) TOPBAR = h + 14;          // it sits 14px down from the edge
+    }
+    /* THE TALLEST POD ON THE PAGE, in the tree's own units rather than the
+       screen's — the layout works in the former and pos.k is the bridge.
+       The tallest and not the average: a clearance that holds for the
+       biggest pod holds for all of them, and it is the biggest one that
+       somebody else ends up standing on. */
+    if (podsEl && pos.k > 0){
+      let tall = 0;
+      for (const el of podsEl.children){
+        const h = el.getBoundingClientRect().height / pos.k;
+        if (h > tall) tall = h;
+      }
+      /* IT ONLY EVER GOES UP. The tallest pod on screen is not the tallest
+         pod this family can have: a tree of bare names measures short, the
+         lane is drawn tight to match, and then somebody fills in a date and
+         a mutupo and the pod that grows lands on the row above. A clearance
+         that shrinks to fit what is there today is not a clearance. */
+      if (tall > POD_TALL) POD_TALL = Math.round(tall);
     }
   } catch (e) { /* the tests run this against a stand-in for the browser */ }
 }

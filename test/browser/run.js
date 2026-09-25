@@ -65,6 +65,7 @@ const SUITES = [
   { name: 'reach',        kind: 'static' },
   { name: 'roots',        kind: 'static' },
   { name: 'setaside',     kind: 'static' },
+  { name: 'standing',     kind: 'static' },
   { name: 'showing',      kind: 'static' }
 ];
 
