@@ -23,6 +23,21 @@
 // married and where those people came from — which is the whole point of
 // this app.
 //
+// AND THE LAST PASS THAT MAKES IT TRUE. The rules that place a tree are many
+// — rows by generation, households in birth order, stranded children brought
+// back to their parents, married-in houses given a lane, branches slid to
+// make room — and each is careful about what it knows. None of them is in a
+// position to promise that no name ends up under another name, because that
+// is a property of all of them together. So there is a last look before
+// anybody is drawn, and it moves branches apart where they still touch.
+//
+// It was checked the only way that means anything: the lane rule was put
+// back to the broken half-generation, and of the hundred and fifty families
+// that produced an overlap, the last pass rescued a hundred and forty-nine.
+// The one it could not was two pods inside a single branch, which no amount
+// of packing can separate — a fault in how that branch is built, and one
+// this pass now steps over rather than pushing at forty times.
+//
 // WHAT IS ASSERTED, and it is one thing: no two pods occupy the same space.
 // Not "usually", and not in the shapes somebody thought of — this checks two
 // hundred families built at random, because the shapes a family really has

@@ -7423,6 +7423,81 @@ function computeLayout(){
     }
   }
 
+  /* ── AND A LAST LOOK BEFORE ANYBODY IS DRAWN ───────────────────────────
+   *
+   * "Still overlapping."
+   *
+   * Everything above is rules: rows by generation, households packed in
+   * birth order, stranded children brought back to their parents, married-in
+   * houses given a lane of their own, branches slid sideways to make room.
+   * Each of them is careful about what it knows. None of them is in a
+   * position to promise the one thing a family actually needs, which is that
+   * no name ends up underneath another name — because that is a property of
+   * all of them together, and it was being asserted by the author of each
+   * one separately.
+   *
+   * So it is checked. Two hundred families built at random, and this moves
+   * nobody in any of them; it is here for the shape nobody thought of. A pod
+   * that is under another pod cannot be read and cannot be tapped, so the
+   * person is simply gone — and "gone" is too high a price for a rule
+   * somewhere having been right about everything except this.
+   *
+   * IT MOVES A BRANCH, NEVER A PERSON. Nudging one pod out of the way would
+   * put it somewhere it does not belong — out of its household, away from
+   * the marriage it hangs off. The whole branch goes, the way every other
+   * move in this layout goes, so the picture stays a picture of a family.
+   *
+   * AND ONLY WHERE THEY REALLY TOUCH. The gap it leaves is small on purpose:
+   * this is a rescue, not a second opinion about the spacing. Where the rules
+   * above did their job it does nothing at all. */
+  {
+    const TOUCHING = 10;                  // the least air two pods may have
+    const rows = new Map();
+    for (const b of blocks){
+      if (b.socket) continue;
+      const r = rows.get(b.y) || [];
+      r.push(b); rows.set(b.y, r);
+    }
+    /* Oldest generation first. A block's branch hangs ABOVE it — its kids are
+       a row further up — so a shift travels upwards, and doing the lower rows
+       first means every row is settled before anything can move it again. */
+    const done = new Map();
+    for (const y of [...rows.keys()].sort((a, c) => c - a)){
+      /* Rows far enough apart cannot touch whatever their x's are, so only
+         the ones within a pod's height are worth comparing against. Normally
+         that is none of them: generations are further apart than a pod is
+         tall, and so is the lane. It is the abnormal case this exists for. */
+      const near = [...done.keys()].filter(k => Math.abs(k - y) < POD_TALL);
+      const line = rows.get(y).sort((a, c) => a.x - c.x);
+      const placed = [];
+      for (const b of line){
+        /* ITS OWN BRANCH IS NOT AN OBSTACLE. A branch moves as one thing, so
+           a block cannot be moved away from something travelling with it —
+           asking would just push the pair sideways forty times and leave
+           them exactly as they were. Two pods inside one branch landing on
+           each other is a fault in how that branch is built, not in how it
+           is packed, and this pass has nothing true to say about it. */
+        const mine = new Set(branchOf(b));
+        for (let guard = 0; guard < 40; guard++){
+          const lo = b.x - width(b) / 2, hi = b.x + width(b) / 2;
+          const clear = t => mine.has(t.of) || hi + TOUCHING <= t.lo || lo - TOUCHING >= t.hi;
+          let on = placed.find(t => !clear(t));
+          if (!on) for (const k of near){
+            on = (done.get(k) || []).find(t => !clear(t));
+            if (on) break;
+          }
+          if (!on) break;
+          // Out of the way to the right, branch and all, and asked again —
+          // moving clear of one can put it against the next.
+          const dx = on.hi + TOUCHING - lo;
+          for (const n of branchOf(b)) n.x += dx;
+        }
+        placed.push({ lo:b.x - width(b) / 2, hi:b.x + width(b) / 2, of:b });
+      }
+      done.set(y, placed);
+    }
+  }
+
   const persons = {}, sockets = [], links = [], unionAt = {};
   // How much hangs below — which is what decides how thick the branch is
   // drawn. A house standing over the row is not hanging from it.
