@@ -6197,11 +6197,117 @@ function closeBuild(){ building = null; }
  * for, and while it is on the bar says so and offers to undo it. */
 let treeReach = '';
 const REACHES = [
-  { v:'',     label:'Everyone', note:'the whole family at once',      hops:Infinity },
+  { v:'all',  label:'Everyone', note:'the whole family at once',      hops:Infinity },
   { v:'near', label:'Near me',  note:'out as far as your cousins',    hops:6 },
   { v:'wide', label:'Wider',    note:'out as far as second cousins',  hops:10 }
 ];
+// '' is nobody having said. See reachNow.
 function setReach(v){ treeReach = REACHES.some(x => x.v === v) ? v : ''; }
+
+/* ── HOW MUCH OF THE TREE, AND WHO DECIDES ───────────────────────────────
+ *
+ * "Don't make users understand the whole tree. For large families, initially
+ *  show a family neighbourhood around me, then provide obvious expansion
+ *  points."
+ *
+ * This existed and was a setting three panels deep, defaulting to everyone.
+ * So a relative opening a family of two hundred was shown two hundred names
+ * at a size where none of them could be read, and the way to see less was
+ * behind Look, under a heading about colours and dark mode. Nobody finds a
+ * setting they do not already know they want.
+ *
+ * '' NOW MEANS NOBODY HAS SAID, which is different from somebody choosing
+ * everyone: a family small enough to take in at a glance is shown whole, and
+ * one that is not opens on the people around you. Choosing is still choosing
+ * and still sticks — 'all' is an answer and is stored as one.
+ *
+ * FORTY, and the number is a judgement rather than a measurement. A tree that
+ * fits a screen at a readable size is somewhere around this on a laptop and
+ * well under it on a phone; below it there is nothing to hide from anybody,
+ * and above it the first thing a relative sees is a diagram rather than their
+ * family. The pill on the bar says what is happening in words and offers the
+ * ways out, which is what makes a default like this honest.
+ */
+const BIG_FAMILY = 40;
+
+function reachNow(){
+  if (treeReach) return treeReach;
+  try { return people().length > BIG_FAMILY ? 'near' : 'all'; }
+  catch (e) { return 'all'; }
+}
+
+/* ── AND THE SIDES, WHICH ARE NOT A DISTANCE ─────────────────────────────
+ *
+ * "+ Mother's family. + Father's family."
+ *
+ * Every other way of showing less of this tree counts steps, and steps do not
+ * know which side of a family they are on: six hops from you reaches some of
+ * your mother's people and some of your father's, cut off wherever the number
+ * ran out. That is not a shape anybody's family has.
+ *
+ * A side is a walk from one parent that never goes back through you or
+ * through the other parent — which is exactly what makes it a side, since the
+ * two lines meet at that marriage and nowhere else unless the family says
+ * otherwise. Where they DO meet elsewhere the walk finds it and says so by
+ * bringing those people in, which is right: they really are on both sides.
+ *
+ * Kept for the session and never written down. It is a view, not a fact about
+ * the family, and the next time somebody opens their tree they should get the
+ * same answer as everybody else rather than yesterday's. */
+let reachAlso = new Set();
+
+function sideFrom(parentId, keepOut){
+  const out = new Set();
+  if (!present(parentId)) return out;
+  const stop = new Set(keepOut.filter(Boolean));
+  const ofPerson = new Map();
+  for (const u of unions())
+    for (const x of u.partners.concat(u.children))
+      (ofPerson.get(x) || ofPerson.set(x, []).get(x)).push(u);
+
+  let edge = [parentId];
+  out.add(parentId);
+  let guard = 0;
+  while (edge.length && guard++ < 5000){
+    const next = [];
+    for (const x of edge)
+      for (const u of (ofPerson.get(x) || []))
+        for (const y of u.partners.concat(u.children)){
+          if (!present(y) || out.has(y) || stop.has(y)) continue;
+          out.add(y); next.push(y);
+        }
+    edge = next;
+  }
+  return out;
+}
+
+/* The two sides, named for what they are rather than for whose they are:
+   "Mother's family" is the phrase the request used and it is what a family
+   says. Offered only where there is a side to offer and some of it is not
+   already on the screen. */
+function sidesToOpen(){
+  const from = (meId && present(meId)) ? meId : null;
+  if (!from || !layout || !layout.persons) return [];
+  const on = layout.persons;
+  const mum = parentBySex(from, 'f'), dad = parentBySex(from, 'm');
+  const out = [];
+  for (const [who, other, label] of [[mum, dad, "Mother's family"],
+                                     [dad, mum, "Father's family"]]){
+    if (!who || !present(who)) continue;
+    const side = sideFrom(who, [from, other]);
+    const hidden = [...side].filter(id => !on[id]);
+    if (hidden.length) out.push({ id:who, label, ids:side, hidden:hidden.length });
+  }
+  return out;
+}
+
+function openSide(ids){
+  for (const id of ids) reachAlso.add(id);
+  forgetLines();
+  render();
+  fit();
+}
+
 
 let treeShape = '';
 const SHAPES = [
@@ -6550,7 +6656,7 @@ function computeLayout(){
      who are all one step from the marriage, and treating them as ten links
      between each other would make a big household look like a short walk to
      everywhere. */
-  const reachSetting = REACHES.find(x => x.v === treeReach) || REACHES[0];
+  const reachSetting = REACHES.find(x => x.v === reachNow()) || REACHES[0];
   let inReach = null;
   if (reachSetting.hops !== Infinity){
     const from = (meId && state.people[meId] && present(meId)) ? meId
@@ -6582,6 +6688,10 @@ function computeLayout(){
         edge = nextPeople;
       }
     }
+    /* AND THE SIDES SOMEBODY HAS ASKED FOR BY NAME. A distance cannot know
+       which side of a family it is on — see sideFrom — so a side that has
+       been opened joins the reach whole rather than being counted in hops. */
+    if (inReach) for (const id of reachAlso) if (present(id)) inReach.add(id);
   }
 
   /* AND WHOEVER IS BEHIND A FOLD. Third of three narrowings, and they are
@@ -11641,13 +11751,30 @@ function showLit(){
      people are off the screen because you asked, and one tap brings them
      back. The picture cannot say this for itself, which is the only reason
      anything is said here at all. */
-  if (treeReach && layout && layout.persons){
-    const r = REACHES.find(x => x.v === treeReach) || REACHES[0];
-    const on = Object.keys(layout.persons).length, all = people().length;
-    if (all > on){
+  /* NARROWED, WHETHER SOMEBODY ASKED FOR IT OR THE APP DID. A family of two
+     hundred opens on the people around you now — see reachNow — and a default
+     that takes a hundred and eighty names off the screen has to say so in the
+     same breath and in the same words as a setting somebody chose.
+   *
+     AND THE WAYS OUT ARE NAMED, not one door marked everyone. "Mother's
+     family" is the thing a person actually wants next, and a distance cannot
+     offer it because a distance does not know which side it is on. */
+  {
+    const eff = reachNow();
+    const r = REACHES.find(x => x.v === eff) || REACHES[0];
+    const on = layout && layout.persons ? Object.keys(layout.persons).length : 0;
+    const all = people().length;
+    if (eff !== 'all' && layout && layout.persons && all > on){
+      const sides = sidesToOpen();
+      const wider = eff === 'near' ? REACHES.find(x => x.v === 'wide') : null;
       rows.push(
         `<div class="pill"><b>${esc(r.label)}</b>` +
-        `<span>${on} of ${all} — the rest are standing aside, not removed.</span>` +
+        `<span>${on} of ${all} — the rest are standing aside, not removed.` +
+        `${treeReach ? '' : ' A family this size opens on the people around you.'}` +
+        `</span>` +
+        sides.map((x, i) =>
+          `<button type="button" id="side${i}">+ ${esc(x.label)}</button>`).join('') +
+        (wider ? `<button type="button" id="reachMore">+ More generations</button>` : '') +
         `<button type="button" id="reachOff">Show everyone</button></div>`);
     }
   }
@@ -11794,9 +11921,24 @@ function showLit(){
     say('Everything is back on the tree.');
   };
   if ($('reachOff')) $('reachOff').onclick = () => {
-    writePref(REACH_KEY, ''); setReach(''); render(); fit();
+    /* 'all' rather than '', because choosing everyone is an answer and has to
+       stick — '' means nobody has said, and the app would narrow a big family
+       again on the next opening. */
+    writePref(REACH_KEY, 'all'); setReach('all'); render(); fit();
     say('The whole family is back.');
   };
+  if ($('reachMore')) $('reachMore').onclick = () => {
+    writePref(REACH_KEY, 'wide'); setReach('wide'); render(); fit();
+    say('Out as far as your second cousins now. Show everyone is on the bar.');
+  };
+  /* Wired by id, like everything else on this bar. The bar is a string of
+     markup assigned to one element and the handlers are hung off the page
+     afterwards; reaching into it with a selector is a second way of doing the
+     same thing, and the only place in this function that would need one. */
+  sidesToOpen().forEach((side, i) => {
+    const b = $('side' + i);
+    if (b) b.onclick = () => { openSide(side.ids); say(`${side.label} is on the tree.`); };
+  });
   if ($('buildOff')) $('buildOff').onclick = () => {
     closeBuild(); render(); fit(); say('The whole family is back.');
   };
@@ -15390,7 +15532,11 @@ function openLook(){
     const theme = readPref(THEME_KEY, THEMES);
     const pal = readPref(PALETTE_KEY, PALETTES);
     const shape = readPref(SHAPE_KEY, SHAPES);
-    const reach = readPref(REACH_KEY, REACHES);
+    /* What the tree is ACTUALLY showing, which on a big family nobody has
+       given an answer for is not what is stored. A panel whose buttons say
+       "Everyone" while the screen shows forty of two hundred is the app
+       disagreeing with itself in front of somebody. */
+    const reach = reachNow();
     const dark = nowDark();
     el.innerHTML =
       `<p class="cap">How the tree looks</p>` +
@@ -15409,7 +15555,9 @@ function openLook(){
           `aria-pressed="${x.v === reach}" title="${esc(x.note)}">${x.label}</button>`).join('') +
       `</div>` +
       `<p class="roothint">${esc((REACHES.find(x => x.v === reach) || REACHES[0]).note)}` +
-      `${reach ? ' — everybody else is still in the tree, just not on the screen.' : ''}</p>` +
+      `${reach !== 'all' ? ' — everybody else is still in the tree, just not on the screen.' : ''}` +
+      `${!treeReach && reach !== 'all'
+          ? ' This is where a family this size opens; pick one and it stays picked.' : ''}</p>` +
       `<p class="lbl" style="margin-top:14px;">When you tap somebody</p>` +
       `<div class="seg" id="lookFocus">` +
         `<button type="button" data-focus="on" aria-pressed="${focusLifts}">` +
