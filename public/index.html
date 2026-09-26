@@ -1314,6 +1314,60 @@ body.carrying .pod{transition:none;}
   background:var(--pod-hi); border:1px solid var(--pod-edge);
   font-size:var(--t-note); line-height:1.5; color:var(--muted);
 }
+/* ── HOW TWO PEOPLE ARE JOINED ───────────────────────────────────────────
+ *
+ * A row of the people in between, in order, each under the link that reaches
+ * them. It WRAPS rather than scrolls: a chain of six on a 320px screen is
+ * three rows of two, and a row that scrolls sideways hides the far end of the
+ * answer behind a gesture nobody knows is available. The arrow is drawn
+ * between steps and not before the first, so a wrapped row never opens with
+ * an arrow pointing at the edge of the panel.
+ *
+ * QUIETER THAN THE WORD ABOVE IT. The Shona term is the answer; this is the
+ * working. It sits on the card surface rather than on leaf green, so nothing
+ * here competes with the thing it explains. */
+#form .chain{
+  margin:-4px 0 12px; padding:10px 12px; border-radius:10px;
+  background:var(--pod-hi); border:1px solid var(--pod-edge);
+}
+#form .chain .lbl{margin:0 0 8px;}
+/* Centred down the row, because the steps are not the same height: the one
+   that starts it carries a name and no link above it, and the one that
+   folded two links carries the house they meet in underneath. Aligned at
+   the top, the first name sat level with the other steps' link words and
+   read as a label for them. */
+#form .chainrow{display:flex; flex-wrap:wrap; align-items:center; gap:8px 0;}
+/* Each step stacks the link over the name it reaches — "Rudo's brother", then
+   Tendai. No box around it: the arrow is what separates them, and a row of
+   bordered pills fights the term above for the eye. */
+#form .chainrow .step{
+  display:grid; grid-template-columns:1fr; gap:2px; min-width:0;
+}
+#form .chainrow .step b{
+  font-family:'Fraunces',Georgia,serif; font-size:var(--t-read); font-weight:600;
+  color:var(--ink); line-height:1.25;
+}
+#form .chainrow .step em{
+  font-style:normal; font-size:var(--t-note); color:var(--muted);
+  letter-spacing:.02em; line-height:1.3;
+}
+/* Where two lines meet, on the one step that is a fold of two links. */
+#form .chainrow .step i{
+  font-style:normal; font-size:var(--t-note); color:var(--gold); line-height:1.3;
+}
+/* The arrow lives in a column of its own inside the step it points at, so it
+   is never the thing that wraps onto a line by itself and never appears
+   before the first name. */
+#form .chainrow .step + .step{grid-template-columns:auto 1fr; column-gap:8px;}
+#form .chainrow .step + .step > *{grid-column:2;}
+#form .chainrow .step + .step::before{
+  content:'\2192'; grid-column:1; grid-row:1 / -1; align-self:center;
+  color:var(--muted); opacity:.6; font-size:var(--t-act); padding:0 2px;
+}
+#form .chainnote{
+  margin:8px 0 0; font-size:var(--t-note); line-height:1.5; color:var(--muted);
+}
+#form .chainnote .linkbtn{margin-left:6px;}
 #form .teach{
   margin:-4px 0 10px; padding:10px 12px; border-radius:0 0 12px 12px;
   background:var(--pod-hi); border:1.5px solid var(--pod-edge); border-top:none;
@@ -4980,6 +5034,118 @@ function kinPath(who, tid){
     mothersBrother: cross && myLink.sex === 'f' && tgLink.sex === 'm',
     myLink: best.myLink, tgLink: best.tgLink
   };
+}
+
+/* ── HOW TWO PEOPLE ARE JOINED, NAMED PERSON BY PERSON ───────────────────
+ *
+ * The engine has always known this and has never once said it. relationship()
+ * answers what somebody is called, whyNotNamed() answers what is missing, and
+ * kinPath() above works out the shape of the fork — how far up each side goes
+ * and which way it crosses — but every one of those is used to CHOOSE A WORD
+ * and then thrown away. So the app could say "Tendai is Belinda's Sekuru,
+ * because he is her mother's brother" and could not say who Belinda's mother
+ * is, nor that she and Tendai are Sydney's children. The reason is the part a
+ * family argues about, checks, and remembers; the word is only its name.
+ *
+ * TWO DIFFERENT THINGS, and this is the one the rest of this file is not.
+ * Everything above derives a Shona term, which is an interpretation: it
+ * depends on sex, on seniority, on which side, and on what a family has
+ * taught. This is the genealogical fact underneath — the recorded links, in
+ * order, through the people who are actually in the tree. It cannot be wrong
+ * about the culture because it does not speak about the culture. When the
+ * derived word and a family's own word disagree, this is what both of them
+ * are talking about.
+ *
+ * SO THE WORDS HERE ARE LINK WORDS AND NOT KIN TERMS. mother, father, son,
+ * daughter, husband, wife, brother, sister — what is recorded, in the same
+ * vocabulary the traces in `why` already use. No Shona term is invented here
+ * and no English kinship CATEGORY appears: there is no cousin, no uncle, no
+ * aunt, no nephew, because those are readings of a link and not links.
+ *
+ * SHORTEST, AND BLOOD FIRST. A breadth-first walk, so what comes back is the
+ * shortest chain there is; parents and children are offered before partners,
+ * so where two chains are the same length the one through blood is the one
+ * found. Set-aside people are not walked through — present() is the seam, and
+ * somebody who has been set aside is not a path between two people who have
+ * not.
+ *
+ * AND A SIBLING IS ONE STEP, NOT TWO. The walk only knows parent, child and
+ * partner links, so a brother is up to a parent and down again — which is the
+ * truth and is not how anybody says it. Those pairs are folded into one step
+ * that keeps the person they were folded through, so the chain reads the way
+ * it is spoken and still names where the two lines meet, which is the thing
+ * an elder is asked. */
+function linkStepsFrom(id){
+  const out = [];
+  const p = parentUnionOf(id);
+  if (p) for (const x of p.partners) if (present(x))
+    out.push({ id:x, kind:'up' });
+  for (const u of unionsOf(id)){
+    for (const c of u.children) if (present(c) && c !== id)
+      out.push({ id:c, kind:'down' });
+  }
+  // Partners last, so a chain through blood wins a tie.
+  for (const x of partnersOf(id)) out.push({ id:x, kind:'side' });
+  return out;
+}
+
+const LINK_WORD = {
+  up:   s => s === 'f' ? 'mother'  : s === 'm' ? 'father'  : 'mother or father',
+  down: s => s === 'f' ? 'daughter': s === 'm' ? 'son'     : 'child',
+  side: s => s === 'f' ? 'wife'    : s === 'm' ? 'husband' : 'husband or wife',
+  sib:  s => s === 'f' ? 'sister'  : s === 'm' ? 'brother' : 'brother or sister'
+};
+
+/* [{id}, {id, kind, word, through}, …] from `a` to `b`, or null if the tree
+   records no way between them. The first entry is `a` and carries no word:
+   nothing was walked to reach the person you started at. */
+function linkChain(a, b, cap){
+  if (!a || !b || a === b || !present(a) || !present(b)) return null;
+  /* A cap, because this is asked for while somebody is looking at a panel and
+     a family can be thousands of people. Four thousand visits is far past any
+     real chain and still finishes inside a frame. */
+  const LIMIT = cap || 4000;
+  const back = new Map([[a, null]]);
+  let frontier = [a], seen = 0, found = false;
+  while (frontier.length && seen < LIMIT && !found){
+    const next = [];
+    for (const id of frontier){
+      if (++seen > LIMIT) break;
+      for (const step of linkStepsFrom(id)){
+        if (back.has(step.id)) continue;
+        back.set(step.id, { from:id, kind:step.kind });
+        if (step.id === b){ found = true; break; }
+        next.push(step.id);
+      }
+      if (found) break;
+    }
+    frontier = next;
+  }
+  if (!found) return null;
+
+  const chain = [];
+  for (let id = b; id; ){
+    const step = back.get(id);
+    chain.unshift(step
+      ? { id, kind:step.kind, word:LINK_WORD[step.kind]((state.people[id] || {}).sex) }
+      : { id });
+    if (!step) break;
+    id = step.from;
+  }
+
+  /* Up then down is a brother or a sister, and the person it went through is
+     kept: "her mother Rudo, then Rudo's brother Tendai — both Sydney's
+     children" is the sentence a family would use, and the shared parent is
+     the half of it the app used to drop. */
+  for (let i = 1; i < chain.length - 1; i++){
+    if (chain[i].kind !== 'up' || chain[i + 1].kind !== 'down') continue;
+    const them = state.people[chain[i + 1].id] || {};
+    chain.splice(i, 2, {
+      id: chain[i + 1].id, kind:'sib', word: LINK_WORD.sib(them.sex),
+      through: chain[i].id
+    });
+  }
+  return chain;
 }
 
 /* THE MAN MARRIED TO SOMEBODY YOU CALL A SISTER, and whether she is senior to
@@ -10944,6 +11110,56 @@ function wireTeaching(el, again, keep){
   });
 }
 
+/* The chain as a sentence, from whoever is being reckoned from. Written so it
+   can be read aloud: each step says whose what this person is, because "his
+   mother" and "her brother" is how the link is spoken and a bare list of
+   words is not. */
+function chainInk(from, to){
+  const chain = linkChain(from, to);
+  if (!chain) return '';
+  if (chain.length < 3) return '';   // one recorded link: the term already said it
+  const first = id => ((state.people[id] || {}).name || '').split(' ')[0] || 'them';
+  const whose = id => id === meId ? 'your' : first(id) + '’s';
+  const steps = chain.slice(1).map((s, i) => {
+    const prev = chain[i].id;
+    return `<span class="step">` +
+      `<em>${esc(whose(prev))} ${esc(s.word)}</em>` +
+      `<b>${esc(first(s.id))}</b>` +
+      (s.through
+        ? `<i>both ${esc(whose(s.through))} children</i>`
+        : '') +
+      `</span>`;
+  }).join('');
+  const n = chain.length - 1;
+  return `<div class="chain">` +
+    `<p class="lbl">How they are joined</p>` +
+    `<div class="chainrow"><span class="step start"><b>${esc(first(from))}</b></span>` +
+      steps + `</div>` +
+    `<p class="chainnote">${n} recorded link${n === 1 ? '' : 's'}. This is what the ` +
+      `tree holds, not what the word means — the word above is read off this.` +
+      `<button type="button" class="linkbtn" data-chain="${esc(from)}|${esc(to)}">` +
+      `Show it on the tree</button></p>` +
+  `</div>`;
+}
+
+/* The chain on the tree itself, lit the way a word is lit. A panel can name
+   six people and cannot show that four of them are standing in one row; the
+   tree can, and a family looking at a name they do not recognise needs to see
+   where it sits before the sentence means anything. */
+function lightChain(from, to){
+  const chain = linkChain(from, to);
+  if (!chain) return;
+  const ids = [];
+  for (const s of chain){ ids.push(s.id); if (s.through) ids.push(s.through); }
+  const a = ((state.people[from] || {}).name || '').split(' ')[0];
+  const b = ((state.people[to] || {}).name || '').split(' ')[0];
+  lit = { from, term:`${a} to ${b}`, ids:new Set(ids),
+          note:`${chain.length - 1} link${chain.length === 2 ? '' : 's'}` };
+  closeForm();
+  render();
+  say(`The way ${a} and ${b} are joined, on the tree — ${ids.length} people.`);
+}
+
 function kinVerdict(from, to, how){
   how = how || {};
   if (!from || !to) return '';
@@ -10981,11 +11197,18 @@ function kinVerdict(from, to, how){
             : '');
       })());
 
+  /* THE CONNECTION ITSELF, under the word and above the box that takes a
+     word — and only under the direction that was asked for. The chain is the
+     same both ways round, so printing it under "and the other way round" as
+     well would say the same thing twice and make the second card look like a
+     second answer. */
+  const joined = how.andBack ? '' : chainInk(from, to);
+
   // Where the app has a shape but no word for it, ask; where it has one, let
   // the family agree with it or put it right. This is the whole mechanism: it
   // never guesses, and it never stays ignorant either. The boxes themselves
   // live in teachFor, because a person's card needs the same ones.
-  return head + teachFor(from, to, how);
+  return head + joined + teachFor(from, to, how);
 }
 
 /* THE CREDIT ON A WORD. Whose word it is, said wherever the word is shown.
@@ -11138,7 +11361,10 @@ function shapeLabel(shape){
    set of words in it depending on where you stand — which is the other thing
    a western tree cannot show, because its words are properties of people
    rather than of pairs. */
-let lit = null;                 // { term, ids:Set, from }
+let lit = null;                 // { term, ids:Set, from, note? }
+/* `note` is what the chip counts, for the lightings that are not counting
+   people: a path of six people is five links, and "6" beside two names is
+   a number nobody asked for. */
 
 /* ── FOCUS: THE PART OF THE TREE YOU ARE LOOKING AT ──────────────────────
  *
@@ -11371,7 +11597,8 @@ function showLit(){
      other way. */
   if (lit){
     rows.push(
-      `<div class="chip"><b>${esc(lit.term)}</b><i>${lit.ids.size}</i>` +
+      `<div class="chip"><b>${esc(lit.term)}</b>` +
+      `<i>${esc(lit.note || String(lit.ids.size))}</i>` +
       `<button type="button" id="litOff" aria-label="Show everyone again">✕</button></div>`);
   }
 
@@ -11639,6 +11866,10 @@ function openKinship(){
   });
   el.querySelectorAll('[data-ask]').forEach(b => b.onclick = () => openCard(b.dataset.ask));
   el.querySelectorAll('[data-fix]').forEach(b => b.onclick = () => openCard(b.dataset.fix));
+  el.querySelectorAll('[data-chain]').forEach(b => b.onclick = () => {
+    const [a, z] = b.dataset.chain.split('|');
+    lightChain(a, z);
+  });
   wireTeaching(el, openKinship);
   $('kNo').onclick = closeForm;
   el.addEventListener('keydown', e => { if (e.key === 'Escape'){ e.preventDefault(); closeForm(); } });
@@ -11774,7 +12005,7 @@ function kinOnCard(id){
         `<b class="lightword" role="button" tabindex="0" ` +
           `data-lightword="${esc(t.term)}">${esc(t.term)}</b>` +
         `<span>${i ? 'and also — ' : ''}${esc(t.why)}${termCredit(t)}</span></p>`).join('');
-  return lines + teachFor(meId, id, { fold:true });
+  return lines + chainInk(meId, id) + teachFor(meId, id, { fold:true });
 }
 
 /* The card behind a person: the details that aren't worth room on the pod,
@@ -12097,6 +12328,14 @@ function openCard(id){
     b.addEventListener('keydown', e => {
       if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); e.stopPropagation(); go(); }
     });
+  });
+  /* AND THE WAY THERE, ON THE TREE. The card goes when this is pressed, so
+     whatever was half-typed into it is committed first — the same promise
+     every other button on this card makes. */
+  el.querySelectorAll('[data-chain]').forEach(b => b.onclick = () => {
+    commit();
+    const [a, z] = b.dataset.chain.split('|');
+    lightChain(a, z);
   });
   /* HOW THEY ARE JOINED. Pressing the one already pressed clears it back to
      not-said, because somebody who marked the wrong union has to be able to

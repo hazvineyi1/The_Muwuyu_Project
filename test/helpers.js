@@ -127,6 +127,9 @@ function loadFrontend(){
       sameness, duplicatePairs, likelyDuplicates, generations, nameTokens,
       nameSimilarity, mustBeDifferent, birthYear, parentUnionOf, partnersOf,
       relationship, kinTerms, kinPath, overlaps, grow, addPerson, addUnion,
+      // The connection itself, as against the word for it — see test/howjoined.
+      linkChain, chainInk, people,
+
       teachTerm, forgetTerm, affirmTerm, lexicon, shapeLabel, kinVerdict,
       teachFor, termCredit, kinOnCard, kinCensus, bandLabel, westernWord, wordSplits, teknonym, matchesName, houseName, houseOf, waysToAdd, waysToJoin, parentBySex, branchFrom, startBuild, closeBuild, draw, setShape, setReach,
       frontier, isOpenEnd, descendantsOf, toggleRoot,

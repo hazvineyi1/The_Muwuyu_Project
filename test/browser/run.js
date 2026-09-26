@@ -60,6 +60,7 @@ const SUITES = [
   { name: 'buds',         kind: 'static' },
   { name: 'correcting',   kind: 'static' },
   { name: 'finding',      kind: 'static' },
+  { name: 'joined',       kind: 'static' },
   { name: 'lines',        kind: 'static' },
   { name: 'look',         kind: 'static' },
   { name: 'reach',        kind: 'static' },
