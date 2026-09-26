@@ -113,7 +113,9 @@ const FAMILY = JSON.stringify({
     await findFor('p3', 'Tarisai Chikomba');
     is(await hits(), [], 'nobody by that name');
     const said = await words();
-    check(/Nobody by that name/.test(said), 'and it says so');
+    /* IN THE FAMILY'S OWN WORDS, and naming who was looked for — "Nobody by
+       that name" is the app talking about its own search. */
+    check(/Hatina kuwana Tarisai Chikomba\./.test(said), 'and it says so, by name');
     check(await page.$('#findAdd') !== null, 'and offers the way on');
     check(/Add Tarisai Chikomba as a relative of Musekiwa/.test(said),
           'naming who would be added and who to: ' + JSON.stringify(said.slice(-80)));
@@ -146,6 +148,87 @@ const FAMILY = JSON.stringify({
     check(await page.$('#findAdd') === null, 'no offer to add them to nobody');
     check(/tap whoever .*belongs to on the tree/i.test(await words()),
           'but it says what would make one: ' + JSON.stringify((await words()).slice(-110)));
+  }
+
+  section('A RESULT SAYS WHO THEY ARE TO YOU, NOT WHERE THEY SIT');
+  /* "If I search for Tendai, the result should immediately tell me something
+      useful: Tendai Musoni, Sekuru vako. I shouldn't have to open Tendai,
+      inspect parents, move around the tree and work out why Tendai is my
+      sekuru."
+   *
+     The word was already worked out here. It was set as the last clause of
+     the small print, after the birth year and the household — "b. 1971 ·
+     child of Sydney Musoni · your Hanzvadzi" — which is the database's answer
+     with the family's answer tacked on the end. */
+  {
+    await findFor('p5', 'edward');
+    const row = await page.evaluate(() => {
+      const f = [...document.querySelectorAll('#findList .found')]
+        .find(e => /Edward Musoni/.test(e.textContent));
+      if (!f) return null;
+      const rel = f.querySelector('u b.rel');
+      return { rel: rel ? rel.childNodes[0].textContent.trim() : null,
+               whose: rel ? (rel.querySelector('i') || {}).textContent : null,
+               acts: [...f.querySelectorAll('.acts button')].map(b => b.textContent.trim()),
+               /* Read off the screen: the point is that it is not small print
+                  at the end of a line about generations. */
+               big: rel ? Math.round(parseFloat(getComputedStyle(rel).fontSize)) : 0,
+               small: Math.round(parseFloat(getComputedStyle(f.querySelector('u small')).fontSize)) };
+    });
+    check(!!row, 'the person is found');
+    /* Reckoned from Musekiwa, who is set as you in this suite — his younger
+       brother, and younger is what decides between the two words. */
+    is(row && row.rel, "Munin'ina", 'and the word is on the result itself');
+    is(row && row.whose, 'to you', 'said to be what they are to YOU, not a fact about them');
+    check(row && row.big > row.small,
+          `and set larger than the record it used to hide in (${row && row.big} vs ${row && row.small})`);
+  }
+
+  section('and every result offers the two things to do with a person');
+  /* Both were reachable before and neither was offered: the only action on a
+     result was "Show", which moved the canvas. The Shona on these is the
+     family's own — see test/browser/door.js. */
+  {
+    /* The two that come first. Join… may follow when somebody is picked on
+       the tree — that is maintenance, and it is not what a result is for. */
+    const acts = await page.evaluate(() => {
+      const f = [...document.querySelectorAll('#findList .found')]
+        .find(e => /Edward Musoni/.test(e.textContent));
+      return [...f.querySelectorAll('.acts button')].map(b => b.textContent.trim());
+    });
+    is(acts.slice(0, 2), ['Ona hukama', 'Ona paMuti'],
+       'see the relationship, and see where they stand');
+
+    await page.evaluate(() => {
+      const f = [...document.querySelectorAll('#findList .found')]
+        .find(e => /Edward Musoni/.test(e.textContent));
+      f.querySelector('[data-kin]').click();
+    });
+    await page.waitForTimeout(400);
+    const panel = await words();
+    check(/What are they to each other\?/.test(panel),
+          'and the relationship one opens the whole answer');
+    check(/Edward Musoni/.test(panel) && /Musekiwa Musoni/.test(panel),
+          'with both people already filled in: ' + JSON.stringify(panel.slice(0, 90)));
+  }
+
+  section('and with nobody set as you there is no word and nothing to ask about');
+  /* Every term in this app is reckoned from one person. Offering "see the
+     relationship" when there is nobody to be related TO would open a panel
+     that cannot answer. */
+  {
+    await page.evaluate(() => { setMe(null); });
+    await findFor('p5', 'edward');
+    const row = await page.evaluate(() => {
+      const f = [...document.querySelectorAll('#findList .found')]
+        .find(e => /Edward Musoni/.test(e.textContent));
+      return { rel: !!f.querySelector('u b.rel'),
+               acts: [...f.querySelectorAll('.acts button')].map(b => b.textContent.trim()) };
+    });
+    is(row.rel, false, 'no word is claimed');
+    check(!row.acts.includes('Ona hukama'),
+          'and nothing offers to explain a relationship to nobody', row.acts);
+    await page.evaluate(() => { setMe('p3'); });
   }
 
   section('AND A BRANCH SAYS THAT IT IS ONE');

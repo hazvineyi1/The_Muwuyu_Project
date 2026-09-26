@@ -1226,18 +1226,34 @@ body.carrying .pod{transition:none;}
 }
 #form .found u{
   flex:1; text-decoration:none; display:block; min-width:0;
-  font-family:'Fraunces',Georgia,serif; font-size:var(--t-act); font-weight:500;
+  font-family:'Fraunces',Georgia,serif; font-size:var(--t-name); font-weight:500;
   color:var(--ink);
+}
+/* WHAT THEY ARE TO YOU, on its own line under the name. It used to be the
+   last clause of the small print, after the generation and the household —
+   the database's answer with the family's answer tacked on the end. */
+#form .found u b.rel{
+  display:block; margin-top:2px;
+  font-family:'Fraunces',Georgia,serif; font-size:var(--t-act); font-weight:600;
+  color:var(--leaf);
+}
+#form .found u b.rel i{
+  font-family:'Karla',sans-serif; font-style:normal; font-weight:700;
+  font-size:var(--t-mark); letter-spacing:.12em; text-transform:uppercase;
+  color:var(--muted); margin-left:6px;
 }
 #form .found u small{
   display:block; font-family:'Karla',sans-serif; font-size:var(--t-note);
   color:var(--muted); font-weight:400; margin-top:2px;
 }
 #form .found .acts{display:flex; gap:6px; flex:0 0 auto;}
+/* BIGGER THAN A PILL. These were 10.5px type in a 26px target, which is a
+   size you choose for a control somebody already knows. A result row is the
+   opposite case: it is where a relative decides what to do next. */
 #form .found .mini{
-  padding:6px 10px; border-radius:99px; cursor:pointer;
+  padding:8px 12px; border-radius:99px; cursor:pointer;
   background:var(--pod); border:1.5px solid var(--pod-edge); color:var(--ink);
-  font-family:'Karla',sans-serif; font-size:var(--t-note); font-weight:700;
+  font-family:'Karla',sans-serif; font-size:var(--t-read); font-weight:700;
   white-space:nowrap;
 }
 #form .found .mini:hover{border-color:var(--gold); color:var(--gold);}
@@ -13772,9 +13788,9 @@ function openFind(anchorId){
   const draw = () => {
     const hits = searchPeople(findText, 12);
     el.innerHTML =
-      `<p class="cap">Find somebody</p>` +
+      `<p class="cap">Tsvaga munhu wemhuri</p>` +
       `<input id="findQ" class="fld" value="${esc(findText)}" autocomplete="off"` +
-      ` placeholder="Name, or part of one" aria-label="Search for a name">` +
+      ` placeholder="Type their name\u2026" aria-label="Search for a name">` +
       (to ? `<p class="browse">Anybody found can be joined to <b>${esc(toName)}</b>` +
             `${anchorId ? '' : ', who is picked on the tree'}.</p>`
           : `<p class="browse">Pick somebody on the tree first and you can join ` +
@@ -13799,8 +13815,9 @@ function openFind(anchorId){
              * So the way on is here, and it carries the name across so it
              * is not typed twice. It still goes through a relative, because
              * that rule holds everywhere: nobody goes in on their own. */
-            ? `<p class="browse">Nobody by that name. Names entered with a ` +
-              `different spelling still turn up — try a shorter piece of it.</p>` +
+            ? `<p class="browse"><b>Hatina kuwana ${esc(findText.trim())}.</b> ` +
+              `Names entered with a different spelling still turn up — try a ` +
+              `shorter piece of it.</p>` +
               (onBranch
                 /* A side of a family is not the family. Somebody working on
                    one branch cannot see the rest and must not read "nobody
@@ -13820,16 +13837,46 @@ function openFind(anchorId){
                   `<b>${esc(findText.trim())}</b> belongs to on the tree — ` +
                   `their buds offer every way in, and this box will offer it ` +
                   `too once somebody is picked.</p>`)
+            /* ── A RESULT SAYS WHO THEY ARE TO YOU, NOT WHERE THEY SIT ──
+             *
+             * "If I search for Tendai, the result should immediately tell me
+             *  something useful: Tendai Musoni, Sekuru vako. I shouldn't have
+             *  to open Tendai, inspect parents, move around the tree and work
+             *  out why Tendai is my sekuru."
+             *
+             * The word was already worked out here and was set as small print
+             * at the end of a line about generations and households — "b.
+             * 1936 · Sydney's son · your Sekuru" — which is the database's
+             * answer with the family's answer tacked on the end. It is the
+             * other way round now: the word is the second line and the rest
+             * is under it, because the word is the whole reason anybody is
+             * looking anybody up in this app.
+             *
+             * AND TWO THINGS TO DO WITH THEM. Seeing the relationship in full
+             * — both directions, the way there, the why — and seeing where
+             * they stand. Both were reachable before and neither was offered:
+             * the only action on a result was "Show", which moved the canvas.
+             *
+             * The Shona on these two is the family's own; see the door. */
             : hits.map(h => {
                 const q = state.people[h.id];
                 const life = q.born ? `b. ${esc(q.born)} · ` : '';
-                const rel = (meId && meId !== h.id) ? (relationship(meId, h.id) || {}) : {};
-                const tag = rel.term ? ` · your ${esc(rel.term)}` : '';
+                const rel = (meId && meId !== h.id && !q.aside)
+                  ? (relationship(meId, h.id) || {}) : {};
                 const gone = q.aside ? `<small class="leaves">set aside — ${esc(q.aside.why || '')}</small>` : '';
                 return `<div class="found">` +
-                  `<u>${esc(q.name)}<small>${life}${esc(positionOf(h.id))}${tag}</small>${gone}</u>` +
+                  `<u>${esc(q.name)}` +
+                    /* The word, and whose word it is, on one line. Without
+                       the second half "Amai" reads as a fact about Rudo
+                       rather than as what Rudo is to whoever is looking —
+                       and those are the two things this app exists to keep
+                       apart. */
+                    (rel.term ? `<b class="rel">${esc(rel.term)}<i>to you</i></b>` : '') +
+                    `<small>${life}${esc(positionOf(h.id))}</small>${gone}</u>` +
                   `<span class="acts">` +
-                    (q.aside ? '' : `<button type="button" class="mini" data-goto="${h.id}">Show</button>`) +
+                    (meId && meId !== h.id && !q.aside
+                      ? `<button type="button" class="mini" data-kin="${h.id}">Ona hukama</button>` : '') +
+                    (q.aside ? '' : `<button type="button" class="mini" data-goto="${h.id}">Ona paMuti</button>`) +
                     (to && to !== h.id && !q.aside
                       ? `<button type="button" class="mini join" data-join="${h.id}">Join…</button>` : '') +
                   `</span></div>`;
@@ -13842,6 +13889,14 @@ function openFind(anchorId){
     q.oninput = () => { findText = q.value; draw(); $('findQ').focus(); };
     q.focus();
     try { q.setSelectionRange(q.value.length, q.value.length); } catch (e) {}
+
+    /* Straight to the whole answer: both directions, the way there, and the
+       why. It is the same panel the door offers, arrived at with the question
+       already filled in. */
+    el.querySelectorAll('[data-kin]').forEach(b => b.onclick = () => {
+      kinA = b.dataset.kin; kinB = meId;
+      openKinship();
+    });
 
     el.querySelectorAll('[data-goto]').forEach(b => b.onclick = () => {
       const id = b.dataset.goto;

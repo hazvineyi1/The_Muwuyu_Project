@@ -174,7 +174,7 @@ const open = async (ctx, family, me, size) => {
       await page.waitForTimeout(250);
       return out;
     };
-    for (const [key, want] of [['find', /Find somebody|Find someone/i],
+    for (const [key, want] of [['find', /Tsvaga munhu wemhuri/i],
                                /* And it arrives asking, not answering: one side is
                                   already you, the other is the question. */
                                ['kin',  /What are they to each other\?Person/i],
