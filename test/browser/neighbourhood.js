@@ -133,6 +133,13 @@ const open = async (ctx, fam, me, wipe) => {
     if (w) localStorage.removeItem('muti-baobab-reach');
     localStorage.setItem('muti-baobab-v1', f);
     localStorage.setItem('muti-baobab-me', m);
+    /* THE PICTURE, ON PURPOSE. A family this size now opens as a BOOK, and
+       a book does not narrow — a page for each side reads the same at four
+       hundred people, and taking half the relatives off the pages would
+       break the very references it is made of. Narrowing is about the
+       picture, so this suite asks for the picture. The book's own answer to
+       this question is asserted at the foot of the file. */
+    localStorage.setItem('muti-baobab-shape', 'mudzi');
   }, [fam, me, wipe !== false]);
   await page.goto(BASE, { waitUntil:'domcontentloaded' });
   await page.waitForFunction(() => { try { return people().length > 1; } catch(e){ return false; } });
@@ -259,6 +266,31 @@ const open = async (ctx, fam, me, wipe) => {
     if (wide < total)
       check(/Wider/.test(await barText(step)), 'said by its own name on the bar');
     await step.close();
+  }
+
+  section('AND A BOOK DOES NOT NARROW AT ALL');
+  /* The one shape that does not need to. A page is bounded by one side of
+     the family however large the tree is, so it reads the same at four
+     hundred people as at forty — and the references between pages only work
+     if the pages are all there. */
+  {
+    const bk = await ctx.newPage();
+    bk.on('pageerror', e => bad('page error', e.message));
+    await bk.goto(BASE, { waitUntil:'domcontentloaded' });
+    await bk.evaluate(([f, m]) => {
+      localStorage.removeItem('muti-baobab-reach');
+      localStorage.setItem('muti-baobab-shape', 'book');
+      localStorage.setItem('muti-baobab-v1', f);
+      localStorage.setItem('muti-baobab-me', m);
+    }, [big.json, big.me]);
+    await bk.goto(BASE, { waitUntil:'domcontentloaded' });
+    await bk.waitForFunction(() => { try { return people().length > 1; } catch(e){ return false; } });
+    await throughDoor(bk);
+    await bk.waitForTimeout(600);
+    is(await shown(bk), await all(bk), 'everybody is on the pages');
+    is(await bk.evaluate(() => reachNow()), 'all', 'whatever the reach was set to');
+    is(await barText(bk), '', 'and nothing is said about people standing aside');
+    await bk.close();
   }
 
   await page.close();

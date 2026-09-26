@@ -1763,6 +1763,147 @@ body.carrying .pod{transition:none;}
    laid out from POD_W and a measured POD_TALL, both of which follow what is
    really on screen — see measureChrome — so nothing here has to be told. */
 
+/* ── THE BOOK ────────────────────────────────────────────────────────────
+ *
+ * A page for each side of the family. Set as a page and not as a panel: a
+ * column of readable width, scrolling on its own, over the picture rather
+ * than floating above it — because this is the view, not a thing on top of
+ * the view.
+ *
+ * THE MEASURE IS THE POINT. Sixty-odd characters is what a person reads
+ * without losing the line, and a family tree drawn as a diagram has no
+ * measure at all: it is as wide as the widest generation, and that is why it
+ * stops being readable as it grows.
+ */
+#book{
+  position:fixed; left:0; right:0; z-index:var(--z-frame);
+  top:var(--topbar, 58px); bottom:calc(var(--barh, 60px) + 16px);
+  overflow:auto; background:var(--sky);
+  padding:16px;
+}
+#book[hidden]{display:none;}
+#book > *{max-width:640px; margin-left:auto; margin-right:auto;}
+/* `margin: 0 auto` and not `margin: 0`, because the shorthand comes after the
+   rule above that centres every child of the page and quietly undid it — the
+   heading sat at the left edge of the screen while the households it headed
+   were centred. */
+/* A PAGE HEADING IS NOT THE LARGEST THING ON THE SCREEN. --t-head is used
+   exactly once in this interface, on the Shona word at the top of a card,
+   and that is the scale agreeing with the project: the answer this app
+   exists to give should be the biggest type in it. A family's own name for
+   its side is a chapter title, and it is told apart by weight and by the
+   rule above it rather than by beating the answer. */
+#book h2{
+  font-family:'Fraunces',Georgia,serif; font-size:var(--t-name); font-weight:600;
+  color:var(--ink); margin:0 auto 2px; line-height:1.2; letter-spacing:.01em;
+}
+#book .bsub{
+  margin:0 auto 16px; font-family:'Karla',sans-serif; font-size:var(--t-read);
+  color:var(--muted); line-height:1.5;
+}
+/* The running head: where you are, and the way on. */
+#book .bhead{
+  display:flex; align-items:center; gap:8px; margin:0 auto 12px;
+  padding-bottom:8px; border-bottom:1.5px solid var(--pod-edge);
+}
+#book .bwhere{
+  flex:1; font-family:'Karla',sans-serif; font-size:var(--t-mark);
+  letter-spacing:.12em; text-transform:uppercase; color:var(--muted);
+}
+#book .bturn{display:flex; gap:6px;}
+#book .bnav{
+  min-width:44px; min-height:44px; cursor:pointer;
+  display:inline-flex; align-items:center; justify-content:center;
+  padding:8px 12px; border-radius:99px;
+  background:var(--pod); border:1.5px solid var(--pod-edge); color:var(--ink);
+  font-family:'Karla',sans-serif; font-size:var(--t-read); font-weight:700;
+}
+#book .bnav:hover{border-color:var(--gold); color:var(--gold);}
+
+/* A household: the couple, then their children under them. The rule down the
+   left is what makes a page read as a household rather than as a list. */
+#book .bhouse{
+  margin:0 auto 16px; padding:12px; border-radius:16px 4px 16px 4px;
+  background:var(--pod); border:1.5px solid var(--pod-edge);
+}
+#book .bcouple{display:flex; flex-wrap:wrap; align-items:center; gap:8px;}
+/* A name and the page it carries on to, kept together however the row wraps.
+   Apart, the reference read as a note about the marriage. */
+#book .bwho{display:flex; flex-direction:column; align-items:flex-start; gap:4px;
+  min-width:0; max-width:100%;}
+#book .bjoin{
+  font-family:'Karla',sans-serif; font-size:var(--t-note); color:var(--muted);
+  letter-spacing:.06em; text-transform:lowercase;
+}
+#book .bjoin.alone{font-style:italic;}
+#book .bdoubt{
+  flex:1 0 100%; font-family:'Karla',sans-serif; font-size:var(--t-note);
+  color:var(--gold); line-height:1.4;
+}
+#book .bkids{
+  margin-top:10px; padding-left:12px; border-left:2px solid var(--pod-edge);
+  display:flex; flex-wrap:wrap; align-items:center; gap:8px;
+}
+#book .blbl{
+  flex:1 0 100%; margin:0 0 2px; font-family:'Karla',sans-serif;
+  font-size:var(--t-mark); letter-spacing:.12em; text-transform:uppercase;
+  color:var(--muted);
+}
+#book .blbl.foot{max-width:640px; margin:16px auto 6px;}
+
+/* A name on a page. It is a button, because every name in this app is a way
+   into that person's card. */
+#book .bname{
+  display:block; text-align:left; cursor:pointer;
+  padding:8px 10px; border-radius:12px 4px 12px 4px;
+  background:var(--pod-hi); border:1.5px solid var(--pod-edge); color:var(--ink);
+  min-height:44px;
+}
+#book .bname:hover{border-color:var(--gold);}
+#book .bname.you{border-color:var(--leaf); background:var(--pod);}
+#book .bname.notsure{border-style:dashed;}
+#book .bname u{
+  display:block; text-decoration:none;
+  font-family:'Fraunces',Georgia,serif; font-size:var(--t-name); font-weight:500;
+}
+#book .bname u i{
+  font-style:normal; margin-left:6px; font-family:'Karla',sans-serif;
+  font-size:var(--t-mark); letter-spacing:.12em; text-transform:uppercase;
+  color:var(--leaf); font-weight:700;
+}
+/* The Shona word, from wherever the reader stands. The reason for the page. */
+#book .bname b{
+  display:block; font-family:'Fraunces',Georgia,serif; font-size:var(--t-act);
+  font-weight:600; color:var(--leaf);
+}
+#book .bname small{
+  display:block; font-family:'Karla',sans-serif; font-size:var(--t-note);
+  color:var(--muted);
+}
+/* The reference to another page: what makes this a book. */
+/* The reference beside a name is quiet: it is a footnote on that person, and
+   the loud one is the list at the foot of the page. */
+#book .bgo{
+  display:inline-flex; align-items:center; cursor:pointer; min-height:44px;
+  padding:6px 10px; border-radius:99px;
+  background:transparent; border:1.5px dashed var(--gold-soft); color:var(--gold);
+  font-family:'Karla',sans-serif; font-size:var(--t-note); font-weight:700;
+  text-align:left;
+}
+#book .bgo:hover{border-style:solid; background:var(--gold); color:var(--pod);}
+#book .bgo.wide{
+  display:flex; flex-direction:column; align-items:flex-start; width:100%;
+  border-radius:16px 4px 16px 4px; border-style:solid; border-color:var(--pod-edge);
+  background:var(--pod); color:var(--ink);
+  font-family:'Fraunces',Georgia,serif; font-size:var(--t-act); font-weight:600;
+}
+#book .bgo.wide:hover{border-color:var(--gold); background:var(--pod); color:var(--ink);}
+#book .bgo.wide small{
+  font-family:'Karla',sans-serif; font-size:var(--t-note); font-weight:400;
+  color:var(--muted); letter-spacing:0;
+}
+#book .bouts{display:flex; flex-direction:column; gap:8px; margin:0 auto 16px;}
+
 /* ── the door ────────────────────────────────────────────────────────────
  *
  * The first thing, and the room to come back to. Not a dialog over the tree —
@@ -2154,6 +2295,16 @@ body.carrying .pod{transition:none;}
   <div id="pods" class="layer"></div>
   <div id="buds"></div>
 </div>
+
+<!-- THE BOOK. A page for each side of the family, over the picture rather
+     than instead of it: the layout underneath is still computed and still
+     true, so switching back is a repaint and not a reload. See drawBook.
+
+     OUTSIDE #stage, and it has to be. The stage tracks pointerdown to pan
+     and zoom the canvas, and a pointerdown on a child of it is a drag
+     starting — which cancels the click that would have turned the page, so
+     every button in the book was drawn, wired, on top, and dead. -->
+<div id="book" hidden></div>
 
 <!-- HIDDEN UNTIL THE PAGE KNOWS THERE IS NOBODY. It used to be visible in the
      markup and hidden by the first render, which means every page showed it
@@ -6316,6 +6467,11 @@ function setReach(v){ treeReach = REACHES.some(x => x.v === v) ? v : ''; }
 const BIG_FAMILY = 40;
 
 function reachNow(){
+  /* A BOOK DOES NOT NARROW. Narrowing exists because a picture of four
+     hundred people cannot be read; a page for each side of the family can,
+     and taking half the relatives off the pages would break the very
+     references the book is made of. */
+  if (reading()) return 'all';
   if (treeReach) return treeReach;
   try { return people().length > BIG_FAMILY ? 'near' : 'all'; }
   catch (e) { return 'all'; }
@@ -6394,12 +6550,45 @@ function openSide(ids){
 }
 
 
+/* ── WHAT SHAPE THE FAMILY IS IN ─────────────────────────────────────────
+ *
+ * "The look of the tree is not functional. As it grows it is more difficult
+ *  to make sense and follow. Make it like a book where at each link, that is
+ *  the beginning of a new tree."
+ *
+ * Two of these draw one picture of everybody, and both of them get harder to
+ * read with every name added — which is the ordinary fate of a family tree
+ * drawn as a diagram, and not a fault in the packing. Four hundred people do
+ * not fit on a page anybody can follow, at any spacing, in any arrangement.
+ *
+ * THE THIRD IS NOT A DIAGRAM. A book has a page for each side of the family,
+ * and a marriage is a reference from one page to another — which is what the
+ * request says and is also how families actually talk: the Mandabas, and
+ * then "she married a Chirwa, and their people are from Mhondoro". A page is
+ * bounded by one line however large the tree is, so it reads the same at four
+ * hundred people as at forty.
+ *
+ * '' IS NOBODY HAVING SAID, as for the reach — see reachNow. A family small
+ * enough to take in whole still opens as a picture, because for a small
+ * family the picture is better than any page could be. A family past the
+ * size where that is true opens as a book. Choosing either sticks.
+ *
+ * The two Shona labels here were given by the family. "Book" is not, so it
+ * is in English: see the door for why this app does not invent Shona. */
 let treeShape = '';
 const SHAPES = [
-  { v:'',     label:'Mudzi', note:'your line straight down the middle' },
-  { v:'muti', label:'Muti',  note:'packed to fit, as it was' }
+  { v:'mudzi', label:'Mudzi', note:'your line straight down the middle' },
+  { v:'muti',  label:'Muti',  note:'packed to fit, as it was' },
+  { v:'book',  label:'Book',  note:'a page for each side of the family' }
 ];
 function setShape(v){ treeShape = SHAPES.some(x => x.v === v) ? v : ''; }
+
+function shapeNow(){
+  if (treeShape) return treeShape;
+  try { return people().length > BIG_FAMILY ? 'book' : 'mudzi'; }
+  catch (e) { return 'mudzi'; }
+}
+const reading = () => shapeNow() === 'book';
 
 /* Which sex the house descends through — the one convention the picture is
    built on: which parents a household hangs from. One constant, so a people
@@ -6590,6 +6779,291 @@ function familyLines(){
 
   linesCache = { lines, homeId, of: id => lineOf.get(id) || null, byId };
   return linesCache;
+}
+
+/* ── THE BOOK ────────────────────────────────────────────────────────────
+ *
+ * "The look of the tree is not functional. As it grows it is more difficult
+ *  to make sense and follow. Make it like a book where at each link, that is
+ *  the beginning of a new tree."
+ *
+ * A PAGE IS A SIDE OF THE FAMILY, and a marriage is a reference from one page
+ * to another. That is not a way of drawing the same diagram smaller — it is
+ * the shape the family itself has, and it is how families talk: the Mandabas,
+ * and then "she married a Chirwa, and their people are from Mhondoro". The
+ * house runs through the men in this family (see HOUSE_THROUGH), so a woman's
+ * children are on her husband's page, which is exactly the "new tree" the
+ * request names: at each link, another one begins.
+ *
+ * WHY IT READS THE SAME AT FOUR HUNDRED PEOPLE AS AT FORTY. A page is bounded
+ * by one line, and a line does not grow when a cousin's wife's people are
+ * recorded — a new page does. The diagram has no such bound: every name added
+ * anywhere makes every other name harder to find, which is the ordinary fate
+ * of a family tree drawn as one picture and not a fault in the packing.
+ *
+ * NOTHING NEW IS COMPUTED. familyLines() has worked out the sides, their
+ * names, their members in senior order and the doors between them since the
+ * tints went in; the book is that, read out. So a page cannot disagree with
+ * the picture, and a family who switch between them are looking at one tree.
+ *
+ * EVERY NAME ON A PAGE IS STILL A PERSON. Tapping one opens their card, which
+ * answers before it asks anything — so the book is a way through the family
+ * and not a printout of it. */
+
+/* Which page is open. null is the contents. Kept for the session only: which
+   page somebody was on is where they had got to, not a fact about the tree.
+
+   `bookSeen` is whether the book has been opened at all this session, which
+   is the difference between "nobody has turned to a page yet" and "somebody
+   asked for the contents" — the first opens on your own side, the second
+   must stay where it was put. */
+let bookAt = null, bookSeen = false;
+
+function bookPages(){
+  const L = familyLines();
+  /* HOME FIRST, THEN OUTWARDS BY MARRIAGE. Your own side is page one, the
+     families it married into are next, and theirs after that — which is the
+     order somebody reading would meet them, and the same `depth` the folding
+     uses so the two cannot disagree. */
+  const pages = L.lines.slice().sort((a, b) =>
+    (a.depth - b.depth) || seniorSide(a.root, b.root));
+  return { L, pages, at: id => pages.findIndex(p => p.id === id) };
+}
+
+/* The households of one side, in the order a page reads: oldest first, each
+   marriage once, with the children of it underneath.
+
+   A household belongs to this page when anybody in this line is in it — so a
+   woman who married out appears in her own line's household as a daughter and
+   on her husband's page as his wife. That is not a duplicate: she is in both
+   families, which is the whole thing a book can say and a single diagram
+   cannot. */
+function bookHouseholds(line){
+  const mine = new Set(line.members);
+  const seen = new Set();
+  const out = [];
+  /* OLDEST FIRST, WHICH IS NOT THE ORDER THE LINE IS KEPT IN. seniorSide
+     puts a person WITH recorded parents before one without, which is right
+     for a row of brothers and sisters — the ones born into the household
+     before the ones who married into it — and exactly backwards for a page,
+     because the head of a line is the one person in it with no parents
+     recorded. Read that way the page opened on a grandchild's marriage and
+     reached the grandfather three households down. */
+  const g = generations();
+  const order = line.members.slice().sort((a, b) =>
+    ((g[a] === undefined ? 99 : g[a]) - (g[b] === undefined ? 99 : g[b])) ||
+    seniorSide(a, b));
+  for (const id of order){
+    for (const u of unionsOf(id)){
+      if (seen.has(u.id)) continue;
+      seen.add(u.id);
+      const partners = u.partners.filter(present);
+      /* The one this page is about comes first, so a row reads "Sydney and
+         his wife" rather than starting with somebody from another family. */
+      partners.sort((a, b) => (mine.has(b) ? 1 : 0) - (mine.has(a) ? 1 : 0)
+                              || seniorSide(a, b));
+      out.push({
+        union: u,
+        partners,
+        kids: u.children.filter(present)
+      });
+    }
+    /* Somebody with no marriage recorded is still on their family's page —
+       a child who died young, an uncle nobody married. They are listed under
+       the household they were born into, so nothing is needed here. */
+  }
+  return out;
+}
+
+/* Everybody on this page who is not in a household of it: the head of the
+   line before any marriage was recorded, and anybody else standing alone. */
+function bookLoose(line, households){
+  const placed = new Set();
+  for (const h of households){
+    for (const x of h.partners) placed.add(x);
+    for (const k of h.kids) placed.add(k);
+  }
+  return line.members.filter(id => !placed.has(id));
+}
+
+/* The line's own members, oldest first — used where a page needs the people
+   rather than the households they are in. */
+function bookOrder(members){
+  const g = generations();
+  return members.slice().sort((a, b) =>
+    ((g[a] === undefined ? 99 : g[a]) - (g[b] === undefined ? 99 : g[b])) ||
+    seniorSide(a, b));
+}
+
+/* What one person reads as, on a page. The Shona word from wherever the
+   reader stands, because that is the thing this app exists to say, and the
+   record under it in the smallest type. */
+function bookName(id, how){
+  const p = state.people[id];
+  if (!p) return '';
+  const rel = (meId && meId !== id) ? (relationship(meId, id) || {}) : {};
+  const life = [p.born ? 'b. ' + p.born : '', p.died ? 'd. ' + p.died : '']
+    .filter(Boolean).join(' · ');
+  const L = familyLines();
+  const theirs = L.of(id);
+  const away = (how && how.line && theirs && theirs !== how.line) ? L.byId.get(theirs) : null;
+  /* THE NAME AND THE DOOR OUT OF IT ARE ONE THING, wrapped together. Left as
+     two children of the row they belonged to, the row wrapped between them
+     and "of the Mangwenya side" landed under the couple — reading as a note
+     about the marriage rather than about the woman in it. */
+  return `<span class="bwho">` +
+    `<button type="button" class="bname${meId === id ? ' you' : ''}` +
+    `${p.unsure != null ? ' notsure' : ''}" data-who="${esc(id)}">` +
+    `<u>${esc(p.name || '')}${meId === id ? '<i>you</i>' : ''}</u>` +
+    (rel.term ? `<b>${esc(rel.term)}</b>` : '') +
+    `<small>${esc(life)}${p.totem ? `${life ? ' · ' : ''}${esc(p.totem)}` : ''}</small>` +
+    `</button>` +
+    /* AND WHERE THEY CARRY ON, which is the reference this whole shape is
+       made of. Named, and one tap away. */
+    (away && away.name
+      ? `<button type="button" class="bgo" data-page="${esc(away.id)}">` +
+        `of the ${esc(away.name)} side →</button>`
+      : '') +
+    `</span>`;
+}
+
+function bookPageInk(line, pages){
+  const L = familyLines();
+  const n = pages.length;
+  const i = pages.findIndex(p => p.id === line.id);
+  const households = bookHouseholds(line);
+  const loose = bookLoose(line, households);
+  const mine = new Set(line.members);
+
+  const head =
+    `<div class="bhead">` +
+      `<button type="button" class="bnav" id="bContents">‹ Contents</button>` +
+      `<span class="bwhere">Page ${i + 1} of ${n}</span>` +
+      `<span class="bturn">` +
+        (i > 0 ? `<button type="button" class="bnav" data-page="${esc(pages[i - 1].id)}">‹</button>` : '') +
+        (i < n - 1 ? `<button type="button" class="bnav" data-page="${esc(pages[i + 1].id)}">›</button>` : '') +
+      `</span>` +
+    `</div>` +
+    `<h2>${esc(line.name || 'This side')}</h2>` +
+    `<p class="bsub">${line.members.length} ` +
+      `${line.members.length === 1 ? 'person' : 'people'} of this side` +
+      `${line.id === L.homeId ? ' · your own' : ''}` +
+      `${line.depth && line.depth !== Infinity
+          ? ` · ${line.depth} marriage${line.depth === 1 ? '' : 's'} from yours` : ''}` +
+    `</p>`;
+
+  const house = h => {
+    const kidsHere = h.kids.filter(k => mine.has(k));
+    const kidsGone = h.kids.filter(k => !mine.has(k));
+    return `<div class="bhouse">` +
+      `<div class="bcouple">` +
+        h.partners.map(x => bookName(x, { line:line.id })).join(
+          `<span class="bjoin">${esc(bondWord(h.union))}</span>`) +
+        (h.partners.length === 1
+          ? `<span class="bjoin alone">nobody recorded on the other side</span>` : '') +
+        (h.union.unsure != null
+          ? `<span class="bdoubt">Hazvina kusimbiswa` +
+            `${h.union.unsure ? ` — ${esc(h.union.unsure)}` : ''}</span>` : '') +
+      `</div>` +
+      (h.kids.length
+        ? `<div class="bkids">` +
+          `<p class="blbl">${h.kids.length} ` +
+            `${h.kids.length === 1 ? 'child' : 'children'}</p>` +
+          kidsHere.map(k => bookName(k, { line:line.id })).join('') +
+          kidsGone.map(k => bookName(k, { line:line.id })).join('') +
+          `</div>`
+        : '') +
+    `</div>`;
+  };
+
+  return head +
+    (loose.length
+      ? `<div class="bhouse"><div class="bcouple">` +
+        loose.map(x => bookName(x, { line:line.id })).join('') +
+        `</div></div>`
+      : '') +
+    households.map(house).join('') +
+    /* THE PAGES THIS ONE LEADS TO, gathered at the foot the way a chapter
+       ends with where to read next. The doors are already worked out — see
+       familyLines — so this cannot list a family the picture would not. */
+    (() => {
+      const outs = [];
+      const seen = new Set();
+      for (const d of line.doors){
+        const to = L.byId.get(d.to);
+        if (!to || seen.has(to.id)) continue;
+        seen.add(to.id);
+        outs.push(`<button type="button" class="bgo wide" data-page="${esc(to.id)}">` +
+          `The ${esc(to.name || 'other')} side` +
+          `<small>through ${esc(((state.people[d.person] || {}).name || '').split(' ')[0])}` +
+          ` and ${esc(((state.people[d.with] || {}).name || '').split(' ')[0])}</small>` +
+          `</button>`);
+      }
+      return outs.length
+        ? `<p class="blbl foot">This side joins</p>` +
+          `<div class="bouts">${outs.join('')}</div>`
+        : '';
+    })();
+}
+
+/* How the two of them are recorded as joined, in one word for a page. The
+   full sentence is on the card; a page needs the word between two names. */
+function bondWord(u){
+  const b = (u && u.bond) || '';
+  return b === 'married' ? 'married' : b === 'together' ? 'together'
+       : b === 'parted' ? 'parted' : 'and';
+}
+
+function bookContentsInk(pages){
+  const L = familyLines();
+  return `<div class="bhead"><span class="bwhere">Contents</span></div>` +
+    `<h2>${esc(familyName || 'This family')}</h2>` +
+    `<p class="bsub">${people().length} people, on ${pages.length} ` +
+      `${pages.length === 1 ? 'side' : 'sides'} of the family. ` +
+      `Every marriage is a page of its own.</p>` +
+    `<div class="bouts">` +
+      pages.map((l, i) =>
+        `<button type="button" class="bgo wide" data-page="${esc(l.id)}">` +
+          `${i + 1}. The ${esc(l.name || 'other')} side` +
+          `<small>${l.members.length} ${l.members.length === 1 ? 'person' : 'people'}` +
+          `${l.id === L.homeId ? ' · your own' : ''}</small>` +
+        `</button>`).join('') +
+    `</div>`;
+}
+
+function drawBook(){
+  const el = $('book');
+  if (!el) return;
+  if (!reading()){ el.hidden = true; el.innerHTML = ''; return; }
+  el.hidden = false;
+
+  const { L, pages } = bookPages();
+  if (!pages.length){ el.hidden = true; el.innerHTML = ''; return; }
+  if (bookAt && !pages.some(p => p.id === bookAt)) bookAt = null;
+  /* OPENED ON YOUR OWN SIDE, not on the contents. Somebody who has said who
+     they are has already answered the only question a contents page asks,
+     and a list of surnames is a worse first screen than their own family.
+     The contents is one tap away at the head of every page. */
+  if (bookAt === null && !bookSeen){
+    bookAt = (L.homeId && pages.some(p => p.id === L.homeId)) ? L.homeId : pages[0].id;
+    bookSeen = true;
+  }
+
+  const line = bookAt ? pages.find(p => p.id === bookAt) : null;
+  const ink = line ? bookPageInk(line, pages) : bookContentsInk(pages);
+  if (el.innerHTML !== ink) el.innerHTML = ink;
+
+  el.querySelectorAll('[data-page]').forEach(b => b.onclick = () => {
+    bookAt = b.dataset.page;
+    el.scrollTop = 0;
+    render();
+  });
+  const back = $('bContents');
+  if (back) back.onclick = () => { bookAt = null; el.scrollTop = 0; render(); };
+  el.querySelectorAll('[data-who]').forEach(b => b.onclick = () => {
+    sel = b.dataset.who;
+    openCard(sel);
+  });
 }
 
 /* Which families can be folded away: everybody's but your own, and only
@@ -7192,7 +7666,7 @@ function computeLayout(){
     for (const k of b.kids) if (!k.visiting) d = Math.max(d, 1 + depthOf(k));
     return d;
   };
-  if (treeShape === ''){
+  if (shapeNow() !== 'muti'){
     let anchor = (meId && ofPerson[meId]) ? meId
                : (state.rootId && ofPerson[state.rootId]) ? state.rootId : null;
     if (!anchor){
@@ -8686,7 +9160,8 @@ function drawing(){
    * then there is nothing to be the first person of. */
   const holdingTheTree = store === 'shared' || store === 'local';
   $('seed').hidden = !!people().length || emptied || !holdingTheTree;
-  $('hint').hidden = (!people().length && !emptied) || people().length > 4;
+  /* The hint is about tapping pods, and a book has none. */
+  $('hint').hidden = (!people().length && !emptied) || people().length > 4 || reading();
   if (emptied){
     $('hint').innerHTML =
       `Everyone is set aside. Nothing was deleted — open <b>${asidePeople().length} ` +
@@ -8703,6 +9178,11 @@ function drawing(){
   }
   fresh.clear();
   applyTransform();
+  /* AND THE BOOK, over the picture that has just been drawn. The layout
+     underneath is still computed and still true — every other part of this
+     app reads it, from who is within reach to why somebody is drawn where
+     they are — so switching between the two is a repaint. */
+  drawBook();
   /* Handed back so a test can read the picture that was just drawn. The page
      itself has no use for it — it has already been written into the page —
      and a suite that had to scrape a stubbed DOM instead would be testing its
@@ -13968,6 +14448,10 @@ function measureChrome(){
     if (top && typeof top.getBoundingClientRect === 'function' && !top.hidden){
       const h = Math.round(top.getBoundingClientRect().height);
       if (h > 0) TOPBAR = h + 14;          // it sits 14px down from the edge
+      /* The book clears the same bar, and is a page rather than a canvas —
+         it cannot be panned out from under it, so it is told where the bar
+         ends in the same breath. */
+      document.documentElement.style.setProperty('--topbar', TOPBAR + 'px');
     }
     /* THE TALLEST POD ON THE PAGE, in the tree's own units rather than the
        screen's — the layout works in the former and pos.k is the bridge.
@@ -15841,7 +16325,9 @@ function openLook(){
   const draw = () => {
     const theme = readPref(THEME_KEY, THEMES);
     const pal = readPref(PALETTE_KEY, PALETTES);
-    const shape = readPref(SHAPE_KEY, SHAPES);
+    /* What the tree is ACTUALLY in, which on a big family nobody has answered
+       for is not what is stored. See shapeNow, and the same note on reach. */
+    const shape = shapeNow();
     const size = readPref(SIZE_KEY, SIZES);
     /* What the tree is ACTUALLY showing, which on a big family nobody has
        given an answer for is not what is stored. A panel whose buttons say
@@ -15859,7 +16345,13 @@ function openLook(){
           `aria-pressed="${x.v === shape}" title="${esc(x.note)}">${x.label}</button>`).join('') +
       `</div>` +
       `<p class="roothint">${esc((SHAPES.find(x => x.v === shape) || SHAPES[0]).note)}` +
-      `${shape === '' ? ' — the line runs through whoever is marked You.' : ''}</p>` +
+      `${shape === 'mudzi' ? ' — the line runs through whoever is marked You.' : ''}` +
+      `${shape === 'book'
+          ? ' — a marriage is a page of its own, so it reads the same however ' +
+            'large the family gets.' : ''}` +
+      `${!treeShape
+          ? ' This is where a family this size opens; pick one and it stays picked.'
+          : ''}</p>` +
       `<p class="lbl" style="margin-top:14px;">How much</p>` +
       `<div class="seg" id="lookReach">` +
         REACHES.map(x => `<button type="button" data-reach="${x.v}" ` +
@@ -16755,6 +17247,14 @@ function updateWho(){
   }
   const undo = $('undo');
   if (undo) undo.hidden = !helping;
+
+  /* FIT AND THE ZOOMS MOVE A PICTURE, and a book has none — it is a page
+     that scrolls. Left on screen they are three buttons that do nothing,
+     which is worse than three buttons that are not there. */
+  const move = document.querySelector('#bar .grp');
+  if (move) move.hidden = reading();
+  const sep = document.querySelector('#bar .sep');
+  if (sep) sep.hidden = reading();
 
   const btn = $('who');
   if (!btn) return;
