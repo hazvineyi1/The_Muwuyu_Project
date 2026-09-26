@@ -11456,6 +11456,33 @@ function showLit(){
       `</div>`);
   }
 
+  /* ── AND WHETHER ANYBODY IS SET AS YOU ─────────────────────────────────
+   *
+   * The one thing this app does that a western tree cannot is say what one
+   * person is to another IN THE FAMILY'S OWN WORD — and every one of those
+   * words is reckoned from a single person. With nobody set there is nothing
+   * to reckon from, so not one Shona word is drawn: Amai, Baba, Sekuru,
+   * Ambuya all vanish and what is left is a tree of bare names.
+   *
+   * WHICH IS THE WHOLE APP SWITCHED OFF, and the only sign of it was an
+   * em-dash in the corner of the top bar. A family opening their own tree and
+   * finding the thing they came for missing does not read "You: —" as the
+   * cause; they read it as the app not working, and there is no reason they
+   * should read it any other way.
+   *
+   * IT DOES NOT CLOSE, for the same reason the branch line does not: this is
+   * not a state somebody put the app into and can be trusted to remember. It
+   * is a question that has not been answered, and the answer is one tap.
+   *
+   * Not said on a tree of one, where there is nobody to be anything to. */
+  if (!meId && people().length > 1){
+    rows.push(
+      `<div class="pill"><b>Nobody is set as you</b>` +
+      `<span>Every Shona word in this tree is reckoned from one person, so ` +
+      `until you say which one you are the tree can only show names.</span>` +
+      `<button type="button" id="meGo">Say who you are</button></div>`);
+  }
+
   /* While a branch is being worked on, this never leaves the screen. A family
      that has twice thought its tree had disappeared must never be left to
      wonder where everybody went. */
@@ -11610,6 +11637,12 @@ function showLit(){
   const ink = rows.join('');
   if (el.innerHTML !== ink) el.innerHTML = ink;
   el.hidden = !rows.length;
+  if ($('meGo')) $('meGo').onclick = () => {
+    /* The same act the "You:" chip performs, so there is one way of saying
+       this and not two that can drift apart. */
+    pickingMe = true; updateWho(); closeForm(); render();
+    say('Tap your own name in the tree.');
+  };
   if ($('litOff')) $('litOff').onclick = () => { lit = null; render(); };
   if ($('selOff')) $('selOff').onclick = () => { sel = null; closeForm(); render(); };
   if ($('growOff')) $('growOff').onclick = () => { closeForm(); stopGrowing(); };
@@ -15629,7 +15662,14 @@ function setMe(id, opts){
   }
   updateWho();
   render();
-  if (id) say(`${state.people[id].name} is you. Tap anyone to see what they are to you.`);
+  /* AND LETTING GO IS NOT SILENT EITHER. Every word on every pod has just
+     gone, because there is nobody to reckon them from — and a tree that
+     quietly turns into a list of names looks like the app breaking rather
+     than like an answer being withdrawn. */
+  say(id
+    ? `${state.people[id].name} is you. Tap anyone to see what they are to you.`
+    : 'Nobody in particular now, so the tree shows names and no words. ' +
+      'Tap "You:" at the top to say who you are.');
 }
 
 /* Say who is viewing, and mean it beyond this browser.
@@ -15978,7 +16018,9 @@ podsEl.addEventListener('click', e => {
 
   const pod = e.target.closest('.pod');
   if (pod){
-    if (pickingMe){ setMe(pod.dataset.id); return; }
+    // Your own name again means nobody, which is the only way out of being
+    // somebody and is said out loud when the pick starts.
+    if (pickingMe){ setMe(pod.dataset.id === meId ? null : pod.dataset.id); return; }
     sel = (sel === pod.dataset.id) ? null : pod.dataset.id;
     closeForm(); render();
     if (sel){ bringIntoView(sel); revealBuds(); }
@@ -16251,10 +16293,26 @@ $('who').onclick = () => {
         `family from where they stand. Ask the family for a link of your own.`);
     return;
   }
-  if (meId){ setMe(null); return; }
+  /* TAPPING THIS USED TO EMPTY IT, silently, in one tap and with no
+     confirmation — on the single setting every Shona word on every pod is
+     reckoned from. Its own tooltip said "tap to change" and it did not
+     change; it unset, the tree went to bare names, and nothing anywhere said
+     why. A woman handing her phone to her brother so he can see the family
+     from where HE stands is the everyday reason to press this, and what she
+     got was a tree with the app switched off in it.
+
+     So it starts the pick, which is what the word change means. Letting go
+     entirely is still there and is now a deliberate act — tapping your own
+     name again while picking — because "nobody" is a real answer for a
+     family looking at somebody else's tree, just not an accidental one. */
   pickingMe = !pickingMe;
   updateWho();
-  say(pickingMe ? 'Tap your own name in the tree.' : '');
+  say(pickingMe
+    ? (meId
+        ? `Tap whoever you are in the tree \u2014 or ${state.people[meId].name.split(' ')[0]} ` +
+          `again to be nobody in particular.`
+        : 'Tap your own name in the tree.')
+    : '');
 };
 
 /* SIGNING OUT, where somebody would look for it.
