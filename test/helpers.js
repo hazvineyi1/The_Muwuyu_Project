@@ -129,6 +129,8 @@ function loadFrontend(){
       relationship, kinTerms, kinPath, overlaps, grow, addPerson, addUnion,
       // The connection itself, as against the word for it — see test/howjoined.
       linkChain, chainInk, people,
+      // What the family has said it is not sure of — see test/unsure.
+      doubtsAlong, doubtLine,
 
       teachTerm, forgetTerm, affirmTerm, lexicon, shapeLabel, kinVerdict,
       teachFor, termCredit, kinOnCard, kinCensus, bandLabel, westernWord, wordSplits, teknonym, matchesName, houseName, houseOf, waysToAdd, waysToJoin, parentBySex, branchFrom, startBuild, closeBuild, draw, setShape, setReach,

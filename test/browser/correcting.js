@@ -87,8 +87,13 @@ const rows = page => page.$$eval('#cMarriages .join', els => els.map(e => ({
   const r = await rows(page);
   console.log('       ' + JSON.stringify(r));
   is(r.length, 3, 'three joins on the card');
-  is(r[0].acts, ['Somebody else','Not joined at all'], 'a named one offers Somebody else');
-  is(r[2].acts, ['Say who','Not joined at all'], 'and the empty one offers Say who');
+  /* And, since migration 019, whether the family are sure of the join at all
+     — which is a different question from who it is with and belongs on the
+     same row. See test/unsure.test.js. */
+  is(r[0].acts, ['Somebody else','Not joined at all','Not confirmed'],
+     'a named one offers Somebody else');
+  is(r[2].acts, ['Say who','Not joined at all','Not confirmed'],
+     'and the empty one offers Say who');
 
   section('CORRECTING A WRONG PARTNER KEEPS THE JOIN AND ITS CHILDREN');
   {

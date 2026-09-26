@@ -192,19 +192,22 @@ function makeResolver(refs) {
    real instruction ("go back to counting the surnames") and leaving it out
    is silence. Every other field here is NOT NULL and '' is its empty. */
 const PERSON_FIELDS = ['name', 'also_known_as', 'sex', 'totem', 'born', 'died',
-                       'added_by', 'house'];
+                       'added_by', 'house', 'unsure'];
 
 const HANDLERS = {
   async addPerson(ctx, op) {
     const { client, treeId, actor } = ctx;
     const { rows } = await client.query(
       `INSERT INTO people (tree_id, name, also_known_as, sex, totem, born, died,
-                           added_by, legacy_id, house)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+                           added_by, legacy_id, house, unsure)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
       [treeId, op.name ?? '', op.alsoKnownAs ?? '', op.sex ?? '', op.totem ?? '',
        op.born ?? '', op.died ?? '', op.addedBy ?? actor ?? '', op.legacyId ?? null,
        // Nobody is born with a caption on them; see migration 018.
-       op.house ?? null]
+       op.house ?? null,
+       // Nor with a doubt on them. See migration 019 — null is nobody having
+       // said, which is what every record entered before this held.
+       op.unsure ?? null]
     );
     const person = rows[0];
     if (op.ref) ctx.refs.set(op.ref, person.id);
@@ -296,6 +299,27 @@ const HANDLERS = {
     await touchUnion(client, unionId);
     await logChange(client, treeId, 'union', unionId, 'setBond', op, actor);
     return { unionId, bond };
+  },
+
+  /* WHETHER THE FAMILY IS SURE OF THIS LINK. See migration 019: three
+     states, and the null is the point — nobody having said is not the same
+     as somebody saying they are not sure.
+
+     Carried as null / '' / a reason, so `unsure: null` here is a family
+     taking the doubt back off a link they have since confirmed. */
+  async setUnsure(ctx, op) {
+    const { client, treeId, actor, resolve } = ctx;
+    const unionId = resolve(op.unionId, 'setUnsure.unionId');
+    if (op.unsure !== null && typeof op.unsure !== 'string') {
+      throw badRequest(`setUnsure: ${JSON.stringify(op.unsure)} is not a reason ` +
+        `or null for nobody having said`, { op: 'setUnsure', unsure: op.unsure });
+    }
+    await checkVersion(client, 'unions', unionId, op.expect, 'union');
+    await client.query('UPDATE unions SET unsure = $2 WHERE id = $1',
+                       [unionId, op.unsure]);
+    await touchUnion(client, unionId);
+    await logChange(client, treeId, 'union', unionId, 'setUnsure', op, actor);
+    return { unionId, unsure: op.unsure };
   },
 
   async addChild(ctx, op) {

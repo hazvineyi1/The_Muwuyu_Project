@@ -67,6 +67,7 @@ const SUITES = [
   { name: 'lines',        kind: 'static' },
   { name: 'look',         kind: 'static' },
   { name: 'neighbourhood', kind: 'static' },
+  { name: 'notsure',      kind: 'static' },
   { name: 'reach',        kind: 'static' },
   { name: 'roots',        kind: 'static' },
   { name: 'setaside',     kind: 'static' },

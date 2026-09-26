@@ -8,6 +8,7 @@
 const { badRequest, notFound } = require('./errors');
 
 const PERSON_COLS = `id, name, also_known_as, sex, totem, born, born_year, died, is_root, house,
+                     unsure,
                      added_by, aside_at, aside_by, aside_why, merged_into,
                      visibility, visibility_by, visibility_at,
                      mw_is_living(died, born_year) AS is_living,
@@ -99,7 +100,7 @@ async function bootstrap(pool, treeId, { focus = null, depth = 3 } = {}) {
     // order. Children are eldest-first: that order is the birth order the
     // seniority terms read, so it must survive the trip.
     pool.query(`
-      SELECT u.id, u.updated_at, u.bond,
+      SELECT u.id, u.updated_at, u.bond, u.unsure,
              COALESCE((SELECT array_agg(up.person_id ORDER BY up.position)
                          FROM union_partners up WHERE up.union_id = u.id), '{}') AS partners,
              COALESCE((SELECT array_agg(uc.person_id ORDER BY uc.birth_order)
@@ -327,7 +328,7 @@ async function fullTree(pool, treeId) {
     pool.query(`SELECT ${PERSON_COLS} FROM people
                  WHERE tree_id = $1 ORDER BY created_at`, [treeId]),
     pool.query(`
-      SELECT u.id, u.updated_at, u.bond,
+      SELECT u.id, u.updated_at, u.bond, u.unsure,
              COALESCE((SELECT array_agg(up.person_id ORDER BY up.position)
                          FROM union_partners up WHERE up.union_id = u.id), '{}') AS partners,
              COALESCE((SELECT array_agg(uc.person_id ORDER BY uc.birth_order)
@@ -349,6 +350,10 @@ async function fullTree(pool, treeId) {
     updated_at: u.updated_at,
     // '' where nobody has said. See migration 015 — silence is not 'married'.
     bond: u.bond || '',
+    /* NULL is carried as NULL, because it is not the same as ''. Nobody
+       having said is this app's own silence; '' is a family saying they are
+       not sure and giving no reason. See migration 019. */
+    unsure: u.unsure === undefined ? null : u.unsure,
     partners: u.partners.slice(),
     children: u.children.slice()
   }));
@@ -416,7 +421,7 @@ async function branchTree(pool, treeId, { members, unions: unionIds, anchorId, n
                  WHERE tree_id = $1 AND id = ANY($2::uuid[]) ORDER BY created_at`,
                [treeId, ids]),
     uids.length ? pool.query(`
-      SELECT u.id, u.updated_at, u.bond,
+      SELECT u.id, u.updated_at, u.bond, u.unsure,
              COALESCE((SELECT array_agg(up.person_id ORDER BY up.position)
                          FROM union_partners up WHERE up.union_id = u.id), '{}') AS partners,
              COALESCE((SELECT array_agg(uc.person_id ORDER BY uc.birth_order)
@@ -441,6 +446,7 @@ async function branchTree(pool, treeId, { members, unions: unionIds, anchorId, n
     people: peopleR.rows,
     unions: unionsR.rows.map(u => ({
       id: u.id, updated_at: u.updated_at, bond: u.bond || '',
+      unsure: u.unsure === undefined ? null : u.unsure,
       partners: u.partners.slice(), children: u.children.slice()
     })),
     notDuplicates: ndR.rows.map(r => [r.a_id, r.b_id]),

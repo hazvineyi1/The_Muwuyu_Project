@@ -633,6 +633,9 @@ body.carrying .pod{transition:none;}
    the pods faded left the tree looking like a tree with the people taken out
    of it, which is the opposite of what is being shown. */
 #gtree.hushed .branch, #gtree.hushed .bond{opacity:.2;}
+/* NOT CONFIRMED. A dashed edge: the record is there and the family have said
+   they are not certain of it. Quiet on purpose — see migration 019. */
+.pod.notsure{border-style:dashed;}
 .pod.lit{
   border-color:var(--gold); border-width:2.5px; box-shadow:var(--lift);
   z-index:var(--z-up);
@@ -1330,6 +1333,22 @@ body.carrying .pod{transition:none;}
   background:var(--pod-hi); border:1px solid var(--pod-edge);
   font-size:var(--t-note); line-height:1.5; color:var(--muted);
 }
+/* WHAT NOBODY HAS CONFIRMED, under the word it qualifies. Quiet rather than
+   alarming: a family saying they are not sure is doing the app a favour, and
+   a red warning would read as an error in their record. */
+#form .unsure{
+  margin:-4px 0 10px; padding:10px 12px; border-radius:10px;
+  background:var(--pod-hi); border:1.5px dashed var(--gold-soft);
+}
+#form .unsure b{
+  display:block; font-family:'Fraunces',Georgia,serif; font-size:var(--t-act);
+  font-weight:600; color:var(--gold);
+}
+#form .unsure span{
+  display:block; margin-top:2px; font-size:var(--t-note); line-height:1.5;
+  color:var(--muted);
+}
+
 /* ── HOW TWO PEOPLE ARE JOINED ───────────────────────────────────────────
  *
  * A row of the people in between, in order, each under the link that reaches
@@ -1576,6 +1595,10 @@ body.carrying .pod{transition:none;}
   letter-spacing:.04em; color:var(--muted);
 }
 #form .join .seg{margin:8px 0 6px;}
+/* The reason a join is not confirmed, on its own line under the row it
+   belongs to. Only there while there is a doubt to explain. */
+#form .join .unsurewhy{flex:1 0 100%; margin:6px 0 0;}
+#form .join .mini.on{border-color:var(--gold); color:var(--gold); font-weight:700;}
 #form .join .mini{
   padding:4px 10px; border-radius:99px; cursor:pointer;
   background:transparent; border:1.5px solid var(--pod-edge); color:var(--muted);
@@ -8556,6 +8579,11 @@ function drawing(){
       `${landedId === p.id ? ' landed' : ''}` +
       `${p.root ? ' taproot' : ''}${meId === p.id ? ' you' : ''}` +
       `${lost.has(p.id) ? ' adrift' : ''}` +
+      /* A dashed edge and nothing else. Somebody the family have marked as
+         not confirmed is in the tree, drawn, counted and related exactly as
+         before — see migration 019 — so this is a note on the record and not
+         a warning about the person. */
+      `${p.unsure != null ? ' notsure' : ''}` +
       `${growing && gaps.has(p.id) ? ' gap' : ''}` +
       `${lit ? (lit.ids.has(p.id) || p.id === lit.from ? ' lit' : ' dim') : ''}` +
       `${!lit && focused ? (focused.has(p.id) ? '' : ' aside') : ''}"` +
@@ -9890,6 +9918,36 @@ function marriageBlock(id){
           `${n ? `, and the ${n} ${n === 1 ? 'child' : 'children'} of it stay ` +
                  `with ${esc(first(id))}` : ''}.">` +
           `Not joined at all</button>` +
+        /* ── AND WHETHER ANYBODY IS SURE OF IT ──────────────────────────
+         *
+         * "Handle uncertainty explicitly. Hazvina kusimbiswa."
+         *
+         * The link, not the people: this is the one a whole branch of Shona
+         * terms hangs off, so a family who are not certain these two were
+         * joined are not certain of any word read through them. Marked here
+         * and read wherever a word is shown — see doubtsAlong.
+         *
+         * Pressing the pressed one takes the doubt off again, the same way
+         * the bond buttons work, because a family who have since asked an
+         * elder must be able to say so. */
+        `<button type="button" class="mini${u.unsure != null ? ' on' : ''}" ` +
+          `data-unsure="${esc(u.id)}" aria-pressed="${u.unsure != null}" ` +
+          `title="${u.unsure != null
+            ? `Recorded as not confirmed${u.unsure ? `: ${esc(u.unsure)}` : ''}. ` +
+              `Press again once somebody has confirmed it.`
+            : `Mark this join as one nobody has confirmed. Nothing is removed ` +
+              `and nobody moves — every word read through it will say so.`}">` +
+          `${u.unsure != null ? '● Not confirmed' : 'Not confirmed'}</button>` +
+        /* THE REASON, AND ONLY ONCE THERE IS A DOUBT TO GIVE ONE FOR. It is
+           worth far more than the flag — "nobody living remembers whether
+           they married" is the thing an elder can settle — and a family who
+           will not type it must still be able to mark the doubt, which is
+           why '' is an answer. See migration 019. */
+        (u.unsure != null
+          ? `<input class="fld unsurewhy" data-unsurefor="${esc(u.id)}" ` +
+            `value="${esc(u.unsure)}" autocomplete="off" ` +
+            `placeholder="What is not confirmed, or who could settle it">`
+          : '') +
       `</div>`;
     }).join('') + `</div>` +
     cardNote(
@@ -11421,6 +11479,110 @@ function wireTeaching(el, again, keep){
   });
 }
 
+/* ── WHAT NOBODY HAS CONFIRMED ───────────────────────────────────────────
+ *
+ * "Handle uncertainty explicitly. Hazvina kusimbiswa."
+ *
+ * Every record in this tree was stated as fact. A year read off a gravestone
+ * and a year an aunt half-remembers were the same row; a marriage everybody
+ * attended and one nobody can quite place were the same union. The app then
+ * read a Shona term off those links and put it in gold on a pod, with no way
+ * of knowing that one step of the reasoning was a guess.
+ *
+ * That is not a gap in the data. It is a gap in what could be SAID: a family
+ * filling in three generations from memory knows perfectly well which parts
+ * they are sure of, and there was nowhere to put it — so the honest answer
+ * had to be recorded as certainty or not recorded at all, and families have
+ * chosen the second and left people out.
+ *
+ * THREE STATES, AND THE NULL IS THE POINT. null is nobody having said, which
+ * is what every record entered before this holds and is NOT the same as
+ * confirmed. '' is a family marking a doubt and giving no reason. Text is
+ * the doubt itself — "Ambuya says 1938, her sister says 1941". See migration
+ * 019.
+ *
+ * AND IT TRAVELS. A word is read off a chain of recorded links, so a chain
+ * with an unconfirmed link in it produces a word that is unconfirmed too —
+ * and the app says which link it was, because "we are not sure" without
+ * saying what is doubted is no better than silence. This is the same rule
+ * the rest of this file keeps: it has never been willing to say a word
+ * nobody said, and this applies it to the links under the words. */
+const unsureOf = x => (x && x.unsure != null) ? x.unsure : null;
+const isUnsure = x => x && x.unsure != null;
+
+/* Every union joining two people who are next to each other in a chain. A
+   step is one recorded link, and the link lives on the union. */
+function unionBetween(a, b){
+  for (const u of unionsOf(a))
+    if (u.partners.includes(b) || u.children.includes(b)) return u;
+  for (const u of unionsOf(b))
+    if (u.children.includes(a)) return u;
+  const pa = parentUnionOf(a), pb = parentUnionOf(b);
+  if (pa && (pa.partners.includes(b) || pa.children.includes(b))) return pa;
+  if (pb && (pb.partners.includes(a) || pb.children.includes(a))) return pb;
+  return null;
+}
+
+/* What is not confirmed along the way between two people: the people on the
+   chain and the links between them. Returns [] where everything on it has
+   been confirmed or where nobody has said anything, which are the same thing
+   as far as this app is concerned — it reports doubts, never absences.
+
+   Reckoned off linkChain, so it is the same walk the panel draws and cannot
+   disagree with it. */
+function doubtsAlong(from, to){
+  const chain = linkChain(from, to);
+  if (!chain) return [];
+  const out = [];
+  const seen = new Set();
+  for (let i = 0; i < chain.length; i++){
+    const who = state.people[chain[i].id];
+    if (isUnsure(who) && !seen.has('p' + chain[i].id)){
+      seen.add('p' + chain[i].id);
+      out.push({ kind:'person', id:chain[i].id, name:who.name || '', why:unsureOf(who) });
+    }
+    if (!i) continue;
+    /* A folded sibling step is two links, so the person it was folded
+       through is checked as well as the two unions it covers. */
+    const hops = chain[i].through
+      ? [[chain[i - 1].id, chain[i].through], [chain[i].through, chain[i].id]]
+      : [[chain[i - 1].id, chain[i].id]];
+    if (chain[i].through){
+      const mid = state.people[chain[i].through];
+      if (isUnsure(mid) && !seen.has('p' + chain[i].through)){
+        seen.add('p' + chain[i].through);
+        out.push({ kind:'person', id:chain[i].through, name:mid.name || '',
+                   why:unsureOf(mid) });
+      }
+    }
+    for (const [a, b] of hops){
+      const u = unionBetween(a, b);
+      if (!u || !isUnsure(u) || seen.has('u' + u.id)) continue;
+      seen.add('u' + u.id);
+      out.push({ kind:'link', id:u.id, why:unsureOf(u),
+                 between:[a, b].map(x => (state.people[x] || {}).name || '') });
+    }
+  }
+  return out;
+}
+
+/* Said in one line, from whoever is reading. The Shona is the family's own —
+   see the door, where the rule about not inventing any is written out. */
+function doubtLine(from, to){
+  const doubts = doubtsAlong(from, to);
+  if (!doubts.length) return '';
+  const first = id => ((state.people[id] || {}).name || '').split(' ')[0];
+  const said = doubts.slice(0, 2).map(d => d.kind === 'person'
+    ? `${esc(first(d.id))}${d.why ? ` — ${esc(d.why)}` : ''}`
+    : `${esc(d.between.map(n => n.split(' ')[0]).join(' and '))} being joined` +
+      `${d.why ? ` — ${esc(d.why)}` : ''}`);
+  const more = doubts.length - said.length;
+  return `<p class="unsure"><b>Hazvina kusimbiswa</b>` +
+    `<span>Not confirmed: ${said.join('; ')}` +
+    `${more ? `, and ${more} more` : ''}. The word above is read off this, ` +
+    `so it is as sure as the family is.</span></p>`;
+}
+
 /* The chain as a sentence, from whoever is being reckoned from. Written so it
    can be read aloud: each step says whose what this person is, because "his
    mother" and "her brother" is how the link is spoken and a bare list of
@@ -11513,7 +11675,7 @@ function kinVerdict(from, to, how){
      same both ways round, so printing it under "and the other way round" as
      well would say the same thing twice and make the second card look like a
      second answer. */
-  const joined = how.andBack ? '' : chainInk(from, to);
+  const joined = how.andBack ? '' : (doubtLine(from, to) + chainInk(from, to));
 
   // Where the app has a shape but no word for it, ask; where it has one, let
   // the family agree with it or put it right. This is the whole mechanism: it
@@ -12396,7 +12558,8 @@ function kinOnCard(id){
         `<b class="lightword" role="button" tabindex="0" ` +
           `data-lightword="${esc(t.term)}">${esc(t.term)}</b>` +
         `<span>${i ? 'and also — ' : ''}${esc(t.why)}${termCredit(t)}</span></p>`).join('');
-  return lines + chainInk(meId, id) + teachFor(meId, id, { fold:true });
+  return lines + doubtLine(meId, id) + chainInk(meId, id) +
+         teachFor(meId, id, { fold:true });
 }
 
 /* The card behind a person: the details that aren't worth room on the pod,
@@ -12597,6 +12760,21 @@ function openCard(id){
       `<input id="cDied" class="fld" value="${esc(p.died || '')}" placeholder="Year died" autocomplete="off">` +
     `</div>` +
     `<input id="cTotem" class="fld" value="${esc(p.totem || '')}" placeholder="Totem / mutupo" autocomplete="off">` +
+    /* AND WHETHER THE FAMILY IS SURE OF ANY OF IT. Under the fields, because
+       it is about them: a name nobody can check, a year that is somebody's
+       best guess. See migration 019 — the doubt is recorded, nothing is
+       hidden, and every word read through this person says so. */
+    `<button class="btn ghost wide${p.unsure != null ? ' on' : ''}" id="cUnsure">` +
+      `${p.unsure != null ? '● ' : ''}Not confirmed</button>` +
+    (p.unsure != null
+      ? `<input id="cUnsureWhy" class="fld" value="${esc(p.unsure)}" autocomplete="off" ` +
+        `placeholder="What is not confirmed, or who could settle it">`
+      : '') +
+    `<p class="roothint">${p.unsure != null
+      ? `${first} is in the tree and related to everybody exactly as before; ` +
+        `what changed is that the app stops claiming more than the family does.`
+      : `Mark this if the family are not certain of who ${first} is, or of ` +
+        `what is written here. Nothing is removed and nobody moves.`}</p>` +
 
     // ── 3. how they are joined ────────────────────────────────────────────
     `<p class="lbl">How ${first} is joined</p>` +
@@ -12756,6 +12934,15 @@ function openCard(id){
     p.born  = $('cBorn').value.trim();
     p.died  = $('cDied').value.trim();
     p.totem = $('cTotem').value.trim();
+    /* The reasons, which are only on the card while there is a doubt to
+       explain. Written straight onto the record the same way the fields
+       above are, so Save covers them and nothing needs its own button. */
+    const why = $('cUnsureWhy');
+    if (why && p.unsure != null) p.unsure = why.value.trim();
+    el.querySelectorAll('[data-unsurefor]').forEach(box => {
+      const u = state.unions[box.dataset.unsurefor];
+      if (u && u.unsure != null) u.unsure = box.value.trim();
+    });
   };
   $('cSave').onclick = () => { commit(); closeForm(); render(); save(); };
   // Naming a relationship redraws the card, so the fields go in first.
@@ -12817,6 +13004,32 @@ function openCard(id){
           `still in the tree, and the children of it stay with ${p.name}.`);
     } else { closeForm(); }
   });
+  /* NOT CONFIRMED, on a join. Pressing the pressed one takes it back off,
+     because a family who have since asked an elder must be able to say so —
+     and because a doubt that cannot be lifted is a doubt nobody will record.
+
+     The reason is asked for in one line rather than in a panel: it is worth
+     far more than the flag ("Ambuya says 1938, her sister says 1941" is the
+     thing an elder can settle) and a family who will not type it should
+     still be able to mark the doubt. Empty is an answer here — see migration
+     019 — so an empty box still records it, and only Escape leaves it. */
+  el.querySelectorAll('[data-unsure]').forEach(b => b.onclick = () => {
+    commit();
+    const u = state.unions[b.dataset.unsure];
+    if (!u) { closeForm(); return; }
+    const had = u.unsure != null;
+    snapshot();
+    /* '' rather than a question in a dialog. A doubt with no reason is a real
+       answer, the box for the reason opens under this the moment it is
+       pressed, and nothing has to be typed for the mark to mean something. */
+    u.unsure = had ? null : '';
+    render(); save(); openCard(id);
+    say(had
+      ? 'Recorded as confirmed. Every word read through it stands as it is.'
+      : 'Recorded as not confirmed. Every word read through this join now ' +
+        'says so — the box under it takes the reason.');
+  });
+
   el.querySelectorAll('[data-parents]').forEach(b => b.onclick = () => {
     commit();
     const label = b.textContent.trim();
@@ -12837,6 +13050,21 @@ function openCard(id){
   if ($('cJoin')) $('cJoin').onclick = () => { commit(); openFind(id); };
 
   /* ── THE OBVIOUS NEXT THINGS ─────────────────────────────────────────── */
+  /* The same act as on a join, on the person. Pressing the pressed one takes
+     the doubt back off, because a doubt that cannot be lifted is a doubt
+     nobody will record. */
+  if ($('cUnsure')) $('cUnsure').onclick = () => {
+    commit();
+    const had = p.unsure != null;
+    snapshot();
+    p.unsure = had ? null : '';
+    render(); save(); openCard(id);
+    say(had
+      ? `${p.name} is recorded as confirmed.`
+      : `${p.name} is recorded as not confirmed. Every word read through them ` +
+        `now says so — the box under it takes the reason.`);
+  };
+
   if ($('cRel')) $('cRel').onclick = () => {
     commit();
     kinA = id; kinB = meId;
@@ -17597,6 +17825,9 @@ function diffOps(was, now){
        different answers about the caption on this side of the family and
        collapsing them loses the one a family had to ask for. */
     if ((p.house ?? null) !== (b.house ?? null)) fields.house = p.house ?? null;
+    /* The same three states, for the same reason: nobody having said is not
+       the same as a family saying they are not sure. See migration 019. */
+    if ((p.unsure ?? null) !== (b.unsure ?? null)) fields.unsure = p.unsure ?? null;
     if (Object.keys(fields).length){
       // `expect` is the whole of the concurrency guarantee: the server
       // refuses this rather than applying it if somebody else has touched
@@ -17676,12 +17907,16 @@ function diffOps(was, now){
       refOf[uid] = r;
       ops.push({ op:'addUnion', ref:r });
       if (u.bond) ops.push({ op:'setBond', unionId:r, bond:u.bond });
+      if (u.unsure != null) ops.push({ op:'setUnsure', unionId:r, unsure:u.unsure });
       u.partners.forEach(x => ops.push({ op:'addPartner', unionId:r, personId:ref(x) }));
       u.children.forEach(x => childAdds.push({ op:'addChild', unionId:r, personId:ref(x) }));
       continue;
     }
     if ((u.bond || '') !== (b.bond || '')){
       ops.push({ op:'setBond', unionId:uid, bond:u.bond || '' });
+    }
+    if ((u.unsure ?? null) !== (b.unsure ?? null)){
+      ops.push({ op:'setUnsure', unionId:uid, unsure:u.unsure ?? null });
     }
     for (const x of u.partners){
       if (!b.partners.includes(x)) ops.push({ op:'addPartner', unionId:uid, personId:ref(x) });
