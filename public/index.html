@@ -1678,6 +1678,68 @@ body.carrying .pod{transition:none;}
 .btn:hover{background:var(--gold-soft); border-color:var(--gold-soft);}
 .btn.ghost:hover{background:transparent; color:var(--ink); border-color:var(--muted);}
 
+/* ── READING IT AT ARM'S LENGTH ──────────────────────────────────────────
+ *
+ * "Replace tiny controls. From the handover, .mini actions are currently
+ *  around 26px. For important actions, I'd increase these substantially,
+ *  especially on mobile."
+ *
+ * The whole interface is built on six type sizes, the largest of which is
+ * eighteen pixels. That is a scale chosen for somebody holding a phone at
+ * reading distance with good eyes, and this app is for families — which means
+ * it is for grandmothers, and for the grandchild who hands them the phone to
+ * ask who somebody is.
+ *
+ * ONE SWITCH, AND IT MOVES THE SCALE RATHER THAN A LIST OF PLACES. Every size
+ * in this interface is one of six tokens and every control is set from them,
+ * so a bigger reading is six numbers: the hierarchy holds, the proportions
+ * hold, nothing has to be re-laid-out, and nothing can be missed. The tokens
+ * are the reason this is a dozen lines instead of a rewrite.
+ *
+ * AND FORTY-FOUR PIXELS, which is the size a finger actually is. Type alone
+ * does not get a pill there — a bigger word in the same padding is a bigger
+ * word in a small target — so the pressable things are given a floor and
+ * centred within it.
+ *
+ * NOT CALLED ELDER MODE ON THE SCREEN. The request's name for it is right
+ * about who asked for it and it is not a label to put on a person: the same
+ * switch is for anybody reading in the sun, or at arm's length, or without
+ * their glasses. It says what it does. */
+:root[data-size="big"]{
+  --t-mark: 12px;
+  --t-note: 14px;
+  --t-read: 16px;
+  --t-act:  18px;
+  --t-name: 20px;
+  --t-head: 26px;
+}
+/* A floor under everything a finger has to find, and the label centred in it
+   rather than sitting at the top of a taller box. */
+:root[data-size="big"] .btn,
+:root[data-size="big"] .seg button,
+:root[data-size="big"] #bar button,
+:root[data-size="big"] #top .set button,
+:root[data-size="big"] #form .found .mini,
+:root[data-size="big"] #form .join .mini,
+:root[data-size="big"] #litbar .pill button,
+:root[data-size="big"] #litbar .chip button{
+  min-height:44px;
+  display:inline-flex; align-items:center; justify-content:center;
+}
+/* The buds and the ways through the door are already taller than this once
+   the words in them grow; what they need is room around the words. */
+:root[data-size="big"] .bud{padding:12px 16px;}
+:root[data-size="big"] #form .found .mini{padding:12px 16px;}
+:root[data-size="big"] .fld{min-height:44px;}
+/* A link inside a sentence stays inside it. Made a flex box like the others
+   it broke the line it was written in, which is the one thing a link in a
+   sentence must not do — so it gets the room around it instead, which a
+   finger finds and the text does not notice. */
+:root[data-size="big"] .linkbtn{padding:16px 6px;}
+/* And the pods, which are the thing being read rather than pressed. They are
+   laid out from POD_W and a measured POD_TALL, both of which follow what is
+   really on screen — see measureChrome — so nothing here has to be told. */
+
 /* ── the door ────────────────────────────────────────────────────────────
  *
  * The first thing, and the room to come back to. Not a dialog over the tree —
@@ -13935,8 +13997,17 @@ function kinshipCoverage(budget){
    for a bright room with a dark system setting or the reverse. */
 const REACH_KEY = 'muti-baobab-reach';
 const SHAPE_KEY = 'muti-baobab-shape';
+const SIZE_KEY  = 'muti-baobab-size';
 const THEME_KEY = 'muti-baobab-theme';
 const PALETTE_KEY = 'muti-baobab-palette';
+
+/* How big everything is read at. See the data-size block in the stylesheet:
+   one switch moves all six type sizes and puts a forty-four pixel floor under
+   everything a finger has to find. */
+const SIZES = [
+  { v:'',    label:'Ordinary', note:'the sizes this tree was drawn for' },
+  { v:'big', label:'Bigger',   note:'larger words, and bigger things to press' }
+];
 
 const THEMES = [
   { v: '',      label: 'Auto',  note: 'follows this device' },
@@ -13972,6 +14043,16 @@ const writePref = (key, v) => {
   catch (e) {}
 };
 
+function applySize(size){
+  const root = document && document.documentElement;
+  if (!root || !root.dataset) return;
+  if (size) root.dataset.size = size; else delete root.dataset.size;
+  /* The bars and the pods are laid out from measurements, not from numbers —
+     so the page has to be told to take them again, or a tree drawn for
+     eighteen-pixel names keeps clearing twenty-pixel ones. */
+  if (typeof measureChrome === 'function') measureChrome();
+}
+
 function applyLook(theme, palette){
   const root = document && document.documentElement;
   if (!root || !root.dataset) return;
@@ -13988,6 +14069,7 @@ function applyLook(theme, palette){
    then another. */
 function loadTheme(){
   applyLook(readPref(THEME_KEY, THEMES), readPref(PALETTE_KEY, PALETTES));
+  applySize(readPref(SIZE_KEY, SIZES));
   setShape(readPref(SHAPE_KEY, SHAPES));
   setReach(readPref(REACH_KEY, REACHES));
   loadFolded();
@@ -15532,6 +15614,7 @@ function openLook(){
     const theme = readPref(THEME_KEY, THEMES);
     const pal = readPref(PALETTE_KEY, PALETTES);
     const shape = readPref(SHAPE_KEY, SHAPES);
+    const size = readPref(SIZE_KEY, SIZES);
     /* What the tree is ACTUALLY showing, which on a big family nobody has
        given an answer for is not what is stored. A panel whose buttons say
        "Everyone" while the screen shows forty of two hundred is the app
@@ -15558,6 +15641,19 @@ function openLook(){
       `${reach !== 'all' ? ' — everybody else is still in the tree, just not on the screen.' : ''}` +
       `${!treeReach && reach !== 'all'
           ? ' This is where a family this size opens; pick one and it stays picked.' : ''}</p>` +
+      /* HOW BIG, and it is not a setting about the tree — it is about the
+         person holding the phone. High up, because somebody who needs it
+         cannot easily read the panel they would have to scroll. */
+      `<p class="lbl" style="margin-top:14px;">How big</p>` +
+      `<div class="seg" id="lookSize">` +
+        SIZES.map(x => `<button type="button" data-size="${x.v}" ` +
+          `aria-pressed="${x.v === size}" title="${esc(x.note)}">${x.label}</button>`).join('') +
+      `</div>` +
+      `<p class="roothint">${esc((SIZES.find(x => x.v === size) || SIZES[0]).note)}` +
+      `${size === 'big'
+          ? ' \u2014 everything a finger has to find is at least 44 pixels.'
+          : ' \u2014 Bigger raises every word and every button, for reading at ' +
+            'arm\u2019s length or handing the phone across the room.'}</p>` +
       `<p class="lbl" style="margin-top:14px;">When you tap somebody</p>` +
       `<div class="seg" id="lookFocus">` +
         `<button type="button" data-focus="on" aria-pressed="${focusLifts}">` +
@@ -15630,6 +15726,18 @@ function openLook(){
                : 'Every family is back on the tree.');
     });
 
+    el.querySelectorAll('[data-size]').forEach(b => b.onclick = () => {
+      writePref(SIZE_KEY, b.dataset.size);
+      applySize(b.dataset.size);
+      draw();
+      /* Redrawn AND re-measured: the pods are cleared by a measured height
+         and the toolbar's own height is written into the layout, so a change
+         of scale that only repainted would leave the tree spaced for the old
+         one. render() takes both again. */
+      render(); fit();
+      const x = SIZES.find(q => q.v === b.dataset.size) || SIZES[0];
+      say(`${x.label} \u2014 ${x.note}.`);
+    });
     el.querySelectorAll('[data-reach]').forEach(b => b.onclick = () => {
       writePref(REACH_KEY, b.dataset.reach);
       setReach(b.dataset.reach);
