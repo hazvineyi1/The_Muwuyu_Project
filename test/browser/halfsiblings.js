@@ -21,7 +21,7 @@
 // Chromium.
 
 const { chromium } = require('playwright');
-const { BASE, EXE, openApp, ready, settled, saved } = require('./lib');
+const { BASE, EXE, openApp, ready, settled, saved, openRecord } = require('./lib');
 
 let pass = 0, fail = 0;
 const ok  = m => { pass++; console.log('  ok   ' + m); };
@@ -131,6 +131,9 @@ const section = t => console.log('\n' + t);
 
   section('the card offers the correction');
   await page.evaluate(id => { sel = id; render(); openCard(id); }, ida);
+  // The joins live behind the card's record fold now — see openRecord.
+  await page.waitForSelector('#form [data-fold="record"]', { timeout: 10000 });
+  await openRecord(page);
   await page.waitForSelector('#cParents', { timeout: 10000 });
   /* THE PRESSED ANSWER NAMES THE PARENTS, rather than comparing her to
      somebody. "Same mother and father" was a phrase written for the form

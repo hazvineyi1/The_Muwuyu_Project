@@ -73,12 +73,12 @@ const section = t => console.log('\n' + t);
        then the family, then what the tree says about them, and the rarer
        switches last and out of the way. Whether somebody is in the public
        record is one of the rarer ones, and it is still reached in one tap. */
-    await page.waitForSelector('#form [data-fold="more"]', { timeout: 10000 });
+    await page.waitForSelector('#form [data-fold="record"]', { timeout: 10000 });
     // Asked of the fold itself rather than of #cVis: a card that is still
     // laying out reports everything inside it as hidden, and this then skips
     // the one click it came for.
-    const shut = await page.$eval('#form [data-fold="more"]', d => !d.open);
-    if (shut) await page.click('#form [data-fold="more"] summary');
+    const shut = await page.$eval('#form [data-fold="record"]', d => !d.open);
+    if (shut) await page.click('#form [data-fold="record"] summary');
     await page.waitForSelector('#cVis', { state:'visible', timeout: 10000 });
     return page.textContent('#form');
   };

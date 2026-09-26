@@ -12,10 +12,23 @@
 // one of them earns its place on somebody's screen one day a year, and every
 // one of them was on everybody's screen every time.
 //
-// THREE THINGS ARE OPEN NOW, and they are the three reasons a card gets
-// opened: what this person is to you, what is known about them, and how they
-// are joined — the last being the one the family asked to be able to put right
-// by tapping a name. The rest is two folds.
+// THREE THINGS WERE OPEN AFTER THAT, and they were the three reasons a card
+// gets opened: what this person is to you, what is known about them, and how
+// they are joined. Two of those three are forms.
+//
+// SO ONE THING IS OPEN NOW. "A person card might initially contain only:
+// name, relationship to me, photo, house/branch, show relationship. Then:
+// More about Rudo ↓ reveals dates, mutupo, other names, history,
+// relationships, sources, editing controls."
+//
+// A relative who taps their aunt to find out what she is to them was handed a
+// name field, an also-known-as field, She/He, two year boxes, a mutupo box and
+// then the joins, and had to work out that the answer was the one line above
+// all of it. The card answers first and offers second now: the word, which
+// side of the family, and four obvious things to do. The record is one tap
+// away behind a fold that says what is in it.
+//
+// NOTHING MOVED OUT OF REACH AND NOTHING WAS DROPPED — see below.
 //
 // AND NOTHING WAS TAKEN AWAY. That is the test that matters most in this file:
 // every control that was on the card is still on the card. A tidy-up that
@@ -49,33 +62,65 @@ section('NOTHING WAS TAKEN AWAY');
   eq('every control is still there', missing, []);
 }
 
-section('THE THREE THINGS A CARD IS OPENED FOR ARE OPEN');
+section('WHAT A CARD SAYS BEFORE IT ASKS ANYTHING');
+/* The answer, whose people they are, and what there is to do. In that order,
+   and all of it before the first box anybody could type in. */
 {
   const t = family();
   const html = t.fe.cardHtml(t.dad);
   const labels = (html.match(/<p class="lbl">([^<]*)/g) || [])
     .map(x => x.replace('<p class="lbl">', ''));
-  eq('in the order somebody reads them',
-     labels.slice(0, 3), ['To you', 'Who Sydney is', 'How Sydney is joined']);
-  /* The section that was asked for by name: "allow the change/correction of
-     relationships when you click the name". */
-  check('and the joins are one of them, not behind a fold',
-        html.indexOf('How Sydney is joined') < html.indexOf('data-fold'), 'joins are folded away');
+  eq('the first thing is what they are to you, in the family\u2019s words',
+     labels[0], 'Hukama hwenyu');
+  check('and which side of the family they are of',
+        /class="branchof">Of the <b>Musoni<\/b> side/.test(html), html.slice(0, 300));
+
+  const firstField = html.indexOf('<input id="cName"');
+  const firstDo    = html.indexOf('class="nextup"');
+  check('the things to do come before the first thing to fill in',
+        firstDo > -1 && firstDo < firstField, { firstDo, firstField });
 }
 
-section('AND THE REST IS TWO FOLDS, CLOSED');
+section('and there is always an obvious next action');
 {
   const t = family();
   const html = t.fe.cardHtml(t.dad);
-  eq('two of them', (html.match(/class="cardfold"/g) || []).length, 2);
+  for (const [id, what] of [['cRel',  'see the whole relationship'],
+                            ['cShow', 'show them on the tree'],
+                            ['cKin',  'see everyone recorded around them'],
+                            ['cAdd',  'add something about them']])
+    check(html.includes(`id="${id}"`), what, html.slice(0, 200));
+  /* Reckoned from somebody, like every other word in this app. There is no
+     relationship to a person who is not related to anybody. */
+  const alone = family();
+  alone.fe.setMe(null);
+  check(!alone.fe.cardHtml(alone.dad).includes('id="cRel"'),
+        'except the relationship one, where there is nobody to be related to');
+}
+
+section('AND THE RECORD IS ONE TAP AWAY, NOT IN THE WAY');
+{
+  const t = family();
+  const html = t.fe.cardHtml(t.dad);
+  eq('two folds', (html.match(/class="cardfold"/g) || []).length, 2);
   check('neither is open to begin with', !/cardfold"[^>]* open/.test(html), html.slice(0, 200));
-  check('the rarer switches are in one', /More about Sydney/.test(html), html);
+  check('one holds the record, and says so', /More about Sydney/.test(html), html);
   check('and taking somebody out is in the other', /Take Sydney out/.test(html), html);
-  /* Delete is the one thing on this card nobody opens it to do, and it was
-     sitting between the family's records and the Save button. */
-  const foldAt = html.indexOf('Take Sydney out');
-  check('so delete is no longer between the records and Save',
-        html.indexOf('id="cGone"') > foldAt, 'delete is still loose on the card');
+
+  /* THE FIELDS, THE JOINS AND THE RARE SWITCHES ARE ALL IN THE FIRST ONE.
+     They were three separate things on one scroll; they are one thing now,
+     because they are one thing — what is recorded about this person. */
+  const rec = html.indexOf('data-fold="record"');
+  const out = html.indexOf('data-fold="out"');
+  for (const [what, at] of [['the name field', html.indexOf('id="cName"')],
+                            ['the joins', html.indexOf('How Sydney is joined')],
+                            ['the rare switches', html.indexOf('id="cRoot"')],
+                            ['and Save, which belongs with them',
+                             html.indexOf('id="cSave"')]])
+    check(at > rec && at < out, `${what} is behind the record fold`, { at, rec, out });
+
+  /* Delete is the one thing on this card nobody opens it to do. */
+  check(html.indexOf('id="cGone"') > out, 'and delete is in the other one');
 }
 
 section('and a fold left open stays open on the next card');
@@ -84,9 +129,9 @@ section('and a fold left open stays open on the next card');
 {
   const t = family();
   t.fe.cardHtml(t.dad);
-  t.fe.cardOpenSet().add('more');
+  t.fe.cardOpenSet().add('record');
   const again = t.fe.cardHtml(t.gf);
-  check('it opens where they left it', /data-fold="more" open/.test(again), again.slice(0, 400));
+  check('it opens where they left it', /data-fold="record" open/.test(again), again.slice(0, 400));
   check('and the other one did not follow it',
         !/data-fold="out" open/.test(again), again);
 }
@@ -110,10 +155,17 @@ section('THE EXPLANATIONS ARE ONE LINE, AND THE REST A TAP AWAY');
 }
 
 section('AND THE LINE ABOUT A WRONG WORD POINTS AT THE SECTION THAT FIXES IT');
+/* It used to say "below", which was true while the joins were the next thing
+   on the scroll. Behind a fold, "below" points at nothing — so it names the
+   fold instead, by the words written on it. */
 {
   const t = family();
   const html = t.fe.cardHtml(t.dad);
-  check('worked out from the joins below', /Worked out from the joins below/.test(html), html);
+  check('the word is worked out from the joins', /Worked out from the joins/.test(html), html);
+  check('and the card says where those joins are, by name',
+        /under <b>More about Sydney<\/b>/.test(html), html);
+  check('which is a fold that really is on this card',
+        html.includes('More about Sydney'), html);
 }
 
 section('A CARD FOR SOMEBODY WITH NO WORD TO YOU STILL HAS EVERYTHING ELSE');

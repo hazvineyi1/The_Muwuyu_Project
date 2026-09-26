@@ -1384,6 +1384,20 @@ body.carrying .pod{transition:none;}
   margin:8px 0 0; font-size:var(--t-note); line-height:1.5; color:var(--muted);
 }
 #form .chainnote .linkbtn{margin-left:6px;}
+/* WHICH SIDE OF THE FAMILY, under the name on a card. The pod wears it and
+   the card did not. */
+#form .branchof{
+  margin:-6px 0 12px; font-family:'Karla',sans-serif; font-size:var(--t-read);
+  color:var(--muted); line-height:1.4;
+}
+#form .branchof b{color:var(--ink); font-weight:700;}
+/* WHAT TO DO NEXT, before anything that is a form. The sentence under each
+   one belongs to it, so it is pulled up tight against it and the space falls
+   between the pairs instead. */
+#form .nextup{margin:12px 0 4px;}
+#form .nextup .btn.wide{margin-bottom:2px;}
+#form .nextup .roothint{margin:0 0 12px;}
+
 #form .teach{
   margin:-4px 0 10px; padding:10px 12px; border-radius:0 0 12px 12px;
   background:var(--pod-hi); border:1.5px solid var(--pod-edge); border-top:none;
@@ -12240,8 +12254,18 @@ function openCard(id){
     `<p class="cap">${esc(p.name)}` +
       `${p.also ? ` <i class="alsocap">${esc(p.also)}</i>` : ''}</p>` +
 
+    /* WHICH SIDE OF THE FAMILY, under the name. The pod wears this and the
+       card did not, so a relative reading a name they do not know on a tree
+       of four hundred had to go back to the picture to find out whose people
+       they are — which is the first thing anybody wants after the name. */
+    (() => {
+      const L = familyLines();
+      const l = L.of(id) ? L.byId.get(L.of(id)) : null;
+      return l && l.name ? `<p class="branchof">Of the <b>${esc(l.name)}</b> side</p>` : '';
+    })() +
+
     // ── 1. what they are to you ───────────────────────────────────────────
-    (rel ? `<p class="lbl">To you</p>` + kinOnCard(id) +
+    (rel ? `<p class="lbl">Hukama hwenyu</p>` + kinOnCard(id) +
       /* WHEN THE WORD IS WRONG BECAUSE THE LINK IS WRONG.
        *
        * "Allow for editing to link or correct relationship and description."
@@ -12257,11 +12281,52 @@ function openCard(id){
        * So the line says which of the two it is; the word is in the box
        * above, and the links are in their own section below, which is where
        * somebody looking to correct a join would go anyway. */
-      `<p class="roothint">Worked out from the joins below. If the word is ` +
-      `wrong, one of them is.</p>`
+      `<p class="roothint">Worked out from the joins recorded in the tree. If ` +
+      `the word is wrong, one of them is \u2014 they are under <b>More about ` +
+      `${first}</b>.</p>`
       : '') +
 
-    // ── 2. what is known about them ───────────────────────────────────────
+    /* ── 2. WHAT TO DO NEXT, before anything that is a form ──────────────
+     *
+     * "There is always an obvious next action."
+     *
+     * A card opened with the record: a name field, an also-known-as field,
+     * She/He, two year boxes, a mutupo box, then the joins, then the folds.
+     * Everything on it was editable and most of it was somebody's homework.
+     * A relative who taps their aunt to find out what she is to them was
+     * handed a form and had to work out that the answer was the one line at
+     * the top of it.
+     *
+     * So the card now answers first and offers second, and the record is one
+     * tap away under a fold that names what is in it. Nothing has been
+     * removed; it is the order that changed, which is the whole of
+     * recommendation 11. */
+    `<div class="nextup">` +
+      (rel
+        ? `<button class="btn ghost wide" id="cRel">Ona hukama</button>` +
+          `<p class="roothint">The whole answer: what ${first} is to you, what ` +
+          `you are to ${first}, the way the two of you are joined, and why ` +
+          `that is the word.</p>`
+        : '') +
+      `<button class="btn ghost wide" id="cShow">Ona paMuti</button>` +
+      `<p class="roothint">Show where ${first} stands, and light the people ` +
+      `${first} belongs to.</p>` +
+      /* EVERYONE ALREADY THERE, one tap from the card. The joins below show
+         this person's parents and marriages and nothing else — not their
+         children, not their brothers and sisters, nobody further out. */
+      `<button class="btn ghost wide" id="cKin">` +
+        `See everyone recorded around ${first}</button>` +
+      `<p class="roothint">Their parents, their marriages, their children, their ` +
+      `brothers and sisters and everybody further out, with the word for each. ` +
+      `Worth a look before adding somebody — it is how a family stops entering ` +
+      `the same person twice.</p>` +
+      `<button class="btn ghost wide" id="cAdd">Add something about ${first}</button>` +
+      `<p class="roothint">A year, a mutupo, the name they married into, who ` +
+      `they are joined to. Anybody can, at any time, with no passcode.</p>` +
+    `</div>` +
+
+    // ── 3. the record, behind the fold that names it ──────────────────────
+    cardFold('record', `More about ${(p.name || '').split(' ')[0]}`,
     `<p class="lbl">Who ${first} is</p>` +
     /* HOW TO CHANGE IT, said where the fields are.
      *
@@ -12351,24 +12416,17 @@ function openCard(id){
         `${esc((state.people[h.holder] || {}).name || '')} has more than one ` +
         `house, and these are the children of this one.</p>` : '';
     })() +
-    /* EVERYONE ALREADY THERE, one tap from the card.
-       The block above shows this person's parents and marriages and nothing
-       else — not their children, not their brothers and sisters, nobody
-       further out. That is the half of the answer a relative needs before
-       they type a name, and without it a family finds out they have two of
-       somebody long after both have been filled in. */
-    `<div class="row"><button class="btn ghost wide" id="cKin">` +
-      `See everyone recorded around ${first}</button></div>` +
-    `<p class="roothint">Their parents, their marriages, their children, their ` +
-    `brothers and sisters and everybody further out, with the word for each. ` +
-    `Worth a look before adding somebody — it is how a family stops entering ` +
-    `the same person twice.</p>` +
     `<div class="row"><button class="btn ghost wide" id="cJoin">` +
       `Join ${first} to somebody already here</button></div>` +
     whyOnCard(id) +
 
-    // ── 4. the rarer switches, out of the way ─────────────────────────────
-    cardFold('more', `More about ${(p.name || '').split(' ')[0]}`,
+    /* ── and the rarer switches, at the end of the same fold ─────────────
+     *
+     * These had a fold of their own, also called "More about X", which put
+     * two folds of that name on one card the moment the record went behind
+     * one. They are of a piece with the record anyway: things about this
+     * person that most people opening the card are not here to change. */
+    `<p class="lbl">Rarely needed</p>` +
       `<button class="btn ghost wide${p.root ? ' on' : ''}" id="cRoot">` +
         `${p.root ? '● ' : ''}Furthest we can trace</button>` +
       `<p class="roothint">${p.root
@@ -12387,7 +12445,15 @@ function openCard(id){
         ? 'Everybody else is off the screen while you work. Nothing has been changed or removed, ' +
           'and the whole family comes back when you close it.'
         : 'Takes everybody else off the screen, so this branch can be grown without ' +
-          'the rest of the family in the way. It changes no records.'}</p>`,
+          'the rest of the family in the way. It changes no records.'}</p>` +
+      /* SAVE IS WHERE THE FIELDS ARE. It used to sit at the foot of the card,
+         which was the right place while the card WAS the fields. With the
+         record behind a fold, a Save button under a card showing a Shona word
+         and four things to do is a button with nothing to save — the exact
+         "everything is available so everything is shown" this fold exists to
+         end. Closing the card without pressing it still keeps nothing, which
+         is what it has always meant. */
+      `<div class="row"><button class="btn" id="cSave">Save</button></div>`,
       p.root ? 'end of the line' : (p.vis ? 'set by hand' : '')) +
 
     /* TAKING THEM OUT, on the card, where somebody looking at a wrong entry
@@ -12419,8 +12485,7 @@ function openCard(id){
       `goes at once; the bar offers to put them back for a few seconds, and ` +
       `after that it cannot be undone.</p>`) +
 
-    `<div class="row"><button class="btn" id="cSave">Save</button>` +
-    `<button class="btn ghost" id="cNo">Close</button></div>`;
+    `<div class="row"><button class="btn ghost" id="cNo">Close</button></div>`;
   el.innerHTML = cardInk;
   document.body.appendChild(el);
   placeForm(el);
@@ -12546,6 +12611,34 @@ function openCard(id){
   });
   if ($('cKin')) $('cKin').onclick = () => { commit(); openRelatives(id); };
   if ($('cJoin')) $('cJoin').onclick = () => { commit(); openFind(id); };
+
+  /* ── THE OBVIOUS NEXT THINGS ─────────────────────────────────────────── */
+  if ($('cRel')) $('cRel').onclick = () => {
+    commit();
+    kinA = id; kinB = meId;
+    openKinship();
+  };
+  if ($('cShow')) $('cShow').onclick = () => {
+    commit();
+    sel = id; closeForm(); render();
+    if (layout.persons[id]) focusOn(id, Math.max(pos.k, 0.78));
+    revealBuds();
+  };
+  /* Adding something IS the record, so this opens it rather than being a
+     second way of doing the same thing somewhere else — and puts the cursor
+     in the first field, because a fold that opens onto a wall of boxes has
+     only moved the question of where to start. */
+  if ($('cAdd')) $('cAdd').onclick = () => {
+    const fold = el.querySelector('[data-fold="record"]');
+    if (!fold) return;
+    fold.open = true;
+    cardOpen.add('record');
+    const box = el.querySelector('#cName');
+    if (box){
+      box.scrollIntoView({ block:'center' });
+      try { box.focus(); box.setSelectionRange(box.value.length, box.value.length); } catch (e) {}
+    }
+  };
   $('cAside').onclick = () => { commit(); closeForm(); openSetAside(id); };
   $('cGone').onclick = () => {
     commit();

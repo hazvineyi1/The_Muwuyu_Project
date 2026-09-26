@@ -105,6 +105,27 @@ async function throughDoor(page, { timeout = 4000 } = {}){
   return true;
 }
 
+/* OPEN THE RECORD ON A CARD.
+
+   A card answers first now — the Shona word, which side of the family, and
+   the things there are to do — and everything that is a form is behind one
+   fold named "More about <name>". A suite that drives the fields, the joins
+   or the rare switches has to open it, the way a person does.
+
+   Pressed rather than forced open, for the same reason throughDoor presses
+   the door: a suite that set `details.open` by hand would go on passing on a
+   day the fold stopped opening. */
+async function openRecord(page, { timeout = 5000 } = {}){
+  const fold = await page.$('#form [data-fold="record"]');
+  if (!fold) return false;
+  if (await fold.evaluate(d => d.open)) return true;
+  await page.click('#form [data-fold="record"] > summary');
+  await page.waitForFunction(
+    () => { const d = document.querySelector('#form [data-fold="record"]'); return d && d.open; },
+    null, { timeout });
+  return true;
+}
+
 const ready = async page => {
   // Bounded short: most of the time nothing is asked and this is the cost of
   // finding that out.
@@ -158,4 +179,4 @@ const saved = async (page, { timeout = 20000 } = {}) => {
 };
 
 module.exports = { BASE, EXE, PASSPHRASE, openApp, enter, onlyThisOrigin,
-                   ready, settled, saved, sayWhoYouAre, throughDoor };
+                   ready, settled, saved, sayWhoYouAre, throughDoor, openRecord };

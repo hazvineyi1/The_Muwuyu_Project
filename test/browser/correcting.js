@@ -27,7 +27,7 @@
 // Chromium.
 
 const { chromium } = require('playwright');
-const { BASE, EXE, onlyThisOrigin, throughDoor } = require('./lib');
+const { BASE, EXE, onlyThisOrigin, throughDoor, openRecord } = require('./lib');
 
 let pass = 0, fail = 0;
 const ok  = m => { pass++; console.log('  ok   ' + m); };
@@ -57,6 +57,9 @@ const FAMILY = JSON.stringify({
 
 const open = async (page, id) => {
   await page.evaluate(i => { sel = i; render(); openCard(i); }, id);
+  // The joins live behind the card's record fold now — see openRecord.
+  await page.waitForSelector('#form [data-fold="record"]', { timeout: 10000 });
+  await openRecord(page);
   await page.waitForSelector('#cMarriages', { timeout: 10000 });
 };
 const rows = page => page.$$eval('#cMarriages .join', els => els.map(e => ({
