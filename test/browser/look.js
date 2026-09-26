@@ -17,6 +17,8 @@
 // Chromium.
 
 const { chromium } = require('playwright');
+// The app opens on a door now; this presses the way through to the tree.
+const { throughDoor } = require('./lib');
 
 const BASE = process.env.MW_BASE_URL || 'http://127.0.0.1:3930/';
 const EXE  = process.env.MW_CHROMIUM || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
@@ -50,6 +52,7 @@ const token = (page, name) => page.evaluate(
   await page.evaluate(f => localStorage.setItem('muti-baobab-v1', f), FAMILY);
   await page.goto(BASE, { waitUntil:'domcontentloaded' });
   await page.waitForFunction(() => { try { return people().length === 2; } catch(e){ return false; } });
+  await throughDoor(page);
 
   section('the tree starts in the palette it was designed around');
   is(await page.evaluate(() => document.documentElement.dataset.palette), undefined,
@@ -94,6 +97,7 @@ const token = (page, name) => page.evaluate(
   section('it survives a reload, because it is the family’s own choice');
   await page.reload({ waitUntil:'domcontentloaded' });
   await page.waitForFunction(() => { try { return people().length === 2; } catch(e){ return false; } });
+  await throughDoor(page);
   is(await page.evaluate(() => document.documentElement.dataset.palette), 'stone',
      'still Stone');
   is(await token(page, 'gold'), '#2F3338', 'still graphite');

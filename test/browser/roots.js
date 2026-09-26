@@ -17,6 +17,8 @@
 // Chromium.
 
 const { chromium } = require('playwright');
+// The app opens on a door now; this presses the way through to the tree.
+const { throughDoor } = require('./lib');
 
 const BASE = process.env.MW_BASE_URL || 'http://127.0.0.1:3930/';
 const EXE  = process.env.MW_CHROMIUM || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
@@ -61,6 +63,7 @@ const is  = (a, b, m) => a === b ? ok(m) : bad(m, `expected ${JSON.stringify(b)}
   });
   await page.reload();
   await page.waitForFunction(() => { try { return people().length === 4; } catch (e) { return false; } });
+  await throughDoor(page);
 
   // ── the frontier split ────────────────────────────────────────────────
   const f = await page.evaluate(() => frontier());

@@ -34,7 +34,7 @@
 // Chromium.
 
 const { chromium } = require('playwright');
-const { BASE, EXE, onlyThisOrigin } = require('./lib');
+const { BASE, EXE, onlyThisOrigin, throughDoor } = require('./lib');
 
 let pass = 0, fail = 0;
 const ok  = m => { pass++; console.log('  ok   ' + m); };
@@ -83,6 +83,7 @@ const open = async (ctx, family, me) => {
   }, [family, me || '']);
   await page.goto(BASE, { waitUntil:'domcontentloaded' });
   await page.waitForFunction(() => { try { return people().length > 0; } catch(e){ return false; } });
+  await throughDoor(page);
   await page.waitForTimeout(500);
   return page;
 };

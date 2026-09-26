@@ -59,6 +59,7 @@ const SUITES = [
     env: { MW_ADMIN_PASSPHRASE: process.env.MW_ADMIN_PASSPHRASE } },
   { name: 'buds',         kind: 'static' },
   { name: 'correcting',   kind: 'static' },
+  { name: 'door',         kind: 'static' },
   { name: 'finding',      kind: 'static' },
   { name: 'joined',       kind: 'static' },
   { name: 'lines',        kind: 'static' },

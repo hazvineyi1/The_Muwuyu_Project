@@ -27,7 +27,7 @@
 // Chromium.
 
 const { chromium } = require('playwright');
-const { BASE, EXE, onlyThisOrigin } = require('./lib');
+const { BASE, EXE, onlyThisOrigin, throughDoor } = require('./lib');
 
 let pass = 0, fail = 0;
 const ok  = m => { pass++; console.log('  ok   ' + m); };
@@ -76,6 +76,7 @@ const rows = page => page.$$eval('#cMarriages .join', els => els.map(e => ({
                              localStorage.setItem('muti-baobab-me', 'j'); }, FAMILY);
   await page.goto(BASE, { waitUntil:'domcontentloaded' });
   await page.waitForFunction(() => { try { return people().length === 6; } catch(e){ return false; } });
+  await throughDoor(page);
   await page.waitForTimeout(500);
 
   section('EVERY JOIN OFFERS A WAY TO CORRECT WHO IT IS WITH');

@@ -22,6 +22,8 @@
 // Chromium.
 
 const { chromium } = require('playwright');
+// The app opens on a door now; this presses the way through to the tree.
+const { throughDoor } = require('./lib');
 
 const BASE = process.env.MW_BASE_URL || 'http://127.0.0.1:3930/';
 const EXE  = process.env.MW_CHROMIUM || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
@@ -70,6 +72,7 @@ const midpointOf = (page, selector) => page.evaluate(sel => {
                              localStorage.setItem('muti-baobab-me', 'p4'); }, FAMILY);
   await page.goto(BASE, { waitUntil:'domcontentloaded' });
   await page.waitForFunction(() => { try { return people().length === 5; } catch (e) { return false; } });
+  await throughDoor(page);
   await page.waitForTimeout(700);
 
   section('every line carries the people it joins');

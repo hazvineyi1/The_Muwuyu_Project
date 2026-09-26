@@ -31,7 +31,7 @@
 // Chromium.
 
 const { chromium } = require('playwright');
-const { BASE, EXE, onlyThisOrigin } = require('./lib');
+const { BASE, EXE, onlyThisOrigin, throughDoor } = require('./lib');
 
 let pass = 0, fail = 0;
 const ok  = m => { pass++; console.log('  ok   ' + m); };
@@ -110,6 +110,7 @@ const openFor = async (page, a, b) => {
                                localStorage.setItem('muti-baobab-me', 'p4'); }, FAMILY);
     await page.goto(BASE, { waitUntil:'domcontentloaded' });
     await page.waitForFunction(() => { try { return people().length === 6; } catch(e){ return false; } });
+    await throughDoor(page);
     await page.waitForTimeout(400);
 
     /* Person: Tendai. Seen by: Belinda. So the panel's first card answers
@@ -156,6 +157,7 @@ const openFor = async (page, a, b) => {
                                localStorage.setItem('muti-baobab-me', 'p4'); }, FAMILY);
     await page.goto(BASE, { waitUntil:'domcontentloaded' });
     await page.waitForFunction(() => { try { return people().length === 6; } catch(e){ return false; } });
+    await throughDoor(page);
     await page.waitForTimeout(400);
 
     await openFor(page, 'p5', 'p4');
@@ -207,6 +209,7 @@ const openFor = async (page, a, b) => {
                                localStorage.setItem('muti-baobab-me', 'p4'); }, FAMILY);
     await page.goto(BASE, { waitUntil:'domcontentloaded' });
     await page.waitForFunction(() => { try { return people().length === 6; } catch(e){ return false; } });
+    await throughDoor(page);
     await page.waitForTimeout(400);
 
     await openFor(page, 'p2', 'p4');

@@ -1648,6 +1648,68 @@ body.carrying .pod{transition:none;}
 .btn:hover{background:var(--gold-soft); border-color:var(--gold-soft);}
 .btn.ghost:hover{background:transparent; color:var(--ink); border-color:var(--muted);}
 
+/* ── the door ────────────────────────────────────────────────────────────
+ *
+ * The first thing, and the room to come back to. Not a dialog over the tree —
+ * it covers the tree, because a question asked in front of the answer reads
+ * as a thing in the way.
+ *
+ * THE WAYS THROUGH IT ARE BIG ON PURPOSE. The controls this app grew were
+ * 26px pills, which is a size you choose when you already know what they do.
+ * These are the opposite case: somebody who has never seen this, holding a
+ * phone, being handed it by a relative. Each one is a full-width target with
+ * its own sentence under it, because an icon explains nothing to somebody who
+ * has not been told what it means.
+ *
+ * IT SCROLLS RATHER THAN SHRINKING. Four ways, a greeting and a line of
+ * Shona do not fit a 320×568 screen at a size anybody's grandmother can read,
+ * and the answer to that is the screen moving, not the type getting smaller.
+ */
+#door{
+  position:fixed; inset:0; z-index:var(--z-over);
+  display:flex; align-items:center; justify-content:center;
+  overflow:auto; padding:24px 16px;
+  background:var(--sky);
+}
+/* An author display: beats the browser's own rule for [hidden], so the guard
+   has to be written. Without it the door never closes. */
+#door[hidden]{display:none;}
+#door .doorin{width:min(440px,100%); margin:auto; text-align:center;}
+#door h1{
+  font-family:'Fraunces',Georgia,serif; font-weight:600;
+  font-size:clamp(31px,6vw,46px); margin:0 0 8px; letter-spacing:.01em;
+  color:var(--ink);
+}
+#door h1 em{font-style:italic; color:var(--leaf);}
+/* The line under the name is Shona and is the whole promise of the app, so it
+   is not set as small print. */
+#door p{
+  margin:0 auto 24px; max-width:34ch; line-height:1.6;
+  font-size:var(--t-name); color:var(--muted);
+}
+#door .doorways{display:flex; flex-direction:column; gap:10px; text-align:left;}
+#door .way{
+  /* text-align, explicitly: a button is centred by the browser's own
+     stylesheet, which beats anything inherited from the panel. */
+  display:block; width:100%; cursor:pointer; text-align:left;
+  padding:16px; border-radius:26px 8px 26px 8px;
+  background:var(--pod); border:1.5px solid var(--pod-edge); box-shadow:var(--shadow);
+  color:var(--ink);
+}
+#door .way:hover{border-color:var(--gold); box-shadow:var(--lift);}
+#door .way:focus-visible{outline:2.5px solid var(--gold); outline-offset:3px;}
+#door .way b{
+  display:block; font-family:'Fraunces',Georgia,serif; font-size:var(--t-name);
+  font-weight:600; line-height:1.3;
+}
+#door .way span{
+  display:block; margin-top:2px; font-family:'Karla',sans-serif;
+  font-size:var(--t-read); color:var(--muted); line-height:1.45;
+}
+/* The way that is only ever the tree itself, kept quieter than the questions:
+   it is what somebody does when none of the questions is theirs. */
+#door .way.plain{background:transparent; box-shadow:none; border-style:dashed;}
+
 /* ── first run ──────────────────────────────────────────────────────── */
 #seed{
   position:fixed; left:50%; top:50%; transform:translate(-50%,-50%);
@@ -1725,17 +1787,20 @@ body.carrying .pod{transition:none;}
   color:var(--ink); letter-spacing:.01em; white-space:nowrap;
 }
 #top .brand em{font-style:italic; color:var(--leaf);}
-/* ── AND ON A PHONE THE PROJECT'S OWN NAME GIVES WAY ────────────────────
+/* ── AND ON A PHONE IT GIVES UP ITS SECOND WORD, NOT ITS PLACE ──────────
  *
  * Four things were sharing 292 pixels: this, the family's name, who is
  * looking, and the way out. Every one of them was cut — "The Muwuyu P…",
- * "The Baobab Proj…", "You: Muse…", "Sign…" — and of the four, three are
- * facts somebody needs and this one is the masthead. Which family this is
- * and who you are is what every Shona word on the screen is reckoned from;
- * what the app is called is in the tab, in the door, and on the page they
- * signed in from. */
+ * "The Baobab Proj…", "You: Muse…", "Sign…" — and this one used to be the
+ * one that went, because a masthead is the only one of the four that is not
+ * a fact somebody needs.
+ *
+ * IT IS NOT A MASTHEAD ANY MORE. It is the way back to the door, which is
+ * where finding yourself, finding somebody and seeing the tree all live —
+ * and a phone is exactly the device that cannot afford to lose them. So it
+ * drops to one word and keeps its corner. */
 @media (max-width: 480px){
-  #top .brand{display:none;}
+  #top .brand em{display:none;}
   #top .set{max-width:100%;}
 }
 /* And narrower still, the three of them take two rows rather than each
@@ -1934,9 +1999,9 @@ body.carrying .pod{transition:none;}
 }
 @media (max-width:600px){
   #hint{display:none;}
-  /* On a phone the family and who you are are what matter; the project's own
-     name is on the tab and on the door they came through. */
-  #top .brand{display:none;}
+  /* On a phone this keeps its corner and drops its second word — see the
+     rule above. It is the way back to the door now, not a masthead. */
+  #top .brand em{display:none;}
   #top .set{max-width:calc(100vw - 28px);}
   #top .set button{font-size:var(--t-read); padding:8px 10px; max-width:150px;}
   #bar button{padding:8px 10px; font-size:var(--t-read);}
@@ -1990,6 +2055,28 @@ body.carrying .pod{transition:none;}
      nobody to start from. It says so, so that the rule is learned here
      rather than contradicted here — and it is never shown again once this
      family has one name in it. -->
+<!-- THE DOOR.
+     "Stop making users learn the interface before they can learn about their
+      family." — and the tree was the interface. Opening Muti put somebody in
+     front of a diagram with a toolbar under it, and everything they came for
+     was behind a control they had to work out first. The diagram is a fine
+     ANSWER and a poor question.
+
+     So the first thing is a question, in the family's own language, with the
+     three things anybody actually arrives wanting: who am I here, who am I
+     looking for, and let me see the whole thing. The tree is the third of
+     those, not the frame around the other two.
+
+     It is not a tutorial and it is not dismissed for ever. It is the room
+     you come back to, which is why the name at the top left goes back to it. -->
+<div id="door" hidden>
+  <div class="doorin">
+    <h1 id="doorHi"></h1>
+    <p id="doorSub"></p>
+    <div class="doorways" id="doorWays"></div>
+  </div>
+</div>
+
 <div id="seed" hidden>
   <h1>The <em>Muwuyu</em> Project</h1>
   <p>A baobab is mostly roots. This family has nobody in it yet, so one name has
@@ -2018,7 +2105,9 @@ body.carrying .pod{transition:none;}
      Signing out lives here too, beside them, because a way in that has no
      visible way out is a door that only opens. -->
 <div id="top" hidden>
-  <span class="brand">The <em>Muwuyu</em> Project</span>
+  <!-- The way back to the door. A name at the top left that goes home is the
+       one convention every phone in this family already carries. -->
+  <button type="button" class="brand" id="brand">Muti <em>weMhuri</em></button>
   <span class="set">
     <button class="who" id="family" hidden>This family</button>
     <button class="who" id="who">You: <b>—</b></button>
@@ -11756,8 +11845,17 @@ function openWords(who){
 
 function openKinship(){
   closeForm();
-  if (!kinA || !state.people[kinA]) kinA = meId || sel || state.rootId;
   if (kinB && !state.people[kinB]) kinB = null;
+  /* ONE SIDE ALREADY ANSWERED MEANS THE OTHER IS THE QUESTION.
+     This filled the empty side with whoever is holding the phone, which was
+     right when the panel was opened cold and wrong the moment anything
+     arrived here already knowing half of it. The door's "How are we related?"
+     fills SEEN BY with you — and the panel then filled PERSON with you too
+     and answered "the same person", which is true and is not what anybody
+     asked; giving it the root instead answered about a stranger. So a side
+     that is already picked leaves the other one empty, waiting, with the
+     cursor in it. */
+  if (!kinA || !state.people[kinA]) kinA = kinB ? null : (meId || sel || state.rootId);
   pending = { kind: 'dupes', anchorId: kinA || state.rootId };
 
   const cov = kinshipCoverage();
@@ -11897,6 +11995,12 @@ function openKinship(){
     inp.addEventListener('input', show);
     inp.addEventListener('focus', show);
   });
+  /* THE EMPTY SIDE TAKES THE CURSOR. Arriving here from the door, one side is
+     already answered — you — and the other is the whole question. */
+  if (!kinA || !kinB){
+    const want = el.querySelector(!kinA ? '#kinA' : '#kinB');
+    if (want) setTimeout(() => { try { want.focus(); } catch (e) {} }, 60);
+  }
   el.querySelectorAll('[data-ask]').forEach(b => b.onclick = () => openCard(b.dataset.ask));
   el.querySelectorAll('[data-fix]').forEach(b => b.onclick = () => openCard(b.dataset.fix));
   el.querySelectorAll('[data-chain]').forEach(b => b.onclick = () => {
@@ -15257,6 +15361,179 @@ function openLook(){
    Somebody genuinely not in the tree yet can put themselves in it, which is
    the honest answer to "I am not on this list": the way to be seen by a
    family tree is to be in it. */
+/* ── THE DOOR ────────────────────────────────────────────────────────────
+ *
+ * "Stop making users learn the interface before they can learn about their
+ *  family."
+ *
+ * Opening Muti used to put somebody in front of a diagram with a toolbar
+ * under it. Everything they had come for — who am I here, what is this
+ * person to me, where are my mother's people — was behind a control they had
+ * to work out first, and the app's own answer to "what can I do" was thirteen
+ * buttons and a picture. A diagram is a fine ANSWER and a poor question.
+ *
+ * So the first thing is a question, in the family's own words, offering the
+ * three things anybody actually arrives wanting. The tree is the third of
+ * them rather than the frame around the other two.
+ *
+ * THE SHONA HERE WAS GIVEN, NOT GUESSED. Every Shona line on this screen was
+ * written by the family this app is for. Where no word was given the label is
+ * in English, deliberately: an app that invents Shona to look Shona is doing
+ * the opposite of what this project is for, and a wrong word in a greeting is
+ * worse than a right one in the other language.
+ *
+ * AND IT IS NOT A TUTORIAL. Nothing is explained; four things are offered and
+ * each of them does something. Somebody learns this app by finding their
+ * grandmother in it, which is also the only reason they opened it. */
+let doorOpen = false;
+
+/* Whether there is anything to open a door onto. An empty family already has
+   its own first screen — #seed, which asks for the one name that has to go in
+   on its own — and two first screens is no first screen at all. */
+const doorWorth = () => {
+  try { return people().length > 0; } catch (e) { return false; }
+};
+
+function openDoor(){
+  const el = $('door');
+  if (!el || !doorWorth()) return;
+  closeForm();
+  doorOpen = true;
+
+  const me = meId && present(meId) ? state.people[meId] : null;
+  const first = me ? (me.name || '').split(' ')[0] : '';
+
+  /* TWO GREETINGS, AND THE DIFFERENCE IS WHETHER THE APP KNOWS WHO IT IS
+     TALKING TO. Somebody it does not know is asked the question the whole
+     app depends on; somebody it does know is greeted by name and asked what
+     they want, because they have already answered it. */
+  $('doorHi').innerHTML = me
+    ? `Mauya, ${esc(first)}.`
+    : `Muti <em>weMhuri</em>`;
+  $('doorSub').textContent = me
+    ? 'What would you like to know?'
+    : 'Ziva vanhu vako. Ziva hukama hwenyu.';
+
+  const way = (key, title, under, plain) =>
+    `<button type="button" class="way${plain ? ' plain' : ''}" data-door="${key}">` +
+      `<b>${esc(title)}</b><span>${esc(under)}</span></button>`;
+
+  $('doorWays').innerHTML = me
+    ? way('find',  'Find someone',        'Search the family by name.') +
+      way('kin',   'How are we related?', `Pick anybody, and Muti says what they are to ` +
+                                          `${first}, what ${first} is to them, and why.`) +
+      way('mine',  'My family',           'The people closest to you.') +
+      way('tree',  'Explore the tree',    'The whole family, as a tree.', true)
+    : way('me',    'Ndiri ani?',          'Find yourself in the family.') +
+      way('find',  'Ndiri kutsvaga ani?', 'Find someone in the family.') +
+      way('tree',  'Ona Muti',            'Explore the whole family.', true);
+
+  el.hidden = false;
+  el.querySelectorAll('[data-door]').forEach(b => b.onclick = () => takeDoor(b.dataset.door));
+  setTimeout(() => { try { el.querySelector('.way').focus(); } catch (e) {} }, 60);
+}
+
+function closeDoor(){
+  doorOpen = false;
+  const el = $('door');
+  if (el) el.hidden = true;
+}
+
+/* Every way out of the door goes somewhere. There is no way that only closes
+   it, because "what can I do next" has to have an answer on this screen as
+   much as on any other — the tree IS one of the answers, and it is named. */
+function takeDoor(key){
+  closeDoor();
+  if (key === 'me')   return openWhoAmI();
+  if (key === 'find') return openFind();
+  if (key === 'kin'){ kinB = meId; kinA = null; return openKinship(); }
+  if (key === 'mine') return openRelatives(meId);
+  render(); fit();
+}
+
+/* ── WHO AM I IN THIS FAMILY ─────────────────────────────────────────────
+ *
+ * The one question every Shona word on the screen is reckoned from, asked on
+ * its own rather than as a mode you put the tree into.
+ *
+ * There was already a version of this — askWhoIsViewing — and it belongs to
+ * the server: it is handed a roster, and answering it claims the viewer on
+ * the session so the NEXT device gets the same answer. That is the right
+ * thing on a shared tree and it cannot run at all on a browser holding its
+ * own copy, which is the case this is for. setMe does the claiming where
+ * there is a session to claim on, so this asks the question and leaves that
+ * to it.
+ *
+ * MATCHED THE SAME WAY FIND MATCHES. A woman recorded under her father's
+ * surname looks for the name she has been called since the wedding, and a
+ * search that only reads the record would tell her she is not in her own
+ * family. */
+function openWhoAmI(){
+  closeForm();
+  pending = { kind:'dupes', anchorId: meId || state.rootId };
+  let q = '';
+
+  const el = document.createElement('div');
+  el.id = 'form';
+  el.className = 'wide';
+
+  /* Named paint, not draw: draw() is the tree. */
+  const paint = () => {
+    const hits = people().filter(p => matchesName(p, q.trim().toLowerCase())).slice(0, 8);
+    el.innerHTML =
+      `<p class="cap">Ndiri ani?</p>` +
+      `<p class="covnote">Every word in this tree is reckoned from one person. ` +
+      `Say which one you are and it will read the family from where you stand.</p>` +
+      `<input id="meQ" class="fld" placeholder="Your name" autocomplete="off" value="${esc(q)}">` +
+      `<div class="kinlist">` +
+        (hits.length
+          ? hits.map(p =>
+              `<button type="button" data-me="${esc(p.id)}">${esc(p.name)}` +
+              `<small>${esc(positionOf(p.id))}</small></button>`).join('')
+          : `<p class="covnote">Nobody of that name is in this family yet. Try the ` +
+            `name you were born with, or the one you married into — this looks ` +
+            `for both.</p>`) +
+      `</div>` +
+      (meId && present(meId)
+        ? `<div class="row" style="margin-top:12px">` +
+          `<button type="button" class="btn ghost wide" id="meNone">` +
+          `Nobody in particular</button></div>`
+        : '') +
+      `<div class="row" style="margin-top:12px">` +
+        `<button class="btn ghost" id="meNo">Close</button></div>`;
+    wire();
+  };
+
+  const wire = () => {
+    const box = el.querySelector('#meQ');
+    box.addEventListener('input', () => {
+      q = box.value;
+      const at = box.selectionStart;
+      paint();
+      const again = el.querySelector('#meQ');
+      again.focus();
+      try { again.setSelectionRange(at, at); } catch (e) {}
+    });
+    el.querySelectorAll('[data-me]').forEach(b => b.onclick = () => {
+      setMe(b.dataset.me);
+      closeForm();
+      /* AND THE ANSWER IS SHOWN, not just recorded. Somebody who has just
+         said who they are is looking at a tree that has this second filled
+         with Shona words, and the thing to do is look at it. */
+      render(); fit();
+    });
+    const none = el.querySelector('#meNone');
+    if (none) none.onclick = () => { setMe(null); closeForm(); render(); };
+    el.querySelector('#meNo').onclick = closeForm;
+  };
+
+  paint();
+  document.body.appendChild(el);
+  placeForm(el);
+  setTimeout(() => { try { el.querySelector('#meQ').focus(); } catch (e) {} }, 60);
+  el.addEventListener('keydown', e => { if (e.key === 'Escape'){ e.preventDefault(); closeForm(); } });
+}
+
 function askWhoIsViewing(roster, saying){
   return new Promise(resolve => {
     closeForm();
@@ -16286,6 +16563,12 @@ function fit(){
   applyTransform();
 }
 
+/* THE WAY BACK TO THE DOOR. Every other screen in this app is reached from
+   somewhere; this is the one that has to be reachable from everywhere, so it
+   is the name in the corner — the one convention every phone already
+   carries. */
+$('brand').onclick = () => { if (doorOpen) closeDoor(); else openDoor(); };
+
 $('who').onclick = () => {
   if (store === 'shared' && viewerVia === 'invite'){
     say(`This link was made for ${meId && state.people[meId]
@@ -16434,7 +16717,13 @@ addEventListener('hashchange', () => {
 });
 
 addEventListener('resize', applyTransform);
-addEventListener('keydown', e => { if (e.key === 'Escape' && !pending && sel){ sel = null; render(); } });
+addEventListener('keydown', e => {
+  /* Escape at the door means the tree, which is the way through it that
+     asks for nothing. It is tried first: while the door is up there is no
+     selection behind it to let go of. */
+  if (e.key === 'Escape' && doorOpen){ e.preventDefault(); takeDoor('tree'); return; }
+  if (e.key === 'Escape' && !pending && sel){ sel = null; render(); }
+});
 
 /* ── storage and sync ───────────────────────────────────────────────────
    The tree lives in Postgres and several relatives edit it at once.
@@ -16631,6 +16920,12 @@ async function load(){
   updateWho();
   render();
   if (people().length) land();
+  /* AND THE DOOR IS THE FIRST THING, on a tree that has anybody in it. It
+     covers the picture that has just been laid out, which is deliberate: the
+     layout is ready underneath so that "Ona Muti" is one tap and no wait,
+     and nobody has to understand a diagram to get past the front of the app.
+     An empty family keeps #seed, which asks the one question that case has. */
+  if (people().length && store !== 'keeper' && store !== 'stalled') openDoor();
   if (store === 'shared') startPolling();
 }
 

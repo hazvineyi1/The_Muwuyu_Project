@@ -81,6 +81,30 @@ async function sayWhoYouAre(page, { timeout = 6000 } = {}){
   return name;
 }
 
+/* THROUGH THE DOOR.
+
+   The app opens on a question now — who am I here, who am I looking for, or
+   show me the tree — and the tree is behind it. That is the point of it: a
+   relative who has never seen this should not have to read a diagram before
+   they can do anything. But it means every suite that drives the TREE has to
+   get past it first, the way a person does, by pressing the way that says
+   "show me the tree".
+
+   Pressed rather than hidden, deliberately. A suite that reached in and set
+   `door.hidden` would go on passing on a day the button stopped working.
+
+   Cheap and idempotent: where there is no door — an empty family, or one this
+   suite has already walked through — it looks once and returns. */
+async function throughDoor(page, { timeout = 4000 } = {}){
+  const up = await page
+    .waitForSelector('#door [data-door="tree"]', { timeout, state:'visible' })
+    .catch(() => null);
+  if (!up) return false;
+  await up.click().catch(() => {});
+  await page.waitForSelector('#door', { state:'hidden', timeout: 5000 }).catch(() => {});
+  return true;
+}
+
 const ready = async page => {
   // Bounded short: most of the time nothing is asked and this is the cost of
   // finding that out.
@@ -88,6 +112,8 @@ const ready = async page => {
   await page.waitForFunction(
     () => { try { return store === 'shared' && !!treeId; } catch (e) { return false; } },
     null, { timeout: 20000 });
+  // And past the front of the app, so what follows is driving the tree.
+  await throughDoor(page, { timeout: 2500 });
   return page;
 };
 
@@ -132,4 +158,4 @@ const saved = async (page, { timeout = 20000 } = {}) => {
 };
 
 module.exports = { BASE, EXE, PASSPHRASE, openApp, enter, onlyThisOrigin,
-                   ready, settled, saved, sayWhoYouAre };
+                   ready, settled, saved, sayWhoYouAre, throughDoor };

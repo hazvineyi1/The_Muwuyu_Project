@@ -38,7 +38,7 @@
 // Chromium.
 
 const { chromium } = require('playwright');
-const { BASE, EXE, onlyThisOrigin } = require('./lib');
+const { BASE, EXE, onlyThisOrigin, throughDoor } = require('./lib');
 
 let pass = 0, fail = 0;
 const ok  = m => { pass++; console.log('  ok   ' + m); };
@@ -80,6 +80,7 @@ const FAMILY = JSON.stringify({
                                localStorage.setItem('muti-baobab-me', 'p3'); }, FAMILY);
     await page.goto(BASE, { waitUntil:'domcontentloaded' });
     await page.waitForFunction(() => { try { return people().length === 5; } catch(e){ return false; } });
+    await throughDoor(page);
     await page.waitForTimeout(500);
 
     /* ── the top bar ────────────────────────────────────────────────────

@@ -305,8 +305,12 @@ const section = t => console.log('\n' + t);
 
   // ── the banner ───────────────────────────────────────────────────────────
   section('THE BANNER SAYS WHERE YOU ARE AND WHO YOU ARE');
+  /* THE NAME IT CALLS ITSELF IS THE NAME THE FAMILY USES. "The Muwuyu
+     Project" was a working title for the software; Muti weMhuri is what the
+     door says, what the family says, and what this corner has to say too, or
+     the way back to the door is a word nobody recognises. */
   is(await page.$eval('#top .brand', el => el.textContent.trim()),
-     'The Muwuyu Project', 'the project names itself');
+     'Muti weMhuri', 'the project names itself, the way the family names it');
   is(await page.$eval('#top #family', el => el.textContent.trim()),
      'The ' + TAG + ' family', 'the family this passcode opened');
   is(/Bertha/.test(await page.$eval('#top #who', el => el.textContent)), true,

@@ -53,7 +53,7 @@
 // Chromium.
 
 const { chromium } = require('playwright');
-const { BASE, EXE, onlyThisOrigin } = require('./lib');
+const { BASE, EXE, onlyThisOrigin, throughDoor } = require('./lib');
 
 let pass = 0, fail = 0;
 const ok  = m => { pass++; console.log('  ok   ' + m); };

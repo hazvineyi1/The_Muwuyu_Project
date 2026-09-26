@@ -34,7 +34,7 @@
 // Chromium.
 
 const { chromium } = require('playwright');
-const { BASE, EXE, onlyThisOrigin } = require('./lib');
+const { BASE, EXE, onlyThisOrigin, throughDoor } = require('./lib');
 
 let pass = 0, fail = 0;
 const ok  = m => { pass++; console.log('  ok   ' + m); };
@@ -81,6 +81,7 @@ const FAMILY = (() => {
                              localStorage.setItem('muti-baobab-me', 'p3'); }, FAMILY);
   await page.goto(BASE, { waitUntil:'domcontentloaded' });
   await page.waitForFunction(() => { try { return people().length === 11; } catch(e){ return false; } });
+  await throughDoor(page);
   /* THE LANDING FIRST, THEN THE WHOLE TREE. A page that knows who is looking
      opens ON them rather than on everything — so fit() has to be asked for
      after that has run its course, or it is simply undone half a second
