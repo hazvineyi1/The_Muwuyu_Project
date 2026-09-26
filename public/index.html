@@ -2173,6 +2173,11 @@ body.carrying .pod{transition:none;}
        still named on the swatch inside, where it is a choice rather than a
        label, and the project's own name is in the header. -->
   <button class="who" id="look" title="The shape, how much of the tree, day or night, and the colours">Look</button>
+  <!-- USING MUTI, OR MAINTAINING IT. See setHelping: every bud on this tree
+       makes or moves a record, and a relative who came to find out what their
+       mother's cousin is to them should not be holding the tools for it. The
+       label says which of the two you are doing. -->
+  <button class="who" id="helping">Help build</button>
   <span class="tally"><b id="count">0</b> in the tree</span>
 </div>
 
@@ -8421,8 +8426,11 @@ function drawing(){
       (sel === p.id ? ordControls(p.id) : '') +
       (sel === p.id ? `<span class="rm" data-card="${p.id}" role="button" tabindex="0"` +
         ` aria-label="Details for ${esc(p.name)}" style="left:-9px;right:auto;">⋯</span>` : '') +
-      (sel === p.id ? `<span class="rm" data-rm="${p.id}" role="button" tabindex="0"` +
-        ` aria-label="Delete ${esc(p.name)} — the bar offers to put them back">✕</span>` : '') +
+      /* The ✕ deletes. It belongs to the half of this app that changes
+         records, so it is not on the pod of somebody who is reading. */
+      (sel === p.id && helping
+        ? `<span class="rm" data-rm="${p.id}" role="button" tabindex="0"` +
+          ` aria-label="Delete ${esc(p.name)} — the bar offers to put them back">✕</span>` : '') +
       `</div>`);
   }
   const pods = html.join('');
@@ -8484,8 +8492,14 @@ function drawing(){
       `Everyone is set aside. Nothing was deleted — open <b>${asidePeople().length} ` +
       `set aside</b> in the bar to put anybody back.`;
   } else if (people().length){
-    $('hint').innerHTML = 'Tap anyone to see where the tree can grow.<br>' +
-      '<b>Roots</b> run down into the soil, <b>branches</b> reach up.';
+    /* It promised the buds, and the buds are one of the two modes. Told to
+       somebody reading the tree it is simply not true, and the first thing
+       this app says to a new relative must not be. */
+    $('hint').innerHTML = helping
+      ? 'Tap anyone to see where the tree can grow.<br>' +
+        '<b>Roots</b> run down into the soil, <b>branches</b> reach up.'
+      : 'Tap anyone to see what they are to you.<br>' +
+        '<b>Roots</b> run down into the soil, <b>branches</b> reach up.';
   }
   fresh.clear();
   applyTransform();
@@ -8579,7 +8593,13 @@ function budWords(id){
 function placeBuds(){
   const layer = $('buds');
   if (!layer) return;
-  if (!sel || !layout.persons[sel]){ layer.innerHTML = ''; budSig = ''; budsBox = null; return; }
+  /* EVERY BUD MAKES OR MOVES A RECORD, so there are none while somebody is
+     reading the tree rather than filling it in — see setHelping. Guarded here
+     rather than at each of the half-dozen places that ask for them, because a
+     mode that is true in five of six callers is not a mode. */
+  if (!sel || !helping || !layout.persons[sel]){
+    layer.innerHTML = ''; budSig = ''; budsBox = null; return;
+  }
 
   const id = sel, at = layout.persons[id];
   const sx = q => q.x * pos.k + pos.x, sy = q => q.y * pos.k + pos.y;
@@ -12629,6 +12649,10 @@ function openCard(id){
      in the first field, because a fold that opens onto a wall of boxes has
      only moved the question of where to start. */
   if ($('cAdd')) $('cAdd').onclick = () => {
+    /* This IS the other job, so pressing it starts it. Somebody who came to
+       read and has found something to correct should not have to know there
+       is a mode, let alone find the switch for it. */
+    if (!helping){ setHelping(true); openCard(id); return; }
     const fold = el.querySelector('[data-fold="record"]');
     if (!fold) return;
     fold.open = true;
@@ -15509,6 +15533,62 @@ function openLook(){
    Somebody genuinely not in the tree yet can put themselves in it, which is
    the honest answer to "I am not on this list": the way to be seen by a
    family tree is to be in it. */
+/* ── USING MUTI, AND MAINTAINING MUTI ────────────────────────────────────
+ *
+ * "Most family members should see a beautiful, simple family experience.
+ *  Editing functions should not dominate that experience. Someone visiting to
+ *  work out who their mother's cousin is should not be surrounded by
+ *  database-maintenance controls."
+ *
+ * They were. Tapping anybody in this tree opened a ring of six or seven buds,
+ * and every single one of them makes or moves a record: add a child, add a
+ * partner, add a parent, add a sibling, add by the word your family uses,
+ * bring somebody already here onto this branch, lift a root. Beside them on
+ * the pod sat a ✕ that deletes, and under them a toolbar with Undo. A woman
+ * who opened her family's tree to find out what her mother's cousin is to her
+ * was given the tools for editing a database and had to find the answer
+ * behind them.
+ *
+ * TWO MODES, AND EXPLORE IS THE ONE YOU GET. A tap shows what a person is to
+ * you — their card, which answers before it asks anything — and the tree
+ * stays a thing to read. Nothing is hidden that changes what the app SAYS:
+ * every word, every path, every panel about the family is there. What is put
+ * away is the machinery for changing records, which is a different job done
+ * by fewer people less often.
+ *
+ * AND IT IS REMEMBERED PER DEVICE, so the relative who is actually filling
+ * this tree in switches once and never thinks about it again, while the
+ * relative they send the link to gets the family rather than the database.
+ * That is the whole point of the split: the same app, honest about which of
+ * the two things you came to do.
+ *
+ * The key is a new one and joins the ones that must never be renamed. */
+const HELP_KEY = 'muti-baobab-helping';
+let helping = false;
+
+function loadHelping(){
+  try { helping = localStorage.getItem(HELP_KEY) === 'on'; } catch (e) { helping = false; }
+}
+
+function setHelping(on){
+  helping = !!on;
+  try {
+    if (helping) localStorage.setItem(HELP_KEY, 'on');
+    else localStorage.removeItem(HELP_KEY);
+  } catch (e) {}
+  /* A card opened while building opens on the record, because that is what
+     somebody building is there for. Done by seeding the fold's own memory
+     rather than by forcing it open, so closing it still sticks. */
+  if (helping) cardOpen.add('record'); else cardOpen.delete('record');
+  updateWho();
+  render();
+  if (!helping) placeBuds();          // take down anything already up
+  say(helping
+    ? 'Helping build. Tapping anybody now offers every way to add to the tree.'
+    : 'Exploring. Tapping anybody says what they are to you; the ways to add ' +
+      'are behind Help build.');
+}
+
 /* ── THE DOOR ────────────────────────────────────────────────────────────
  *
  * "Stop making users learn the interface before they can learn about their
@@ -15566,11 +15646,19 @@ function openDoor(){
     `<button type="button" class="way${plain ? ' plain' : ''}" data-door="${key}">` +
       `<b>${esc(title)}</b><span>${esc(under)}</span></button>`;
 
+  /* AND THE OTHER JOB, NAMED. Adding a person, correcting a year, teaching
+     the family's own word for something — that is a different visit from
+     "what is this person to me", done by fewer people less often, and it has
+     never had a name. Offered only to somebody the app knows, because
+     building starts from where you stand. */
   $('doorWays').innerHTML = me
     ? way('find',  'Find someone',        'Search the family by name.') +
       way('kin',   'How are we related?', `Pick anybody, and Muti says what they are to ` +
                                           `${first}, what ${first} is to them, and why.`) +
       way('mine',  'My family',           'The people closest to you.') +
+      way('build', helping ? 'Carry on building our Muti' : 'Help build our Muti',
+                             'Add a person, correct something, teach the word your ' +
+                             'family uses.') +
       way('tree',  'Explore the tree',    'The whole family, as a tree.', true)
     : way('me',    'Ndiri ani?',          'Find yourself in the family.') +
       way('find',  'Ndiri kutsvaga ani?', 'Find someone in the family.') +
@@ -15596,7 +15684,16 @@ function takeDoor(key){
   if (key === 'find') return openFind();
   if (key === 'kin'){ kinB = meId; kinA = null; return openKinship(); }
   if (key === 'mine') return openRelatives(meId);
-  render(); fit();
+  /* Not a panel: it changes what the tree offers, so it leaves you looking at
+     the tree it has just changed. */
+  if (key === 'build'){ if (!helping) setHelping(true); land(); return; }
+  /* LANDED, NOT FITTED. fit() puts the whole family on the screen, which on a
+     phone means a hundred and fifty names too small to read — and "Ona Muti"
+     that opens onto an unreadable diagram has answered nothing. land() does
+     the same where the family is small enough to read whole, and where it is
+     not it opens on the person the tree is reckoned from, at a size their
+     name can be read at. Same function the app lands with on boot. */
+  render(); land();
 }
 
 /* ── WHO AM I IN THIS FAMILY ─────────────────────────────────────────────
@@ -16158,6 +16255,23 @@ function updateWho(){
   // there is nothing to sign out of.
   const out = $('signout');
   if (out) out.hidden = store !== 'shared';
+
+  /* WHICH OF THE TWO THINGS YOU ARE DOING, said on the button that changes
+     it. Undo belongs to the half that changes records, so it goes with
+     them — there is nothing to take back while nothing is being done. */
+  const help = $('helping');
+  if (help){
+    help.classList.toggle('on', helping);
+    help.textContent = helping ? '● Helping build' : 'Help build';
+    help.title = helping
+      ? 'Tapping anybody offers every way to add to the tree. Press to go back ' +
+        'to reading it.'
+      : 'Add people, correct what is recorded, teach the family\u2019s own words. ' +
+        'Nothing changes on the tree itself.';
+  }
+  const undo = $('undo');
+  if (undo) undo.hidden = !helping;
+
   const btn = $('who');
   if (!btn) return;
   const p = meId && state.people[meId];
@@ -16448,7 +16562,13 @@ podsEl.addEventListener('click', e => {
     if (pickingMe){ setMe(pod.dataset.id === meId ? null : pod.dataset.id); return; }
     sel = (sel === pod.dataset.id) ? null : pod.dataset.id;
     closeForm(); render();
-    if (sel){ bringIntoView(sel); revealBuds(); }
+    if (!sel) return;
+    bringIntoView(sel);
+    /* WHAT A TAP IS FOR, and it is not the same question in the two modes.
+       Somebody building wants the ways to add, which is what the buds are.
+       Somebody reading wants to know who this is to them, which is what the
+       card now says before it asks anything. */
+    if (helping) revealBuds(); else openCard(sel);
   }
 });
 podsEl.addEventListener('keydown', e => {
@@ -16717,6 +16837,8 @@ function fit(){
    carries. */
 $('brand').onclick = () => { if (doorOpen) closeDoor(); else openDoor(); };
 
+$('helping').onclick = () => { closeForm(); setHelping(!helping); };
+
 $('who').onclick = () => {
   if (store === 'shared' && viewerVia === 'invite'){
     say(`This link was made for ${meId && state.people[meId]
@@ -16841,6 +16963,10 @@ function plant(){
   state.rootId = sel = addPerson(name, '', '');
   $('seedName').value = '';
   pos = { x:innerWidth/2, y:innerHeight*0.6, k:1 };
+  /* Somebody who has just typed the first name of a family is building it.
+     Asking them to find a switch before the tree will grow would be the app
+     holding the door shut on the one person who is definitely coming in. */
+  if (!helping) setHelping(true);
   render(); save();
   say(`${name} planted. Tap them to grow the tree.`);
   /* AND THE SAVE THIS JUST STARTED IS WHAT ASKS WHO IS LOOKING.
@@ -18484,6 +18610,7 @@ function showStalled(){
 pos = { x:innerWidth/2, y:innerHeight*0.6, k:1 };
 // Before anything paints, so the page never flashes the wrong one.
 loadTheme();
+loadHelping();
 buildBackdrop();
 load();
 </script>

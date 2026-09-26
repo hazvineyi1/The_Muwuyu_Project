@@ -18,7 +18,7 @@
 
 const { chromium } = require('playwright');
 // The app opens on a door now; this presses the way through to the tree.
-const { throughDoor } = require('./lib');
+const { throughDoor, helpBuild } = require('./lib');
 
 const BASE = process.env.MW_BASE_URL || 'http://127.0.0.1:3930/';
 const EXE  = process.env.MW_CHROMIUM || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
@@ -56,6 +56,8 @@ const FAMILY = {
   await page.goto(BASE, { waitUntil:'domcontentloaded' });
   await page.waitForFunction(() => { try { return people().length === 4; } catch(e){ return false; } });
   await throughDoor(page);
+  // These drive the building half of the app — see helpBuild.
+  await helpBuild(page);
   // Garikai is the one looking, so what he sets aside is stamped with his name.
   await page.evaluate(() => { setMe('p2'); });
 
@@ -151,6 +153,8 @@ const FAMILY = {
   await page.goto(BASE, { waitUntil:'domcontentloaded' });
   await page.waitForFunction(() => { try { return people().length === 3; } catch(e){ return false; } });
   await throughDoor(page);
+  // These drive the building half of the app — see helpBuild.
+  await helpBuild(page);
   is(await page.evaluate(() => !!state.people.p3), true, 'the person is still in the stored tree');
   is(await page.evaluate(() => state.people.p3.aside.why),
      'Entered twice — same Tendai as his brother recorded.', 'with the reason intact');

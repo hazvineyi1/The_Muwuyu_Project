@@ -122,8 +122,14 @@ const open = async (ctx, family, me, size) => {
     const d = await door(page);
     is(d && d.hi,  'Mauya, Belinda.',          'by name');
     is(d && d.sub, 'What would you like to know?', 'and asked, not instructed');
-    is(d && d.ways.map(w => w.key), ['find', 'kin', 'mine', 'tree'],
-       'with the four things a relative comes back for');
+    is(d && d.ways.map(w => w.key), ['find', 'kin', 'mine', 'build', 'tree'],
+       'with the things a relative comes back for');
+    /* AND THE OTHER JOB, NAMED. Adding a person, correcting a year, teaching
+       the family's own word is a different visit from "what is this person to
+       me", and until it had a name it was simply what the app looked like. */
+    check(d && /Help build our Muti|Carry on building/.test(d.ways[3].title),
+          'including helping to build it, which is the other half of the app',
+          d && d.ways[3].title);
     check(d && /what they are to Belinda/.test(d.ways[1].under),
           'and the relationship one is written about her: ' +
           JSON.stringify(d && d.ways[1].under));
@@ -152,7 +158,8 @@ const open = async (ctx, family, me, size) => {
     /* AND THE ENGLISH IS ENGLISH. A "Mhuri yangu" nobody asked for would slip
        in here unnoticed otherwise. */
     is(back.ways.map(w => w.title),
-       ['Find someone', 'How are we related?', 'My family', 'Explore the tree'],
+       ['Find someone', 'How are we related?', 'My family',
+        'Help build our Muti', 'Explore the tree'],
        'and the labels with no given word are in plain English, on purpose');
   }
 

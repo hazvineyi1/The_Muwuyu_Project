@@ -22,7 +22,7 @@
 //     npm run test:browser removing
 
 const { chromium } = require('playwright');
-const { EXE, openApp, ready, saved } = require('./lib.js');
+const { EXE, openApp, ready, saved, helpBuild } = require('./lib.js');
 
 const CODE = process.env.MW_DELETE_PASSCODE || 'browser-delete-code';
 
@@ -46,6 +46,10 @@ const section = t => console.log('\n' + t);
     save();
   });
   await saved(page);
+  /* Deleting is the building half of the app — see helpBuild. Pressed after
+     the family exists, because the toolbar it lives in is not on screen while
+     the tree is empty. */
+  await helpBuild(page);
 
   const idOf = name => page.evaluate(
     n => (people().find(p => p.name.indexOf(n) === 0) || {}).id, name);

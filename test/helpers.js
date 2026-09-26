@@ -152,7 +152,13 @@ function loadFrontend(){
       bezier, easeMove, MOTION_FAR, glideTo, stopGlide, focusOn, getPos(){ return pos; },
       setGrowing(on){ growing = !!on; }, growingNow(){ return growing; },
       pick(id){ sel = id; },
-      budsHtml(id){ sel = id; computeLayout(); placeBuds(); return budsHtml(); },
+      /* THE BUILDING VIEW, and it says so by turning it on. Every bud makes or
+         moves a record, so a page that is being read has none — see
+         setHelping. Asking this accessor for the buds IS asking for the half
+         of the app that changes things; a suite that is about the MODE rather
+         than about the buds uses setHelping itself. */
+      budsHtml(id){ setHelping(true); sel = id; computeLayout(); placeBuds(); return budsHtml(); },
+      setHelping, helpingNow(){ return helping; },
       seenTo(n){ seenSeq = n; }, headTo(n){ headSeq = n; },
       sharedNow(){ store = 'shared'; },
       // The grow form as it is built, so a suite can read what it offers.

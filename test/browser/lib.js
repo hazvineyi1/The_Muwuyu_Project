@@ -126,6 +126,26 @@ async function openRecord(page, { timeout = 5000 } = {}){
   return true;
 }
 
+/* HELPING BUILD.
+
+   Every bud on this tree makes or moves a record, so a page that is being
+   READ has none — see setHelping. A suite that adds people, corrects a join,
+   or drives the buds is exercising the other half of the app and has to say
+   so, the way a relative does: by pressing the switch in the toolbar.
+
+   Pressed rather than set, for the same reason throughDoor presses the door.
+   Idempotent — pressing it while it is already on would turn it off, so this
+   asks first. */
+async function helpBuild(page, { timeout = 5000 } = {}){
+  await page.waitForSelector('#helping', { timeout }).catch(() => {});
+  const on = await page.evaluate(() => { try { return !!helping; } catch (e) { return null; } });
+  if (on === null) return false;
+  if (!on) await page.click('#helping');
+  await page.waitForFunction(() => { try { return !!helping; } catch (e) { return false; } },
+                             null, { timeout });
+  return true;
+}
+
 const ready = async page => {
   // Bounded short: most of the time nothing is asked and this is the cost of
   // finding that out.
@@ -179,4 +199,5 @@ const saved = async (page, { timeout = 20000 } = {}) => {
 };
 
 module.exports = { BASE, EXE, PASSPHRASE, openApp, enter, onlyThisOrigin,
-                   ready, settled, saved, sayWhoYouAre, throughDoor, openRecord };
+                   ready, settled, saved, sayWhoYouAre, throughDoor, openRecord,
+                   helpBuild };

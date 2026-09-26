@@ -32,7 +32,7 @@
 // Chromium.
 
 const { chromium } = require('playwright');
-const { BASE, EXE, onlyThisOrigin, throughDoor } = require('./lib');
+const { BASE, EXE, onlyThisOrigin, throughDoor, helpBuild } = require('./lib');
 
 let pass = 0, fail = 0;
 const ok  = m => { pass++; console.log('  ok   ' + m); };
@@ -78,6 +78,8 @@ const FAMILY = JSON.stringify({
   await page.goto(BASE, { waitUntil:'domcontentloaded' });
   await page.waitForFunction(() => { try { return people().length === 8; } catch(e){ return false; } });
   await throughDoor(page);
+  // These drive the building half of the app — see helpBuild.
+  await helpBuild(page);
   await page.waitForTimeout(500);
 
   // Every bud's real rectangle, as the browser laid it out.

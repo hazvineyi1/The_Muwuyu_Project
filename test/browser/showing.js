@@ -34,7 +34,7 @@
 // Chromium.
 
 const { chromium } = require('playwright');
-const { BASE, EXE, onlyThisOrigin, throughDoor } = require('./lib');
+const { BASE, EXE, onlyThisOrigin, throughDoor, helpBuild } = require('./lib');
 
 let pass = 0, fail = 0;
 const ok  = m => { pass++; console.log('  ok   ' + m); };
@@ -82,6 +82,8 @@ const FAMILY = (() => {
   await page.goto(BASE, { waitUntil:'domcontentloaded' });
   await page.waitForFunction(() => { try { return people().length === 11; } catch(e){ return false; } });
   await throughDoor(page);
+  // These drive the building half of the app — see helpBuild.
+  await helpBuild(page);
   /* THE LANDING FIRST, THEN THE WHOLE TREE. A page that knows who is looking
      opens ON them rather than on everything — so fit() has to be asked for
      after that has run its course, or it is simply undone half a second
@@ -201,6 +203,9 @@ const FAMILY = (() => {
                               localStorage.setItem('muti-baobab-me', 'p3'); }, FAMILY);
     await big.goto(BASE, { waitUntil:'domcontentloaded' });
     await big.waitForFunction(() => { try { return people().length === 11; } catch(e){ return false; } });
+    await throughDoor(big);
+    // This one grows the tree too — see helpBuild.
+    await helpBuild(big);
     await big.waitForTimeout(900);
     /* Centred on them, with room on every side, so nothing has to be nudged
        and holding still is the only thing left for the view to do. */
